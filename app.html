@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Base de Datos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 5px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .tab.active {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+
+        .btn-danger:hover {
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #6c757d, #5a6268);
+        }
+
+        .search-results, .records-table {
+            margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        th {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Gestor de Base de Datos</h1>
+        
+        <!-- Configuración -->
+        <div class="card" style="margin-bottom: 30px;">
+            <h3>⚙️ Configuración de n8n</h3>
+            <div class="grid">
+                <div class="form-group">
+                    <label for="n8nUrl">URL base de n8n:</label>
+                    <input type="url" id="n8nUrl" placeholder="https://tu-proyecto.up.railway.app/webhook" value="https://tu-proyecto.up.railway.app/webhook">
+                </div>
+                <div class="form-group">
+                    <label for="sheetColumns">Columnas del Sheet (separadas por coma):</label>
+                    <input type="text" id="sheetColumns" placeholder="nombre,email,telefono,fecha" value="nombre,email,telefono,fecha">
+                </div>
+            </div>
+            <button onclick="saveConfig()">💾 Guardar Configuración</button>
+        </div>
+
+        <!-- Pestañas -->
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('create')">✨ Crear</div>
+            <div class="tab" onclick="showTab('read')">📋 Ver Todos</div>
+            <div class="tab" onclick="showTab('update')">✏️ Editar</div>
+            <div class="tab" onclick="showTab('delete')">🗑️ Eliminar</div>
+            <div class="tab" onclick="showTab('admin')">⚙️ Admin</div>
+        </div>
+
+        <!-- Crear registro -->
+        <div id="create" class="tab-content active">
+            <div class="card">
+                <h2>✨ Crear Nuevo Registro</h2>
+                <form id="createForm">
+                    <div id="createFields"></div>
+                    <button type="submit">🎯 Crear Registro</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Leer registros -->
+        <div id="read" class="tab-content">
+            <div class="card">
+                <h2>📋 Todos los Registros</h2>
+                <button onclick="loadAllRecords()">🔄 Actualizar Lista</button>
+                <div id="allRecords"></div>
+            </div>
+        </div>
+
+        <!-- Actualizar registro -->
+        <div id="update" class="tab-content">
+            <div class="card">
+                <h2>✏️ Editar Registro</h2>
+                <div class="form-group">
+                    <label for="searchUpdateField">Campo de búsqueda:</label>
+                    <select id="searchUpdateField"></select>
+                </div>
+                <div class="form-group">
+                    <label for="searchUpdateValue">Valor a buscar:</label>
+                    <input type="text" id="searchUpdateValue" placeholder="Ingresa el valor">
+                </div>
+                <button onclick="searchForUpdate()">🔍 Buscar</button>
+                
+                <div id="updateResults"></div>
+            </div>
+        </div>
+
+        <!-- Eliminar registro -->
+        <div id="delete" class="tab-content">
+            <div class="card">
+                <h2>🗑️ Eliminar Registro</h2>
+                <div class="form-group">
+                    <label for="searchDeleteField">Campo de búsqueda:</label>
+                    <select id="searchDeleteField"></select>
+                </div>
+                <div class="form-group">
+                    <label for="searchDeleteValue">Valor a buscar:</label>
+                    <input type="text" id="searchDeleteValue" placeholder="Ingresa el valor">
+                </div>
+                <button onclick="searchForDelete()">🔍 Buscar</button>
+                
+                <div id="deleteResults"></div>
+            </div>
+        </div>
+
+        <!-- Panel de Administración -->
+        <div id="admin" class="tab-content">
+            <div class="card">
+                <h2>⚙️ Panel de Administración</h2>
+                
+                <div class="grid">
+                    <div class="card">
+                        <h3>🏥 Estado del Servidor</h3>
+                        <div id="serverStatus">
+                            <p>Verificando...</p>
+                        </div>
+                        <button onclick="checkServerHealth()">🔍 Verificar Estado</button>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📊 Estadísticas</h3>
+                        <div id="serverStats">
+                            <p>Cargando estadísticas...</p>
+                        </div>
+                        <button onclick="loadServerStats()">📈 Actualizar Stats</button>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <h3>🧪 Prueba de Conectividad</h3>
+                    <p>Prueba la conexión con Google Sheets:</p>
+                    <button onclick="testConnection()">🔗 Probar Conexión</button>
+                    <div id="connectionTest"></div>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <h3>🔄 Mantenimiento</h3>
+                    <p>Herramientas de mantenimiento del sistema:</p>
+                    <button onclick="pingServer()">🏓 Ping Server</button>
+                    <button onclick="clearCache()" class="btn-secondary">🧹 Limpiar Caché</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Procesando...</p>
+        </div>
+
+        <!-- Messages -->
+        <div id="messages"></div>
+    </div>
+
+    <!-- Modal de confirmación -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>⚠️ Confirmar Eliminación</h2>
+            <p>¿Estás seguro de que quieres eliminar este registro?</p>
+            <div id="confirmData"></div>
+            <button id="confirmDelete" class="btn-danger">🗑️ Sí, Eliminar</button>
+            <button onclick="closeModal()" class="btn-secondary">❌ Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let config = {
+            n8nUrl: 'https://your-n8n-url.com/webhook',
+            columns: ['nombre', 'email', 'telefono', 'fecha']
+        };
+        let allData = [];
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            initializeFields();
+            
+            // Event listeners
+            document.getElementById('createForm').addEventListener('submit', createRecord);
+            document.querySelector('.close').addEventListener('click', closeModal);
+            window.addEventListener('click', function(event) {
+                const modal = document.getElementById('confirmModal');
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+        });
+
+        // Configuración
+        function saveConfig() {
+            const n8nUrl = document.getElementById('n8nUrl').value;
+            const columns = document.getElementById('sheetColumns').value.split(',').map(col => col.trim());
+            
+            config.n8nUrl = n8nUrl;
+            config.columns = columns;
+            
+            localStorage.setItem('dbManagerConfig', JSON.stringify(config));
+            initializeFields();
+            showMessage('Configuración guardada correctamente', 'success');
+        }
+
+        function loadConfig() {
+            const saved = localStorage.getItem('dbManagerConfig');
+            if (saved) {
+                config = JSON.parse(saved);
+                document.getElementById('n8nUrl').value = config.n8nUrl;
+                document.getElementById('sheetColumns').value = config.columns.join(', ');
+            }
+        }
+
+        // Inicializar campos dinámicos
+        function initializeFields() {
+            // Crear campos para formulario de creación
+            const createFields = document.getElementById('createFields');
+            createFields.innerHTML = '';
+            
+            config.columns.forEach(column => {
+                const div = document.createElement('div');
+                div.className = 'form-group';
+                div.innerHTML = `
+                    <label for="create_${column}">${column}:</label>
+                    <input type="text" id="create_${column}" name="${column}" required>
+                `;
+                createFields.appendChild(div);
+            });
+
+            // Actualizar selects de búsqueda
+            updateSearchSelects();
+        }
+
+        function updateSearchSelects() {
+            const selects = ['searchUpdateField', 'searchDeleteField'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '';
+                config.columns.forEach(column => {
+                    const option = document.createElement('option');
+                    option.value = column;
+                    option.textContent = column;
+                    select.appendChild(option);
+                });
+            });
+        }
+
+        // Funciones de UI
+        function showTab(tabName) {
+            // Ocultar todas las pestañas
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Mostrar pestaña seleccionada
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function showLoading(show = true) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showMessage(message, type = 'success') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        // Operaciones CRUD
+        async function createRecord(e) {
+            e.preventDefault();
+            showLoading();
+
+            const formData = new FormData(e.target);
+            const data = {};
+            
+            config.columns.forEach(column => {
+                data[column] = formData.get(column);
+            });
+
+            try {
+                const response = await fetch(`${config.n8nUrl}/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    showMessage('Registro creado exitosamente', 'success');
+                    e.target.reset();
+                } else {
+                    throw new Error('Error al crear el registro');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function loadAllRecords() {
+            showLoading();
+
+            try {
+                const response = await fetch(`${config.n8nUrl}/read`);
+                if (response.ok) {
+                    allData = await response.json();
+                    displayAllRecords(allData);
+                } else {
+                    throw new Error('Error al cargar los registros');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayAllRecords(data) {
+            const container = document.getElementById('allRecords');
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No hay registros disponibles.</p>';
+                return;
+            }
+
+            let html = `
+                <div class="records-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                ${config.columns.map(col => `<th>${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            data.forEach(record => {
+                html += '<tr>';
+                config.columns.forEach(column => {
+                    html += `<td>${record[column] || ''}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        async function searchForUpdate() {
+            const field = document.getElementById('searchUpdateField').value;
+            const value = document.getElementById('searchUpdateValue').value;
+
+            if (!value) {
+                showMessage('Por favor ingresa un valor para buscar', 'error');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                // Primero obtenemos todos los datos
+                const response = await fetch(`${config.n8nUrl}/read`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const found = data.find(record => record[field] && record[field].toString().toLowerCase().includes(value.toLowerCase()));
+                    
+                    if (found) {
+                        displayUpdateForm(found);
+                    } else {
+                        showMessage('No se encontró ningún registro con ese valor', 'error');
+                        document.getElementById('updateResults').innerHTML = '';
+                    }
+                } else {
+                    throw new Error('Error al buscar el registro');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayUpdateForm(record) {
+            let html = `
+                <div class="card" style="margin-top: 20px;">
+                    <h3>Editar Registro</h3>
+                    <form id="updateForm">
+            `;
+
+            config.columns.forEach(column => {
+                html += `
+                    <div class="form-group">
+                        <label for="update_${column}">${column}:</label>
+                        <input type="text" id="update_${column}" name="${column}" value="${record[column] || ''}" required>
+                    </div>
+                `;
+            });
+
+            html += `
+                        <button type="submit">💾 Actualizar Registro</button>
+                        <button type="button" onclick="document.getElementById('updateResults').innerHTML = ''" class="btn-secondary">❌ Cancelar</button>
+                    </form>
+                </div>
+            `;
+
+            document.getElementById('updateResults').innerHTML = html;
+
+            // Agregar event listener al formulario
+            document.getElementById('updateForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await updateRecord(e, record);
+            });
+        }
+
+        async function updateRecord(e, originalRecord) {
+            showLoading();
+
+            const formData = new FormData(e.target);
+            const data = {};
+            
+            config.columns.forEach(column => {
+                data[column] = formData.get(column);
+            });
+
+            // Agregar información para identificar el registro original
+            data.originalRecord = originalRecord;
+
+            try {
+                const response = await fetch(`${config.n8nUrl}/update`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    showMessage('Registro actualizado exitosamente', 'success');
+                    document.getElementById('updateResults').innerHTML = '';
+                    document.getElementById('searchUpdateValue').value = '';
+                } else {
+                    throw new Error('Error al actualizar el registro');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function searchForDelete() {
+            const field = document.getElementById('searchDeleteField').value;
+            const value = document.getElementById('searchDeleteValue').value;
+
+            if (!value) {
+                showMessage('Por favor ingresa un valor para buscar', 'error');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch(`${config.n8nUrl}/read`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const found = data.find(record => record[field] && record[field].toString().toLowerCase().includes(value.toLowerCase()));
+                    
+                    if (found) {
+                        displayDeleteConfirmation(found);
+                    } else {
+                        showMessage('No se encontró ningún registro con ese valor', 'error');
+                        document.getElementById('deleteResults').innerHTML = '';
+                    }
+                } else {
+                    throw new Error('Error al buscar el registro');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayDeleteConfirmation(record) {
+            let html = `
+                <div class="card" style="margin-top: 20px;">
+                    <h3>⚠️ Registro Encontrado</h3>
+                    <p>¿Confirmas que quieres eliminar este registro?</p>
+                    <table style="margin: 15px 0;">
+            `;
+
+            config.columns.forEach(column => {
+                html += `
+                    <tr>
+                        <td><strong>${column}:</strong></td>
+                        <td>${record[column] || ''}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </table>
+                    <button onclick="confirmDelete('${JSON.stringify(record).replace(/"/g, '&quot;')}')" class="btn-danger">🗑️ Eliminar</button>
+                    <button onclick="document.getElementById('deleteResults').innerHTML = ''" class="btn-secondary">❌ Cancelar</button>
+                </div>
+            `;
+
+            document.getElementById('deleteResults').innerHTML = html;
+        }
+
+        async function confirmDelete(recordStr) {
+            const record = JSON.parse(recordStr.replace(/&quot;/g, '"'));
+            showLoading();
+
+            try {
+                const response = await fetch(`${config.n8nUrl}/delete`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(record)
+                });
+
+                if (response.ok) {
+                    showMessage('Registro eliminado exitosamente', 'success');
+                    document.getElementById('deleteResults').innerHTML = '';
+                    document.getElementById('searchDeleteValue').value = '';
+                } else {
+                    throw new Error('Error al eliminar el registro');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('confirmModal').style.display = 'none';
+        }
+
+        // Funciones de administración
+        async function checkServerHealth() {
+            const statusDiv = document.getElementById('serverStatus');
+            statusDiv.innerHTML = '<p>🔍 Verificando...</p>';
+            
+            try {
+                const response = await fetch(`${config.n8nUrl}/health`);
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'healthy') {
+                    statusDiv.innerHTML = `
+                        <div class="message success">
+                            <strong>✅ Servidor Saludable</strong><br>
+                            Base de datos: ${data.database}<br>
+                            Última verificación: ${new Date(data.timestamp).toLocaleString()}
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <div class="message error">
+                            <strong>❌ Servidor con Problemas</strong><br>
+                            Estado: ${data.status}<br>
+                            Base de datos: ${data.database}<br>
+                            Error: ${data.error || 'Desconocido'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `
+                    <div class="message error">
+                        <strong>🚨 Servidor No Disponible</strong><br>
+                        Error: ${error.message}<br>
+                        <small>Verifica la URL del servidor</small>
+                    </div>
+                `;
+            }
+        }
+
+        async function loadServerStats() {
+            const statsDiv = document.getElementById('serverStats');
+            statsDiv.innerHTML = '<p>📊 Cargando...</p>';
+            
+            try {
+                const response = await fetch(`${config.n8nUrl}/stats`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const uptimeHours = Math.floor(data.serverUptime / 3600);
+                    const uptimeMinutes = Math.floor((data.serverUptime % 3600) / 60);
+                    
+                    statsDiv.innerHTML = `
+                        <div class="message success">
+                            <strong>📈 Estadísticas del Servidor</strong><br>
+                            Total de registros: ${data.totalRecords}<br>
+                            Tiempo activo: ${uptimeHours}h ${uptimeMinutes}m<br>
+                            Memoria en uso: ${Math.round(data.memoryUsage.used / 1024 / 1024)} MB<br>
+                            Versión Node: ${data.nodeVersion}<br>
+                            Última actualización: ${new Date(data.timestamp).toLocaleString()}
+                        </div>
+                    `;
+                } else {
+                    statsDiv.innerHTML = `
+                        <div class="message error">
+                            <strong>❌ Error al cargar estadísticas</strong><br>
+                            ${data.error || 'Error desconocido'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                statsDiv.innerHTML = `
+                    <div class="message error">
+                        <strong>🚨 No se pudieron cargar las estadísticas</strong><br>
+                        Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function testConnection() {
+            const testDiv = document.getElementById('connectionTest');
+            testDiv.innerHTML = '<p>🔗 Probando conexión...</p>';
+            
+            try {
+                const response = await fetch(`${config.n8nUrl}/test-connection`);
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'success') {
+                    testDiv.innerHTML = `
+                        <div class="message success">
+                            <strong>✅ Conexión Exitosa</strong><br>
+                            Hoja: ${data.sheetTitle}<br>
+                            Número de hojas: ${data.sheetCount}<br>
+                            Tiempo de respuesta: ${new Date(data.timestamp).toLocaleString()}
+                        </div>
+                    `;
+                } else {
+                    testDiv.innerHTML = `
+                        <div class="message error">
+                            <strong>❌ Error de Conexión</strong><br>
+                            ${data.message || 'Error desconocido'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                testDiv.innerHTML = `
+                    <div class="message error">
+                        <strong>🚨 Fallo en la Prueba</strong><br>
+                        Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function pingServer() {
+            try {
+                const start = Date.now();
+                const response = await fetch(`${config.n8nUrl}/ping`);
+                const end = Date.now();
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage(`🏓 Pong! Servidor respondió en ${end - start}ms`, 'success');
+                } else {
+                    showMessage('❌ Servidor no respondió correctamente', 'error');
+                }
+            } catch (error) {
+                showMessage(`🚨 Error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearCache() {
+            // Limpiar caché local
+            allData = [];
+            document.getElementById('allRecords').innerHTML = '';
+            document.getElementById('updateResults').innerHTML = '';
+            document.getElementById('deleteResults').innerHTML = '';
+            
+            showMessage('🧹 Caché limpiado correctamente', 'success');
+        }
+
+        // Auto-verificación cada 5 minutos
+        setInterval(async () => {
+            if (document.getElementById('admin').classList.contains('active')) {
+                await checkServerHealth();
+                await loadServerStats();
+            }
+        }, 300000); // 5 minutos
+    </script>
+</body>
+</html>
