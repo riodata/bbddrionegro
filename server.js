@@ -170,7 +170,58 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Keep-alive endpoint para evitar sleep
+// Sistema de logging y monitoreo
+const fs = require('fs').promises;
+
+// Log requests
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path} - IP: ${req.ip}`);
+  next();
+});
+
+// Endpoint de estadísticas
+app.get('/stats', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+    
+    res.json({
+      timestamp: new Date().toISOString(),
+      totalRecords: rows.length,
+      serverUptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      nodeVersion: process.version,
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(503).json({
+      error: 'Database connection failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Endpoint de prueba de conectividad
+app.get('/test-connection', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const info = await sheet.doc.loadInfo();
+    
+    res.json({
+      status: 'success',
+      sheetTitle: info.title,
+      sheetCount: info.sheetCount,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 app.get('/ping', (req, res) => {
   res.json({ 
     status: 'alive', 
