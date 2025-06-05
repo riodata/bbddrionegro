@@ -1,6 +1,7 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 require('dotenv').config();
@@ -11,6 +12,9 @@ const PORT = process.env.PORT || 8000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// NUEVO: Servir archivos estáticos del frontend
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Configuración de Google Sheets
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
@@ -30,9 +34,9 @@ async function initializeSheet() {
   return doc.sheetsByIndex[0]; // Primera hoja
 }
 
-// Endpoint de prueba
+// NUEVO: Ruta principal para servir el frontend
 app.get('/', (req, res) => {
-  res.json({ message: 'Webhook server is running!' });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // CREATE - Crear nuevo registro
@@ -222,6 +226,7 @@ app.get('/test-connection', async (req, res) => {
     });
   }
 });
+
 app.get('/ping', (req, res) => {
   res.json({ 
     status: 'alive', 
@@ -250,8 +255,14 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// NUEVO: Manejar rutas SPA - debe ir al final
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Frontend available at /`);
   console.log(`Health check available at /health`);
   console.log(`Keep-alive available at /ping`);
 });
