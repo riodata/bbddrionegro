@@ -63,15 +63,33 @@ app.post('/webhook/create', async (req, res) => {
   }
 });
 
-// READ - Leer todos los registros
+// READ - Leer todos los registros con filtros opcionales
 app.get('/webhook/read', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
     
-    const data = rows.map(row => row.toObject());
+    let data = rows.map(row => row.toObject());
     
-    res.json(data);
+    // Aplicar filtros si existen en los query parameters
+    const { searchText, searchField } = req.query;
+    
+    if (searchText && searchField) {
+      data = data.filter(record => {
+        const fieldValue = record[searchField];
+        if (fieldValue === undefined || fieldValue === null) return false;
+        
+        // Búsqueda case-insensitive y parcial
+        return fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: data,
+      total: data.length,
+      filtered: !!(searchText && searchField)
+    });
   } catch (error) {
     console.error('Error reading records:', error);
     res.status(500).json({ 
@@ -82,26 +100,120 @@ app.get('/webhook/read', async (req, res) => {
   }
 });
 
-// UPDATE - Actualizar registro
+// READ - Obtener campos disponibles para filtrado
+app.get('/webhook/fields', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+    
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        fields: [],
+        message: 'No hay registros para obtener campos'
+      });
+    }
+    
+    // Obtener los nombres de las columnas del primer registro
+    const fields = Object.keys(rows[0].toObject());
+    
+    res.json({
+      success: true,
+      fields: fields
+    });
+  } catch (error) {
+    console.error('Error getting fields:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al obtener los campos',
+      error: error.message 
+    });
+  }
+});
+
+// SEARCH - Búsqueda avanzada con múltiples filtros
+app.post('/webhook/search', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+    
+    let data = rows.map(row => row.toObject());
+    const { filters } = req.body; // Array de objetos: [{field, value, operator}]
+    
+    if (filters && Array.isArray(filters) && filters.length > 0) {
+      data = data.filter(record => {
+        return filters.every(filter => {
+          const { field, value, operator = 'contains' } = filter;
+          const fieldValue = record[field];
+          
+          if (fieldValue === undefined || fieldValue === null) return false;
+          
+          const recordValue = fieldValue.toString().toLowerCase();
+          const searchValue = value.toString().toLowerCase();
+          
+          switch (operator) {
+            case 'equals':
+              return recordValue === searchValue;
+            case 'contains':
+              return recordValue.includes(searchValue);
+            case 'startsWith':
+              return recordValue.startsWith(searchValue);
+            case 'endsWith':
+              return recordValue.endsWith(searchValue);
+            case 'notEquals':
+              return recordValue !== searchValue;
+            default:
+              return recordValue.includes(searchValue);
+          }
+        });
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: data,
+      total: data.length,
+      filtersApplied: filters?.length || 0
+    });
+  } catch (error) {
+    console.error('Error searching records:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al buscar registros',
+      error: error.message 
+    });
+  }
+});
+
+// UPDATE - Actualizar registro con búsqueda previa
 app.put('/webhook/update', async (req, res) => {
   try {
     const sheet = await initializeSheet();
-    const { originalRecord, ...updateData } = req.body;
+    const { searchCriteria, updateData } = req.body;
     
     const rows = await sheet.getRows();
     
-    // Buscar la fila que coincida con el registro original
+    // Buscar la fila usando criterios de búsqueda más flexibles
     const rowToUpdate = rows.find(row => {
       const rowData = row.toObject();
-      return Object.keys(originalRecord).every(key => 
-        rowData[key] === originalRecord[key]
-      );
+      
+      if (searchCriteria.originalRecord) {
+        // Método original - buscar por registro completo
+        return Object.keys(searchCriteria.originalRecord).every(key => 
+          rowData[key] === searchCriteria.originalRecord[key]
+        );
+      } else if (searchCriteria.field && searchCriteria.value) {
+        // Nuevo método - buscar por campo específico
+        return rowData[searchCriteria.field] === searchCriteria.value;
+      }
+      
+      return false;
     });
     
     if (!rowToUpdate) {
       return res.status(404).json({ 
         success: false, 
-        message: 'Registro no encontrado' 
+        message: 'Registro no encontrado con los criterios especificados' 
       });
     }
     
@@ -114,7 +226,8 @@ app.put('/webhook/update', async (req, res) => {
     
     res.json({ 
       success: true, 
-      message: 'Registro actualizado exitosamente' 
+      message: 'Registro actualizado exitosamente',
+      updatedRecord: rowToUpdate.toObject()
     });
   } catch (error) {
     console.error('Error updating record:', error);
@@ -126,40 +239,117 @@ app.put('/webhook/update', async (req, res) => {
   }
 });
 
-// DELETE - Eliminar registro
+// DELETE - Eliminar registro con búsqueda previa
 app.delete('/webhook/delete', async (req, res) => {
   try {
     const sheet = await initializeSheet();
-    const recordToDelete = req.body;
+    const { searchCriteria } = req.body;
     
     const rows = await sheet.getRows();
     
-    // Buscar la fila que coincida con el registro a eliminar
+    // Buscar la fila usando criterios de búsqueda más flexibles
     const rowToDelete = rows.find(row => {
       const rowData = row.toObject();
-      return Object.keys(recordToDelete).every(key => 
-        rowData[key] === recordToDelete[key]
-      );
+      
+      if (searchCriteria.recordToDelete) {
+        // Método original - buscar por registro completo
+        return Object.keys(searchCriteria.recordToDelete).every(key => 
+          rowData[key] === searchCriteria.recordToDelete[key]
+        );
+      } else if (searchCriteria.field && searchCriteria.value) {
+        // Nuevo método - buscar por campo específico
+        return rowData[searchCriteria.field] === searchCriteria.value;
+      }
+      
+      return false;
     });
     
     if (!rowToDelete) {
       return res.status(404).json({ 
         success: false, 
-        message: 'Registro no encontrado' 
+        message: 'Registro no encontrado con los criterios especificados' 
       });
     }
     
+    const deletedRecord = rowToDelete.toObject();
     await rowToDelete.delete();
     
     res.json({ 
       success: true, 
-      message: 'Registro eliminado exitosamente' 
+      message: 'Registro eliminado exitosamente',
+      deletedRecord: deletedRecord
     });
   } catch (error) {
     console.error('Error deleting record:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error al eliminar el registro',
+      error: error.message 
+    });
+  }
+});
+
+// BULK DELETE - Eliminar múltiples registros
+app.delete('/webhook/bulk-delete', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const { filters } = req.body; // Misma estructura que search
+    
+    const rows = await sheet.getRows();
+    let rowsToDelete = [];
+    
+    if (filters && Array.isArray(filters) && filters.length > 0) {
+      rowsToDelete = rows.filter(row => {
+        const rowData = row.toObject();
+        return filters.every(filter => {
+          const { field, value, operator = 'contains' } = filter;
+          const fieldValue = rowData[field];
+          
+          if (fieldValue === undefined || fieldValue === null) return false;
+          
+          const recordValue = fieldValue.toString().toLowerCase();
+          const searchValue = value.toString().toLowerCase();
+          
+          switch (operator) {
+            case 'equals':
+              return recordValue === searchValue;
+            case 'contains':
+              return recordValue.includes(searchValue);
+            case 'startsWith':
+              return recordValue.startsWith(searchValue);
+            case 'endsWith':
+              return recordValue.endsWith(searchValue);
+            case 'notEquals':
+              return recordValue !== searchValue;
+            default:
+              return recordValue.includes(searchValue);
+          }
+        });
+      });
+    }
+    
+    if (rowsToDelete.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No se encontraron registros que coincidan con los filtros' 
+      });
+    }
+    
+    // Eliminar las filas encontradas
+    const deletedRecords = rowsToDelete.map(row => row.toObject());
+    await Promise.all(rowsToDelete.map(row => row.delete()));
+    
+    res.json({ 
+      success: true, 
+      message: `${deletedRecords.length} registro(s) eliminado(s) exitosamente`,
+      deletedCount: deletedRecords.length,
+      deletedRecords: deletedRecords
+    });
+  } catch (error) {
+    console.error('Error bulk deleting records:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al eliminar los registros',
       error: error.message 
     });
   }
