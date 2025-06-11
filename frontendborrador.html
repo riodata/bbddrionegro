@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BBDD Río Negro - CRUD Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4a90e2, #357abd);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            color: #6c757d;
+        }
+
+        .tab.active {
+            background: white;
+            color: #4a90e2;
+            border-bottom: 3px solid #4a90e2;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4a90e2, #357abd);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(74, 144, 226, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+        }
+
+        .btn-clear {
+            background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+        }
+
+        .search-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+
+        .search-field {
+            flex: 2;
+        }
+
+        .search-dropdown {
+            flex: 1;
+        }
+
+        .search-buttons {
+            flex: 1;
+        }
+
+        .records-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .record {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .record:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .record:last-child {
+            border-bottom: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            opacity: 0.9;
+        }
+
+        .results-info {
+            background: #e3f2fd;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .advanced-search {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 1px solid #ffeaa7;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 10px;
+        }
+
+        .filter-field, .filter-value {
+            flex: 1;
+        }
+
+        .filter-operator {
+            flex: 0.8;
+        }
+
+        .filter-actions {
+            flex: 0.5;
+        }
+
+        @media (max-width: 768px) {
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .search-row, .filter-row {
+                flex-direction: column;
+            }
+
+            .search-field, .search-dropdown, .search-buttons,
+            .filter-field, .filter-value, .filter-operator, .filter-actions {
+                flex: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗄️ BBDD Río Negro</h1>
+            <p>Sistema de gestión de datos con Google Sheets</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('create')">➕ Crear</button>
+            <button class="tab" onclick="showTab('read')">📋 Leer</button>
+            <button class="tab" onclick="showTab('update')">✏️ Actualizar</button>
+            <button class="tab" onclick="showTab('delete')">🗑️ Eliminar</button>
+            <button class="tab" onclick="showTab('stats')">📊 Estadísticas</button>
+        </div>
+
+        <div class="content">
+            <div id="status-message"></div>
+
+            <!-- CREATE TAB -->
+            <div id="create" class="tab-content active">
+                <h2>Crear Nuevo Registro</h2>
+                <form id="createForm">
+                    <div class="form-group">
+                        <label for="nombre">Nombre:</label>
+                        <input type="text" id="nombre" name="nombre" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email:</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="telefono">Teléfono:</label>
+                        <input type="tel" id="telefono" name="telefono">
+                    </div>
+                    <div class="form-group">
+                        <label for="ciudad">Ciudad:</label>
+                        <input type="text" id="ciudad" name="ciudad">
+                    </div>
+                    <div class="form-group">
+                        <label for="comentarios">Comentarios:</label>
+                        <textarea id="comentarios" name="comentarios" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn">Crear Registro</button>
+                </form>
+            </div>
+
+            <!-- READ TAB -->
+            <div id="read" class="tab-content">
+                <h2>Registros Existentes</h2>
+                
+                <!-- Búsqueda Simple -->
+                <div class="search-container">
+                    <h3>🔍 Búsqueda Simple</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="searchText">Texto a buscar:</label>
+                            <input type="text" id="searchText" placeholder="Ingresa el texto a buscar...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="searchField">Campo:</label>
+                            <select id="searchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="searchRecords()" class="btn">🔍 Buscar</button>
+                            <button onclick="clearSearch()" class="btn btn-clear">🧹 Limpiar</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Botón para mostrar búsqueda avanzada -->
+                    <button onclick="toggleAdvancedSearch()" class="btn btn-warning">⚙️ Búsqueda Avanzada</button>
+                </div>
+
+                <!-- Búsqueda Avanzada (inicialmente oculta) -->
+                <div id="advancedSearch" class="advanced-search" style="display: none;">
+                    <h3>🔧 Búsqueda Avanzada</h3>
+                    <p>Agrega múltiples filtros para búsquedas más específicas:</p>
+                    <div id="filtersContainer"></div>
+                    <button onclick="addFilter()" class="btn btn-success">➕ Agregar Filtro</button>
+                    <button onclick="executeAdvancedSearch()" class="btn">🔍 Buscar Avanzado</button>
+                    <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar Filtros</button>
+                </div>
+
+                <!-- Controles principales -->
+                <div style="margin: 20px 0;">
+                    <button onclick="loadRecords()" class="btn">🔄 Cargar Todos</button>
+                    <button onclick="loadFields()" class="btn btn-warning">📋 Actualizar Campos</button>
+                </div>
+
+                <!-- Información de resultados -->
+                <div id="resultsInfo" style="display: none;"></div>
+
+                <!-- Contenedor de registros -->
+                <div id="records-container" class="records-container">
+                    <div class="loading">Cargando registros...</div>
+                </div>
+            </div>
+
+            <!-- UPDATE TAB -->
+            <div id="update" class="tab-content">
+                <h2>Actualizar Registro</h2>
+                
+                <!-- Búsqueda para actualizar -->
+                <div class="search-container">
+                    <h3>🔍 Buscar Registro a Actualizar</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="updateSearchText">Texto a buscar:</label>
+                            <input type="text" id="updateSearchText" placeholder="Buscar registro...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="updateSearchField">Campo:</label>
+                            <select id="updateSearchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="searchRecordsForUpdate()" class="btn">🔍 Buscar</button>
+                            <button onclick="loadRecordsForUpdate()" class="btn btn-warning">📋 Ver Todos</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="update-records"></div>
+            </div>
+
+            <!-- DELETE TAB -->
+            <div id="delete" class="tab-content">
+                <h2>Eliminar Registro</h2>
+                
+                <!-- Búsqueda para eliminar -->
+                <div class="search-container">
+                    <h3>🔍 Buscar Registro a Eliminar</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="deleteSearchText">Texto a buscar:</label>
+                            <input type="text" id="deleteSearchText" placeholder="Buscar registro...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="deleteSearchField">Campo:</label>
+                            <select id="deleteSearchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="searchRecordsForDelete()" class="btn">🔍 Buscar</button>
+                            <button onclick="loadRecordsForDelete()" class="btn btn-danger">📋 Ver Todos</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eliminación múltiple -->
+                <div class="search-container" style="background: #ffebee;">
+                    <h3>⚠️ Eliminación Múltiple</h3>
+                    <p><strong>¡CUIDADO!</strong> Esta función eliminará TODOS los registros que coincidan con los filtros.</p>
+                    <button onclick="showBulkDeleteForm()" class="btn btn-danger">🗑️ Eliminar Múltiples</button>
+                    <div id="bulkDeleteForm" style="display: none; margin-top: 15px;">
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>Campo:</label>
+                                <select id="bulkDeleteField">
+                                    <option value="">Selecciona un campo...</option>
+                                </select>
+                            </div>
+                            <div class="filter-value">
+                                <label>Valor:</label>
+                                <input type="text" id="bulkDeleteValue" placeholder="Valor a buscar...">
+                            </div>
+                            <div class="filter-actions">
+                                <button onclick="executeBulkDelete()" class="btn btn-danger">🗑️ Eliminar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="delete-records"></div>
+            </div>
+
+            <!-- STATS TAB -->
+            <div id="stats" class="tab-content">
+                <h2>Estadísticas del Sistema</h2>
+                <button onclick="loadStats()" class="btn">📊 Cargar Estadísticas</button>
+                <div id="stats-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Base URL (usa la URL actual)
+        const API_BASE = window.location.origin;
+        
+        // Variables globales para filtros
+        let availableFields = [];
+        let filterCount = 0;
+
+        // Funciones de utilidad
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        function showTab(tabName) {
+            // Ocultar todos los tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Mostrar el tab seleccionado
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Cargar campos cuando se abren tabs que los necesitan
+            if (['read', 'update', 'delete'].includes(tabName)) {
+                loadFields();
+            }
+        }
+
+        // Cargar campos disponibles
+        async function loadFields() {
+            try {
+                const response = await fetch(`${API_BASE}/webhook/fields`);
+                const result = await response.json();
+                
+                if (result.success && result.fields) {
+                    availableFields = result.fields;
+                    populateFieldDropdowns();
+                }
+            } catch (error) {
+                console.error('Error loading fields:', error);
+            }
+        }
+
+        function populateFieldDropdowns() {
+            const dropdowns = [
+                'searchField', 'updateSearchField', 'deleteSearchField', 'bulkDeleteField'
+            ];
+            
+            dropdowns.forEach(dropdownId => {
+                const dropdown = document.getElementById(dropdownId);
+                if (dropdown) {
+                    dropdown.innerHTML = '<option value="">Selecciona un campo...</option>';
+                    availableFields.forEach(field => {
+                        dropdown.innerHTML += `<option value="${field}">${field}</option>`;
+                    });
+                }
+            });
+        }
+
+        // Funciones de búsqueda avanzada
+        function toggleAdvancedSearch() {
+            const advancedDiv = document.getElementById('advancedSearch');
+            advancedDiv.style.display = advancedDiv.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function addFilter() {
+            const container = document.getElementById('filtersContainer');
+            const filterId = `filter_${filterCount++}`;
+            
+            const filterHtml = `
+                <div class="filter-row" id="${filterId}">
+                    <div class="filter-field">
+                        <label>Campo:</label>
+                        <select class="filter-field-select">
+                            <option value="">Selecciona un campo...</option>
+                            ${availableFields.map(field => `<option value="${field}">${field}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="filter-operator">
+                        <label>Operador:</label>
+                        <select class="filter-operator-select">
+                            <option value="contains">Contiene</option>
+                            <option value="equals">Igual a</option>
+                            <option value="startsWith">Comienza con</option>
+                            <option value="endsWith">Termina con</option>
+                            <option value="notEquals">Diferente de</option>
+                        </select>
+                    </div>
+                    <div class="filter-value">
+                        <label>Valor:</label>
+                        <input type="text" class="filter-value-input" placeholder="Valor a buscar...">
+                    </div>
+                    <div class="filter-actions">
+                        <button onclick="removeFilter('${filterId}')" class="btn btn-danger">❌</button>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML += filterHtml;
+        }
+
+        function removeFilter(filterId) {
+            document.getElementById(filterId).remove();
+        }
+
+        function clearAdvancedSearch() {
+            document.getElementById('filtersContainer').innerHTML = '';
+            filterCount = 0;
+        }
+
+        async function executeAdvancedSearch() {
+            const filterRows = document.querySelectorAll('#filtersContainer .filter-row');
+            const filters = [];
+            
+            filterRows.forEach(row => {
+                const field = row.querySelector('.filter-field-select').value;
+                const operator = row.querySelector('.filter-operator-select').value;
+                const value = row.querySelector('.filter-value-input').value;
+                
+                if (field && value) {
+                    filters.push({ field, operator, value });
+                }
+            });
+            
+            if (filters.length === 0) {
+                showStatus('❌ Agrega al menos un filtro válido', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('records-container');
+            container.innerHTML = '<div class="loading">Buscando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/search`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filters })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecords(result.data, `Búsqueda avanzada: ${result.total} resultados encontrados`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+        // CREATE
+        document.getElementById('createForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData);
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('✅ Registro creado exitosamente!', 'success');
+                    e.target.reset();
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        });
+
+        // READ - Funciones de búsqueda
+        async function searchRecords() {
+            const searchText = document.getElementById('searchText').value.trim();
+            const searchField = document.getElementById('searchField').value;
+            
+            if (!searchText || !searchField) {
+                showStatus('❌ Por favor completa ambos campos de búsqueda', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('records-container');
+            container.innerHTML = '<div class="loading">Buscando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/read?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecords(result.data, `Búsqueda: "${searchText}" en campo "${searchField}" - ${result.total} resultados`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+        function clearSearch() {
+            document.getElementById('searchText').value = '';
+            document.getElementById('searchField').value = '';
+            document.getElementById('resultsInfo').style.display = 'none';
+            loadRecords();
+        }
+
+        async function loadRecords() {
+            const container = document.getElementById('records-container');
+            container.innerHTML = '<div class="loading">Cargando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/read`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecords(result.data, `Todos los registros: ${result.total} encontrados`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                container.innerHTML = '<div class="loading">Error al cargar registros</div>';
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+
+        function displayRecords(records, infoText) {
+            const container = document.getElementById('records-container');
+            const infoDiv = document.getElementById('resultsInfo');
+            
+            // Mostrar información de resultados
+            if (infoText) {
+                infoDiv.innerHTML = `<div class="results-info">📊 ${infoText}</div>`;
+                infoDiv.style.display = 'block';
+            }
+            
+            if (records.length === 0) {
+                container.innerHTML = '<div class="loading">No se encontraron registros</div>';
+                return;
+            }
+            
+            let html = '';
+            records.forEach((record, index) => {
+                html += `
+                    <div class="record">
+                        <strong>Registro #${index + 1}</strong><br>
+                        ${Object.entries(record).map(([key, value]) => 
+                            `<strong>${key}:</strong> ${value || 'N/A'}`
+                        ).join('<br>')}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            showStatus(`📋 ${records.length} registros mostrados`, 'success');
+        }
+
+        // UPDATE - con búsqueda
+        async function searchRecordsForUpdate() {
+            const searchText = document.getElementById('updateSearchText').value.trim();
+            const searchField = document.getElementById('updateSearchField').value;
+            
+            if (!searchText || !searchField) {
+                showStatus('❌ Por favor completa ambos campos de búsqueda', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('update-records');
+            container.innerHTML = '<div class="loading">Buscando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/read?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecordsForUpdate(result.data, `Búsqueda: "${searchText}" en "${searchField}"`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadRecordsForUpdate() {
+            const container = document.getElementById('update-records');
+            container.innerHTML = '<div class="loading">Cargando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/read`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecordsForUpdate(result.data, 'Todos los registros');
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+        function displayRecordsForUpdate(records, searchInfo) {
+            const container = document.getElementById('update-records');
+            
+            if (records.length === 0) {
+                container.innerHTML = '<div class="loading">No se encontraron registros</div>';
+                return;
+            }
+            
+            let html = `<h3>📝 ${searchInfo} - Selecciona un registro para actualizar:</h3>`;
+            records.forEach((record, index) => {
+                html += `
+                    <div class="record" style="cursor: pointer;" onclick="editRecord(${index}, ${JSON.stringify(record).replace(/"/g, '&quot;')})">
+                        <strong>Registro #${index + 1}</strong><br>
+                        ${Object.entries(record).map(([key, value]) => 
+                            `<strong>${key}:</strong> ${value || 'N/A'}`
+                        ).join('<br>')}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function editRecord(index, record) {
+            const container = document.getElementById('update-records');
+            
+            let formHtml = '<h3>✏️ Editar Registro:</h3><form id="updateForm">';
+            Object.entries(record).forEach(([key, value]) => {
+                formHtml += `
+                    <div class="form-group
