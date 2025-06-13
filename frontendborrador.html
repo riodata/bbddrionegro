@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BBDD Río Negro - CRUD Interface</title>
+    <title>Bases de datos del Gobierno de Río Negro</title>
     <style>
         * {
             margin: 0;
@@ -310,13 +310,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🗄️ BBDD Río Negro</h1>
-            <p>Sistema de gestión de datos con Google Sheets</p>
+            <h1>Gobierno de la Provincia Río Negro</h1>
+            <p>🗄️ Sistema de gestión de bases de datos</p>
         </div>
 
         <div class="tabs">
             <button class="tab active" onclick="showTab('create')">➕ Crear</button>
-            <button class="tab" onclick="showTab('read')">📋 Leer</button>
+            <button class="tab" onclick="showTab('read')">📋 Buscar</button>
             <button class="tab" onclick="showTab('update')">✏️ Actualizar</button>
             <button class="tab" onclick="showTab('delete')">🗑️ Eliminar</button>
             <button class="tab" onclick="showTab('stats')">📊 Estadísticas</button>
@@ -330,20 +330,129 @@
                 <h2>Crear Nuevo Registro</h2>
                 <form id="createForm">
                     <div class="form-group">
-                        <label for="nombre">Nombre:</label>
-                        <input type="text" id="nombre" name="nombre" required>
+                        <label for="legajo">Legajo:</label>
+                        <input type="text" id="legajo" name="legajo" required>
                     </div>
                     <div class="form-group">
-                        <label for="email">Email:</label>
-                        <input type="email" id="email" name="email" required>
+                        <label for="cooperativa">Cooperativa:</label>
+                        <input type="text" id="cooperativa" name="cooperativa" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="matricula">Matrícula:</label>
+                        <input type="text" id="matricula" name="matricula" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="actapcial">Acta provincial:</label>
+                        <input type="text" id="actapcial" name="actapcial" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="emismatr">Fecha de emisión matrícula:</label>
+                        <input type="date" id="emismatr" name="emismatr" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="direccion">Dirección:</label>
+                        <input type="text" id="direccion" name="direccion" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="direccionverif">Dirección verificada:</label>
+                        <input type="text" id="direccionverif" name="direccionverif" required>
                     </div>
                     <div class="form-group">
                         <label for="telefono">Teléfono:</label>
                         <input type="tel" id="telefono" name="telefono">
                     </div>
                     <div class="form-group">
-                        <label for="ciudad">Ciudad:</label>
-                        <input type="text" id="ciudad" name="ciudad">
+                        <label for="presid">Presidente:</label>
+                        <input type="text" id="presid" name="presid" required>
+                    </div> 
+                    <div class="form-group">
+                        <label for="estadoentid">Fecha Estado Entidad:</label>
+                        <input type="date" id="estadoentid" name="estadoentid" required>
+                    </div>                 
+                    <div class="form-group">
+                        <label for="fechasamb">Fecha Asamblea:</label>
+                        <input type="date" id="fechasamb" name="fechasamb" required>
+                    </div> 
+                    <div class="form-group">
+                        <label for="tipoasamb">Tipo de asamblea:</label>
+                        <input type="text" id="tipoasamb" name="tipoasamb">
+                    </div>
+                    <div class="form-group">
+                        <label for="consejoadm">Consejo administrativo:</label>
+                        <input type="text" id="consejoadm" name="consejoadm">
+                    </div>
+                    <div class="form-group">
+                        <label for="sindicatura">Sindicatura:</label>
+                        <input type="text" id="sindicatura" name="sindicatura">
+                    </div>                    
+                    <div class="form-group">
+                        <label for="localidad">Localidad:</label>
+                        <input type="text" id="localidad" name="localidad">
+                    </div>
+                    <div class="form-group">
+                        <label for="departamento">Departamento:</label>
+                        <input type="text" id="departamento" name="departamento">
+                    </div>
+                    <div class="form-group">
+                        <label for="codpost">Código postal:</label>
+                        <input type="text" id="codpost" name="codpost">
+                    </div>
+                    <div class="form-group">
+                        <label for="cuit">CUIT:</label>
+                        <input type="text" id="cuit" name="cuit">
+                    </div>
+                    <div class="form-group">
+                        <label for="tipo">Tipo:</label>
+                          <input type="radio" id="agricola" name="tipo" value="agricola">
+                          <label for="agricola">Agrícola</label><br>
+                          <input type="radio" id="agric-ganad" name="tipo" value="agric-ganad">
+                          <label for="agric-ganad">Agrícola-ganadera</label><br>
+                          <input type="radio" id="consumo" name="tipo" value="consumo">
+                          <label for="consumo">Consumo</label>
+                          <input type="radio" id="federacion" name="tipo" value="federacion">
+                          <label for="federacion">Federación</label><br>
+                          <input type="radio" id="fruticola" name="tipo" value="fruticola">
+                          <label for="fruticola">Frutícola</label><br>
+                          <input type="radio" id="frutihorticola" name="tipo" value="frutihorticola">
+                          <label for="frutihorticola">Frutihortícola</label>
+                          <input type="radio" id="ganadera" name="tipo" value="ganadera">
+                          <label for="ganadera">Ganadera</label><br>
+                          <input type="radio" id="Produccion" name="tipo" value="produccion">
+                          <label for="produccion">Producción</label><br>
+                          <input type="radio" id="provision" name="tipo" value="provision">
+                          <label for="provision">Provisión</label>
+                          <input type="radio" id="servicios" name="tipo" value="servicios">
+                          <label for="servicios">Servicios</label><br>
+                          <input type="radio" id="servicios-publicos" name="tipo" value="servicios-publicos">
+                          <label for="servicios-publicos">Servicios públicos</label><br>
+                          <input type="radio" id="trabajo" name="tipo" value="trabajo">
+                          <label for="trabajo">Trabajo</label>
+                          <input type="radio" id="vivienda" name="tipo" value="vivienda">
+                          <label for="vivienda">Vivienda</label>
+                    </div>
+                    <div class="form-group">
+                        <label for="tipo">Subtipo:</label>
+                          <input type="radio" id="atencionpersonas" name="tipo" value="atencionpersonas">
+                          <label for="atencionpersonas">Atención de personas</label><br>
+                          <input type="radio" id="audiovisual" name="tipo" value="audiovisual">
+                          <label for="audiovisual">Audiovisual</label><br>
+                          <input type="radio" id="bienes-servicios" name="tipo" value="bienes-servicios">
+                          <label for="bienes-servicios">Bienes y servicios</label>
+                          <input type="radio" id="comercial-industrial" name="tipo" value="comercial-industrial">
+                          <label for="comercial-industrial">Comercialización e industrialización</label><br>
+                          <input type="radio" id="comercial-consumo" name="tipo" value="comercial-consumo">
+                          <label for="comercial-consumo">Comercialización y consumo</label><br>
+                          <input type="radio" id="comercial-explotac" name="tipo" value="comercial-explotac">
+                          <label for="comercial-explotac">Comercialización y explotación</label>
+                          <input type="radio" id="comercial-produc" name="tipo" value="comercial-produc">
+                          <label for="comercial-produc">Comercialización y producción</label><br>
+                          <input type="radio" id="comercial-provis" name="tipo" value="comercial-provis">
+                          <label for="comercial-provis">Comercialización y provision</label><br>
+                          <input type="radio" id="comercial-transp" name="tipo" value="comercial-transp">
+                          <label for="comercial-transp">Comercialización y transporte</label>
+                          <input type="radio" id="construccion" name="tipo" value="construccion">
+                          <label for="construcciion">Construcción</label><br>
+                          
                     </div>
                     <div class="form-group">
                         <label for="comentarios">Comentarios:</label>
