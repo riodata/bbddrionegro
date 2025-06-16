@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BBDD Río Negro - CRUD Interface</title>
+    <title>Bases de datos del Gobierno de Río Negro</title>
     <style>
         * {
             margin: 0;
@@ -110,6 +110,26 @@
             box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
         }
 
+        /* Estilos para campos de texto personalizados (otros) */
+        .custom-field {
+            display: none;
+            margin-top: 10px;
+        }
+
+        .custom-field.show {
+            display: block;
+        }
+
+        .custom-field input {
+            border-color: #28a745;
+            background-color: #f8fff9;
+        }
+
+        .custom-field label {
+            color: #28a745;
+            font-style: italic;
+        }
+
         .btn {
             background: linear-gradient(135deg, #4a90e2, #357abd);
             color: white;
@@ -135,6 +155,41 @@
 
         .btn-success {
             background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+        }
+
+        .btn-clear {
+            background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+        }
+
+        .search-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+
+        .search-field {
+            flex: 2;
+        }
+
+        .search-dropdown {
+            flex: 1;
+        }
+
+        .search-buttons {
+            flex: 1;
         }
 
         .records-container {
@@ -213,6 +268,41 @@
             opacity: 0.9;
         }
 
+        .results-info {
+            background: #e3f2fd;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .advanced-search {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border: 1px solid #ffeaa7;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 10px;
+        }
+
+        .filter-field, .filter-value {
+            flex: 1;
+        }
+
+        .filter-operator {
+            flex: 0.8;
+        }
+
+        .filter-actions {
+            flex: 0.5;
+        }
+
         @media (max-width: 768px) {
             .tabs {
                 flex-direction: column;
@@ -225,19 +315,28 @@
             .header h1 {
                 font-size: 2rem;
             }
+
+            .search-row, .filter-row {
+                flex-direction: column;
+            }
+
+            .search-field, .search-dropdown, .search-buttons,
+            .filter-field, .filter-value, .filter-operator, .filter-actions {
+                flex: none;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🗄️ BBDD Río Negro</h1>
-            <p>Sistema de gestión de datos con Google Sheets</p>
+            <h1>Gobierno de la Provincia Río Negro</h1>
+            <p>🗄️ Sistema de gestión de bases de datos</p>
         </div>
 
         <div class="tabs">
             <button class="tab active" onclick="showTab('create')">➕ Crear</button>
-            <button class="tab" onclick="showTab('read')">📋 Leer</button>
+            <button class="tab" onclick="showTab('read')">📋 Buscar</button>
             <button class="tab" onclick="showTab('update')">✏️ Actualizar</button>
             <button class="tab" onclick="showTab('delete')">🗑️ Eliminar</button>
             <button class="tab" onclick="showTab('stats')">📊 Estadísticas</button>
@@ -250,34 +349,213 @@
             <div id="create" class="tab-content active">
                 <h2>Crear Nuevo Registro</h2>
                 <form id="createForm">
-                    <div class="form-group">
-                        <label for="nombre">Nombre:</label>
-                        <input type="text" id="nombre" name="nombre" required>
+<div class="form-group">
+                        <label for="legajo">Legajo:</label>
+                        <input type="text" id="legajo" name="legajo" required>
                     </div>
                     <div class="form-group">
-                        <label for="email">Email:</label>
-                        <input type="email" id="email" name="email" required>
+                        <label for="cooperativa">Cooperativa:</label>
+                        <input type="text" id="cooperativa" name="cooperativa" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="matricula">Matrícula:</label>
+                        <input type="text" id="matricula" name="matricula" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="actapcial">Acta provincial:</label>
+                        <input type="text" id="actapcial" name="actapcial" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="emismatr">Fecha de emisión matrícula:</label>
+                        <input type="date" id="emismatr" name="emismatr" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="direccion">Dirección:</label>
+                        <input type="text" id="direccion" name="direccion" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="direccionverif">Dirección verificada:</label>
+                        <input type="text" id="direccionverif" name="direccionverif" required>
                     </div>
                     <div class="form-group">
                         <label for="telefono">Teléfono:</label>
                         <input type="tel" id="telefono" name="telefono">
                     </div>
                     <div class="form-group">
-                        <label for="ciudad">Ciudad:</label>
-                        <input type="text" id="ciudad" name="ciudad">
+                        <label for="presid">Presidente:</label>
+                        <input type="text" id="presid" name="presid" required>
+                    </div> 
+                    <div class="form-group">
+                        <label for="estadoentid">Fecha Estado Entidad:</label>
+                        <input type="date" id="estadoentid" name="estadoentid" required>
+                    </div>                 
+                    <div class="form-group">
+                        <label for="fechasamb">Fecha Asamblea:</label>
+                        <input type="date" id="fechasamb" name="fechasamb" required>
+                    </div> 
+                    <div class="form-group">
+                        <label for="tipoasamb">Tipo de asamblea:</label>
+                        <select id="tipoasamb" name="tipoasamb" required onchange="handleSelectChange(this, 'tipoasamb_custom')">
+                            <option value="">Seleccionar...</option>
+                            <option value="Ordinaria">Ordinaria</option>
+                            <option value="Ordinaria autoconvocada">Ordinaria autoconvocada</option>
+                            <option value="Extraordinaria">Extraordinaria</option>
+                            <option value="Extraordinaria autoconvocada">Extraordinaria autoconvocada</option>
+                            <option value="otros">Otros</option>
+                        </select>
+                        <div id="tipoasamb_custom" class="custom-field">
+                            <label for="tipoasamb_custom_text">Especificar otro tipo:</label>
+                            <input type="text" id="tipoasamb_custom_text" name="tipoasamb_custom" placeholder="Ingrese otro tipo de asamblea...">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label for="comentarios">Comentarios:</label>
-                        <textarea id="comentarios" name="comentarios" rows="3"></textarea>
+                        <label for="consejoadm">Consejo administrativo:</label>
+                        <input type="text" id="consejoadm" name="consejoadm">
+                    </div>
+                    <div class="form-group">
+                        <label for="sindicatura">Sindicatura:</label>
+                        <input type="text" id="sindicatura" name="sindicatura">
+                    </div>                    
+                    <div class="form-group">
+                        <label for="localidad">Localidad:</label>
+                        <input type="text" id="localidad" name="localidad">
+                    </div>
+                    <div class="form-group">
+                        <label for="departamento">Departamento:</label>
+                        <select id="departamento" name="departamento" required>
+                            <option value="">Seleccionar departamento...</option>
+                            <option value="Adolfo Alsina">Adolfo Alsina</option>
+                            <option value="Avellaneda">Avellaneda</option>
+                            <option value="Bariloche">Bariloche</option>
+                            <option value="Conesa">Conesa</option>
+                            <option value="El Cuy">El Cuy</option>
+                            <option value="General Roca">General Roca</option>
+                            <option value="9 de Julio">9 de Julio</option>
+                            <option value="Ñorquincó">Ñorquincó</option>
+                            <option value="Pichi Mahuida">Pichi Mahuida</option>
+                            <option value="Pilcaniyeu">Pilcaniyeu</option>
+                            <option value="San Antonio">San Antonio</option>
+                            <option value="Valcheta">Valcheta</option>
+                            <option value="25 de Mayo">25 de Mayo</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="codpost">Código postal:</label>
+                        <input type="text" id="codpost" name="codpost">
+                    </div>
+                    <div class="form-group">
+                        <label for="cuit">CUIT:</label>
+                        <input type="text" id="cuit" name="cuit" placeholder="XX-XXXXXXXX-X" maxlength="13" pattern="[0-9]{2}-[0-9]{8}-[0-9]{1}">
+                    </div>
+                    <!-- DROPDOWN PARA TIPO -->
+                    <div class="form-group">
+                        <label for="tipo">Tipo:</label>
+                        <select id="tipo" name="tipo" required onchange="handleSelectChange(this, 'tipo_custom')">
+                            <option value="">Seleccionar tipo...</option>
+                            <option value="Agrícola">Agrícola</option>
+                            <option value="Agrícola-ganadera">Agrícola-ganadera</option>
+                            <option value="Consumo">Consumo</option>
+                            <option value="Federación">Federación</option>
+                            <option value="Frutícola">Frutícola</option>
+                            <option value="Frutihortícola">Frutihortícola</option>
+                            <option value="Ganadera">Ganadera</option>
+                            <option value="Producción">Producción</option>
+                            <option value="Provisión">Provisión</option>
+                            <option value="Servicios">Servicios</option>
+                            <option value="Servicios públicos">Servicios públicos</option>
+                            <option value="Trabajo">Trabajo</option>
+                            <option value="Vivienda">Vivienda</option>
+                            <option value="otros">Otros</option>
+                        </select>
+                        <div id="tipo_custom" class="custom-field">
+                            <label for="tipo_custom_text">Especificar otro tipo:</label>
+                            <input type="text" id="tipo_custom_text" name="tipo_custom" placeholder="Ingrese otro tipo...">
+                        </div>
+                    </div>                
+                    <!-- DROPDOWN PARA SUBTIPO -->
+                    <div class="form-group">
+                        <label for="subtipo">Subtipo:</label>
+                        <select id="subtipo" name="subtipo" onchange="handleSelectChange(this, 'subtipo_custom')">
+                            <option value="">Seleccionar subtipo...</option>
+                            <option value="Atención de personas">Atención de personas</option>
+                            <option value="Audiovisual">Audiovisual</option>
+                            <option value="Bienes y servicios">Bienes y servicios</option>
+                            <option value="Comercialización e industrialización">Comercialización e industrialización</option>
+                            <option value="Comercialización y consumo">Comercialización y consumo</option>
+                            <option value="Comercialización y explotación">Comercialización y explotación</option>
+                            <option value="Comercialización y producción">Comercialización y producción</option>
+                            <option value="Comercialización y provisión">Comercialización y provisión</option>
+                            <option value="Comercialización y transporte">Comercialización y transporte</option>
+                            <option value="Construcción">Construcción</option>
+                            <option value="Construcción de estaciones transformadores de transmisión">Construcción de estaciones transformadores de transmisión</option>
+                            <option value="Cultura">Cultura</option>
+                            <option value="Diseño y producción">Diseño y producción</option>
+                            <option value="Educativa">Educativa</option>
+                            <option value="Empaque y embalaje de frutas">Empaque y embalaje de frutas</option>
+                            <option value="Estacionamiento medido y pago">Estacionamiento medido y pago</option>
+                            <option value="No aplica">No aplica</option>
+                            <option value="Producción y consumo">Producción y consumo</option>
+                            <option value="Radiodifusión">Radiodifusión</option>
+                            <option value="Rurales">Rurales</option>
+                            <option value="otros">Otros</option>
+                        </select>
+                        <div id="subtipo_custom" class="custom-field">
+                            <label for="subtipo_custom_text">Especificar otro subtipo:</label>
+                            <input type="text" id="subtipo_custom_text" name="subtipo_custom" placeholder="Ingrese otro subtipo...">
+                        </div>
+                    </div>                    
+                    <div class="form-group">
+                        <label for="observaciones">Observaciones:</label>
+                        <textarea id="observaciones" name="observaciones" rows="3"></textarea>
                     </div>
                     <button type="submit" class="btn">Crear Registro</button>
                 </form>
             </div>
 
-            <!-- READ TAB -->
-            <div id="read" class="tab-content">
-                <h2>Registros Existentes</h2>
-                <button onclick="loadRecords()" class="btn">🔄 Recargar Datos</button>
+                <!-- Búsqueda Simple -->
+                <div class="search-container">
+                    <h3>🔍 Búsqueda Simple</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="searchText">Texto a buscar:</label>
+                            <input type="text" id="searchText" placeholder="Ingresa el texto a buscar...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="searchField">Campo:</label>
+                            <select id="searchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="searchRecords()" class="btn">🔍 Buscar</button>
+                            <button onclick="clearSearch()" class="btn btn-clear">🧹 Limpiar</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Botón para mostrar búsqueda avanzada -->
+                    <button onclick="toggleAdvancedSearch()" class="btn btn-warning">⚙️ Búsqueda Avanzada</button>
+                </div>
+
+                <!-- Búsqueda Avanzada (inicialmente oculta) -->
+                <div id="advancedSearch" class="advanced-search" style="display: none;">
+                    <h3>🔧 Búsqueda Avanzada</h3>
+                    <p>Agrega múltiples filtros para búsquedas más específicas:</p>
+                    <div id="filtersContainer"></div>
+                    <button onclick="addFilter()" class="btn btn-success">➕ Agregar Filtro</button>
+                    <button onclick="executeAdvancedSearch()" class="btn">🔍 Buscar Avanzado</button>
+                    <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar Filtros</button>
+                </div>
+
+                <!-- Controles principales -->
+                <div style="margin: 20px 0;">
+                    <button onclick="loadRecords()" class="btn">🔄 Cargar Todos</button>
+                    <button onclick="loadFields()" class="btn btn-warning">📋 Actualizar Campos</button>
+                </div>
+
+                <!-- Información de resultados -->
+                <div id="resultsInfo" style="display: none;"></div>
+
+                <!-- Contenedor de registros -->
                 <div id="records-container" class="records-container">
                     <div class="loading">Cargando registros...</div>
                 </div>
@@ -286,16 +564,80 @@
             <!-- UPDATE TAB -->
             <div id="update" class="tab-content">
                 <h2>Actualizar Registro</h2>
-                <p>Primero carga los registros para seleccionar uno:</p>
-                <button onclick="loadRecordsForUpdate()" class="btn">Cargar Registros</button>
+                
+                <!-- Búsqueda para actualizar -->
+                <div class="search-container">
+                    <h3>🔍 Buscar Registro a Actualizar</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="updateSearchText">Texto a buscar:</label>
+                            <input type="text" id="updateSearchText" placeholder="Buscar registro...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="updateSearchField">Campo:</label>
+                            <select id="updateSearchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="searchRecordsForUpdate()" class="btn">🔍 Buscar</button>
+                            <button onclick="loadRecordsForUpdate()" class="btn btn-warning">📋 Ver Todos</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="update-records"></div>
             </div>
 
             <!-- DELETE TAB -->
             <div id="delete" class="tab-content">
                 <h2>Eliminar Registro</h2>
-                <p>Primero carga los registros para seleccionar uno:</p>
-                <button onclick="loadRecordsForDelete()" class="btn btn-danger">Cargar Registros</button>
+                
+                <!-- Búsqueda para eliminar -->
+                <div class="search-container">
+                    <h3>🔍 Buscar Registro a Eliminar</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="deleteSearchText">Texto a buscar:</label>
+                            <input type="text" id="deleteSearchText" placeholder="Buscar registro...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="deleteSearchField">Campo:</label>
+                            <select id="deleteSearchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="searchRecordsForDelete()" class="btn">🔍 Buscar</button>
+                            <button onclick="loadRecordsForDelete()" class="btn btn-danger">📋 Ver Todos</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Eliminación múltiple -->
+                <div class="search-container" style="background: #ffebee;">
+                    <h3>⚠️ Eliminación Múltiple</h3>
+                    <p><strong>¡CUIDADO!</strong> Esta función eliminará TODOS los registros que coincidan con los filtros.</p>
+                    <button onclick="showBulkDeleteForm()" class="btn btn-danger">🗑️ Eliminar Múltiples</button>
+                    <div id="bulkDeleteForm" style="display: none; margin-top: 15px;">
+                        <div class="filter-row">
+                            <div class="filter-field">
+                                <label>Campo:</label>
+                                <select id="bulkDeleteField">
+                                    <option value="">Selecciona un campo...</option>
+                                </select>
+                            </div>
+                            <div class="filter-value">
+                                <label>Valor:</label>
+                                <input type="text" id="bulkDeleteValue" placeholder="Valor a buscar...">
+                            </div>
+                            <div class="filter-actions">
+                                <button onclick="executeBulkDelete()" class="btn btn-danger">🗑️ Eliminar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="delete-records"></div>
             </div>
 
@@ -311,6 +653,86 @@
     <script>
         // API Base URL (usa la URL actual)
         const API_BASE = window.location.origin;
+
+                // Variables globales para filtros
+        let availableFields = [];
+        let filterCount = 0;
+
+                // Configuración de listados para dropdowns
+        const dropdownLists = {
+            tipo: [
+                "Agrícola",
+                "Agrícola-ganadera",
+                "Consumo",
+                "Federación",
+                "Frutícola",
+                "Frutihortícola",
+                "Ganadera",
+                "Producción",
+                "Provisión",
+                "Servicios",
+                "Servicios públicos",
+                "Trabajo",
+                "Vivienda"
+            ],
+            subtipo: [
+                "Atención de personas",
+                "Audiovisual",
+                "Bienes y servicios",
+                "Comercialización e industrialización",
+                "Comercialización y consumo",
+                "Comercialización y explotación", 
+                "Comercialización y producción",
+                "Comercialización y provisión",
+                "Comercialización y transporte",
+                "Construcción",
+                "Construcción de estaciones transformadores de transmisión",
+                "Cultura",
+                "Diseño y producción",
+                "Educativa",
+                "Empaque y embalaje de frutas",
+                "Estacionamiento medido y pago",
+                "No aplica",
+                "Producción y consumo",
+                "Radiodifusión",
+                "Rurales",
+                "Servicio de crédito",
+                "Servicios contables",
+                "Servicios de agua potable",
+                "Servicios de asesoria",
+                "Servicios de carga y descarga",
+                "Servicios de electricidad",
+                "Servicios de empaque",
+                "Servicios de lavadero",
+                "Servicios de mantenimiento",
+                "Servicios de recolección",
+                "Servicios en bienes móviles",
+                "Servicios generales",
+                "Servicios médicos",
+                "Servicios metalúrgicos",
+                "Servicios telefónicos",
+                "Servivcios hoteleros",
+                "Textil",
+                "Transporte",
+                "Turismo"
+            ]
+        };
+
+                // Función para manejar el cambio en selects con opción "Otros"
+        function handleSelectChange(selectElement, customFieldId) {
+            const customField = document.getElementById(customFieldId);
+            const customInput = document.getElementById(customFieldId + '_text');
+            
+            if (selectElement.value === 'otros') {
+                customField.classList.add('show');
+                customInput.required = true;
+                // Limpiar el valor del select principal cuando se usa "otros"
+                selectElement.setAttribute('data-original-value', selectElement.value);
+            } else {
+                customField.classList.remove('show');
+                customInput.required = false;
+                customInput.value = '';
+            }
 
         // Funciones de utilidad
         function showStatus(message, type = 'success') {
