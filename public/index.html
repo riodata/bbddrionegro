@@ -718,7 +718,7 @@
             ]
         };
 
-                // Función para manejar el cambio en selects con opción "Otros"
+        // Función para manejar el cambio en selects con opción "Otros"
         function handleSelectChange(selectElement, customFieldId) {
             const customField = document.getElementById(customFieldId);
             const customInput = document.getElementById(customFieldId + '_text');
@@ -755,8 +755,139 @@
             // Mostrar el tab seleccionado
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
+
+            // Cargar campos cuando se abren tabs que los necesitan
+            if (['read', 'update', 'delete'].includes(tabName)) {
+                loadFields();
+            }
         }
 
+        // Cargar campos disponibles
+        async function loadFields() {
+            try {
+                const response = await fetch(`${API_BASE}/webhook/fields`);
+                const result = await response.json();
+                
+                if (result.success && result.fields) {
+                    availableFields = result.fields;
+                    populateFieldDropdowns();
+                }
+            } catch (error) {
+                console.error('Error loading fields:', error);
+            }
+        }
+
+        function populateFieldDropdowns() {
+            const dropdowns = [
+                'searchField', 'updateSearchField', 'deleteSearchField', 'bulkDeleteField'
+            ];
+            
+            dropdowns.forEach(dropdownId => {
+                const dropdown = document.getElementById(dropdownId);
+                if (dropdown) {
+                    dropdown.innerHTML = '<option value="">Selecciona un campo...</option>';
+                    availableFields.forEach(field => {
+                        dropdown.innerHTML += `<option value="${field}">${field}</option>`;
+                    });
+                }
+            });
+        }
+
+        // Funciones de búsqueda avanzada
+        function toggleAdvancedSearch() {
+            const advancedDiv = document.getElementById('advancedSearch');
+            advancedDiv.style.display = advancedDiv.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function addFilter() {
+            const container = document.getElementById('filtersContainer');
+            const filterId = `filter_${filterCount++}`;
+            
+            const filterHtml = `
+                <div class="filter-row" id="${filterId}">
+                    <div class="filter-field">
+                        <label>Campo:</label>
+                        <select class="filter-field-select">
+                            <option value="">Selecciona un campo...</option>
+                            ${availableFields.map(field => `<option value="${field}">${field}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="filter-operator">
+                        <label>Operador:</label>
+                        <select class="filter-operator-select">
+                            <option value="contains">Contiene</option>
+                            <option value="equals">Igual a</option>
+                            <option value="startsWith">Comienza con</option>
+                            <option value="endsWith">Termina con</option>
+                            <option value="notEquals">Diferente de</option>
+                        </select>
+                    </div>
+                    <div class="filter-value">
+                        <label>Valor:</label>
+                        <input type="text" class="filter-value-input" placeholder="Valor a buscar...">
+                    </div>
+                    <div class="filter-actions">
+                        <button onclick="removeFilter('${filterId}')" class="btn btn-danger">❌</button>
+                    </div>
+                </div>
+            `;
+            
+            container.innerHTML += filterHtml;
+        }
+
+        function removeFilter(filterId) {
+            document.getElementById(filterId).remove();
+        }
+
+        function clearAdvancedSearch() {
+            document.getElementById('filtersContainer').innerHTML = '';
+            filterCount = 0;
+        }
+
+        async function executeAdvancedSearch() {
+            const filterRows = document.querySelectorAll('#filtersContainer .filter-row');
+            const filters = [];
+            
+            filterRows.forEach(row => {
+                const field = row.querySelector('.filter-field-select').value;
+                const operator = row.querySelector('.filter-operator-select').value;
+                const value = row.querySelector('.filter-value-input').value;
+                
+                if (field && value) {
+                    filters.push({ field, operator, value });
+                }
+            });
+            
+            if (filters.length === 0) {
+                showStatus('❌ Agrega al menos un filtro válido', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('records-container');
+            container.innerHTML = '<div class="loading">Buscando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/search`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filters })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecords(result.data, `Búsqueda avanzada: ${result.total} resultados encontrados`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+            
         // CREATE
         document.getElementById('createForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -786,66 +917,156 @@
             }
         });
 
-        // READ
+                // READ - Funciones de búsqueda
+        async function searchRecords() {
+            const searchText = document.getElementById('searchText').value.trim();
+            const searchField = document.getElementById('searchField').value;
+            
+            if (!searchText || !searchField) {
+                showStatus('❌ Por favor completa ambos campos de búsqueda', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('records-container');
+            container.innerHTML = '<div class="loading">Buscando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/read?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecords(result.data, `Búsqueda: "${searchText}" en campo "${searchField}" - ${result.total} resultados`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
+        function clearSearch() {
+            document.getElementById('searchText').value = '';
+            document.getElementById('searchField').value = '';
+            document.getElementById('resultsInfo').style.display = 'none';
+            loadRecords();
+        }
+
         async function loadRecords() {
             const container = document.getElementById('records-container');
             container.innerHTML = '<div class="loading">Cargando registros...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/webhook/read`);
-                const records = await response.json();
+                const result = await response.json();
                 
-                if (records.length === 0) {
-                    container.innerHTML = '<div class="loading">No hay registros disponibles</div>';
-                    return;
+                if (result.success) {
+                    displayRecords(result.data, `Todos los registros: ${result.total} encontrados`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
                 }
-                
-                let html = '';
-                records.forEach((record, index) => {
-                    html += `
-                        <div class="record">
-                            <strong>Registro #${index + 1}</strong><br>
-                            ${Object.entries(record).map(([key, value]) => 
-                                `<strong>${key}:</strong> ${value || 'N/A'}`
-                            ).join('<br>')}
-                        </div>
-                    `;
-                });
-                
-                container.innerHTML = html;
-                showStatus(`📋 ${records.length} registros cargados`, 'success');
             } catch (error) {
                 container.innerHTML = '<div class="loading">Error al cargar registros</div>';
                 showStatus(`❌ Error: ${error.message}`, 'error');
             }
         }
 
-        // UPDATE
+        function displayRecords(records, infoText) {
+            const container = document.getElementById('records-container');
+            const infoDiv = document.getElementById('resultsInfo');
+            
+            // Mostrar información de resultados
+            if (infoText) {
+                infoDiv.innerHTML = `<div class="results-info">📊 ${infoText}</div>`;
+                infoDiv.style.display = 'block';
+            }
+            
+            if (records.length === 0) {
+                container.innerHTML = '<div class="loading">No se encontraron registros</div>';
+                return;
+            }
+            
+            let html = '';
+            records.forEach((record, index) => {
+                html += `
+                    <div class="record">
+                        <strong>Registro #${index + 1}</strong><br>
+                        ${Object.entries(record).map(([key, value]) => 
+                            `<strong>${key}:</strong> ${value || 'N/A'}`
+                        ).join('<br>')}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            showStatus(`📋 ${records.length} registros mostrados`, 'success');
+        }
+
+        // UPDATE - con búsqueda
+        async function searchRecordsForUpdate() {
+            const searchText = document.getElementById('updateSearchText').value.trim();
+            const searchField = document.getElementById('updateSearchField').value;
+            
+            if (!searchText || !searchField) {
+                showStatus('❌ Por favor completa ambos campos de búsqueda', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('update-records');
+            container.innerHTML = '<div class="loading">Buscando registros...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webhook/read?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayRecordsForUpdate(result.data, `Búsqueda: "${searchText}" en "${searchField}"`);
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
+            }
+        }
+
         async function loadRecordsForUpdate() {
             const container = document.getElementById('update-records');
             container.innerHTML = '<div class="loading">Cargando registros...</div>';
             
             try {
                 const response = await fetch(`${API_BASE}/webhook/read`);
-                const records = await response.json();
+                const result = await response.json();
                 
-                let html = '<h3>Selecciona un registro para actualizar:</h3>';
-                records.forEach((record, index) => {
-                    html += `
-                        <div class="record" style="cursor: pointer;" onclick="editRecord(${index}, ${JSON.stringify(record).replace(/"/g, '&quot;')})">
-                            <strong>Registro #${index + 1}</strong><br>
-                            ${Object.entries(record).map(([key, value]) => 
-                                `<strong>${key}:</strong> ${value || 'N/A'}`
-                            ).join('<br>')}
-                        </div>
-                    `;
-                });
-                
-                container.innerHTML = html;
+                if (result.success) {
+                    displayRecordsForUpdate(result.data, 'Todos los registros');
+                } else {
+                    showStatus(`❌ Error: ${result.message}`, 'error');
+                }
             } catch (error) {
-                container.innerHTML = '<div class="loading">Error al cargar registros</div>';
-                showStatus(`❌ Error: ${error.message}`, 'error');
+                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
             }
+        }              
+
+        function displayRecordsForUpdate(records, searchInfo) {
+            const container = document.getElementById('update-records');
+            
+            if (records.length === 0) {
+                container.innerHTML = '<div class="loading">No se encontraron registros</div>';
+                return;
+            }
+            
+            let html = `<h3>📝 ${searchInfo} - Selecciona un registro para actualizar:</h3>`;
+            records.forEach((record, index) => {
+                html += `
+                    <div class="record" style="cursor: pointer;" onclick="editRecord(${index}, ${JSON.stringify(record).replace(/"/g, '&quot;')})">
+                        <strong>Registro #${index + 1}</strong><br>
+                        ${Object.entries(record).map(([key, value]) => 
+                            `<strong>${key}:</strong> ${value || 'N/A'}`
+                        ).join('<br>')}
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
         }
 
         function editRecord(index, record) {
