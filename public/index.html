@@ -606,32 +606,12 @@
             <div id="delete" class="tab-content">
                 <h2>Eliminar Registro</h2>
                 
-                <!-- Eliminación múltiple -->
-                <div class="search-container" style="background: #ffebee;">
-                    <h3>⚠️ Eliminación Múltiple</h3>
-                    <p><strong>¡CUIDADO!</strong> Esta función eliminará TODOS los registros que coincidan con los filtros.</p>
-                    <button onclick="showBulkDeleteForm()" class="btn btn-danger">🗑️ Eliminar Múltiples</button>
-                    <div id="bulkDeleteForm" style="display: none; margin-top: 15px;">
-                        <div class="filter-row">
-                            <div class="filter-field">
-                                <label>Campo:</label>
-                                <select id="bulkDeleteField">
-                                    <option value="">Selecciona un campo...</option>
-                                </select>
-                            </div>
-                            <div class="filter-value">
-                                <label>Valor:</label>
-                                <input type="text" id="bulkDeleteValue" placeholder="Valor a buscar...">
-                            </div>
-                            <div class="filter-actions">
-                                <button onclick="executeBulkDelete()" class="btn btn-danger">🗑️ Eliminar</button>
-                            </div>
-                        </div>
-                    </div>
+                <!-- Container for delete records -->
+                <div id="delete-records" class="records-container">
+                    <div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>
                 </div>
-
-                <div id="delete-records"></div>
             </div>
+
 <script>
 const API_BASE = window.location.origin;
 
@@ -696,6 +676,7 @@ function showTab(tabName) {
 
     // Cargar campos si es necesario
     if (tabName === 'search') loadFieldsForSearch();
+    if (['update', 'delete'].includes(tabName)) loadFieldsForGlobalSearch();
     if (tabName === 'delete') loadFieldsForDelete();
 
     // Si hay registro seleccionado para editar/eliminar, mostrarlo
@@ -809,14 +790,32 @@ function performGlobalSearch() {
         showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
         return;
     }
+    
+    // Show loading status in the active tab
+    const activeTabId = document.querySelector('.tab-content.active').id;
+    if (activeTabId === 'update') {
+        document.getElementById('update-records-container').innerHTML = '<div class="loading">Buscando...</div>';
+    } else if (activeTabId === 'delete') {
+        document.getElementById('delete-records').innerHTML = '<div class="loading">Buscando...</div>';
+    }
+    
     const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
     fetch(url)
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 currentRecords = data.data;
-                displaySearchResults(data.data); // Muestra igual que búsqueda normal
-                updateSearchResultsInfo(`Se encontraron ${data.total} registro(s)`);
+                
+                // Display results based on active tab
+                if (activeTabId === 'search') {
+                    displaySearchResults(data.data);
+                    updateSearchResultsInfo(`Se encontraron ${data.total} registro(s)`);
+                } else if (activeTabId === 'update') {
+                    displayUpdateResults(data.data);
+                } else if (activeTabId === 'delete') {
+                    displayDeleteResults(data.data);
+                }
+                
                 showStatus(`Se encontraron ${data.total} registro(s)`, 'success');
             } else {
                 showStatus('Error en la búsqueda: ' + data.message, 'error');
@@ -827,6 +826,56 @@ function performGlobalSearch() {
             showStatus('Error al realizar la búsqueda', 'error');
         });
 }
+
+function displayUpdateResults(records) {
+    const container = document.getElementById('update-records-container');
+    if (!records.length) {
+        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
+        return;
+    }
+    container.innerHTML = '';
+    records.forEach(record => {
+        const div = document.createElement('div');
+        div.className = 'record';
+        div.innerHTML = Object.entries(record)
+            .filter(([k]) => k !== '_rowIndex')
+            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+            .join('<br>');
+        
+        // Add Edit button
+        if (typeof record._rowIndex !== 'undefined') {
+            div.innerHTML += `<br>
+                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
+            `;
+        }
+        container.appendChild(div);
+    });
+}
+
+function displayDeleteResults(records) {
+    const container = document.getElementById('delete-records');
+    if (!records.length) {
+        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
+        return;
+    }
+    container.innerHTML = '';
+    records.forEach(record => {
+        const div = document.createElement('div');
+        div.className = 'record';
+        div.innerHTML = Object.entries(record)
+            .filter(([k]) => k !== '_rowIndex')
+            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+            .join('<br>');
+        
+        // Add Delete button
+        if (typeof record._rowIndex !== 'undefined') {
+            div.innerHTML += `<br>
+                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
+            `;
+        }
+        container.appendChild(div);
+    });
+}    
 
 function clearGlobalSearch() {
     document.getElementById('globalSearchText').value = '';
