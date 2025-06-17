@@ -344,6 +344,28 @@
         <div class="content">
             <div id="status-message"></div>
 
+            <!-- Barra de búsqueda global (solo visible en pestañas que la necesitan) -->
+            <div id="global-search" class="global-search" style="display: none;">
+                <h3>🔍 Buscar Registros</h3>
+                <div class="search-row">
+                    <div class="search-field">
+                        <label for="globalSearchText">Texto a buscar:</label>
+                        <input type="text" id="globalSearchText" placeholder="Ingresa el texto a buscar...">
+                    </div>
+                    <div class="search-dropdown">
+                        <label for="globalSearchField">Campo:</label>
+                        <select id="globalSearchField">
+                            <option value="">Selecciona un campo...</option>
+                        </select>
+                    </div>
+                    <div class="search-buttons">
+                        <button onclick="performGlobalSearch()" class="btn">🔍 Buscar</button>
+                        <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
+                        <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- CREATE TAB -->
             <div id="create" class="tab-content active">
                 <h2>Crear Nuevo Registro</h2>
@@ -515,32 +537,8 @@
             <div id="search" class="tab-content">
                 <h2>Buscar Registros Existentes</h2>
                 
-                <!-- Búsqueda Simple -->
+                <!-- Búsqueda Avanzada -->
                 <div class="search-container">
-                    <h3>🔍 Búsqueda Simple</h3>
-                    <div class="search-row">
-                        <div class="search-field">
-                            <label for="searchText">Texto a buscar:</label>
-                            <input type="text" id="searchText" placeholder="Ingresa el texto a buscar...">
-                        </div>
-                        <div class="search-dropdown">
-                            <label for="searchField">Campo:</label>
-                            <select id="searchField">
-                                <option value="">Selecciona un campo...</option>
-                            </select>
-                        </div>
-                        <div class="search-buttons">
-                            <button onclick="performSimpleSearch()" class="btn">🔍 Buscar</button>
-                            <button onclick="clearSearch()" class="btn btn-clear">🧹 Limpiar</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Botón para mostrar búsqueda avanzada -->
-                    <button onclick="toggleAdvancedSearch()" class="btn btn-warning">⚙️ Búsqueda Avanzada</button>
-                </div>
-            
-                <!-- Búsqueda Avanzada (inicialmente oculta) -->
-                <div id="advancedSearch" class="advanced-search" style="display: none;">
                     <h3>🔧 Búsqueda Avanzada</h3>
                     <p>Agrega múltiples filtros para búsquedas más específicas:</p>
                     <div id="filtersContainer"></div>
@@ -569,54 +567,30 @@
                 <h2>Actualizar Registro</h2>
                 
                 <!-- Búsqueda para actualizar -->
-                <div class="search-container">
-                    <h3>🔍 Buscar Registro a Actualizar</h3>
-                    <div class="search-row">
-                        <div class="search-field">
-                            <label for="updateSearchText">Texto a buscar:</label>
-                            <input type="text" id="updateSearchText" placeholder="Buscar registro...">
+                <!-- Formulario de actualización (oculto inicialmente) -->
+                <div id="update-form-container" style="display: none;">
+                    <h3>✏️ Editando Registro</h3>
+                    <form id="updateForm">
+                        <input type="hidden" id="update-rowIndex" name="rowIndex">
+                        <!-- Los campos se generarán dinámicamente -->
+                        <div id="update-fields"></div>
+                        <div style="margin-top: 20px;">
+                            <button type="submit" class="btn">💾 Guardar Cambios</button>
+                            <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
                         </div>
-                        <div class="search-dropdown">
-                            <label for="updateSearchField">Campo:</label>
-                            <select id="updateSearchField">
-                                <option value="">Selecciona un campo...</option>
-                            </select>
-                        </div>
-                        <div class="search-buttons">
-                            <button onclick="searchRecordsForUpdate()" class="btn">🔍 Buscar</button>
-                            <button onclick="loadRecordsForUpdate()" class="btn btn-warning">📋 Ver Todos</button>
-                        </div>
-                    </div>
+                    </form>
                 </div>
 
-                <div id="update-records"></div>
+                <!-- Contenedor de registros para actualizar -->
+                <div id="update-records-container" class="records-container">
+                    <div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>
+                </div>
             </div>
 
             <!-- DELETE TAB -->
             <div id="delete" class="tab-content">
                 <h2>Eliminar Registro</h2>
                 
-                <!-- Búsqueda para eliminar -->
-                <div class="search-container">
-                    <h3>🔍 Buscar Registro a Eliminar</h3>
-                    <div class="search-row">
-                        <div class="search-field">
-                            <label for="deleteSearchText">Texto a buscar:</label>
-                            <input type="text" id="deleteSearchText" placeholder="Buscar registro...">
-                        </div>
-                        <div class="search-dropdown">
-                            <label for="deleteSearchField">Campo:</label>
-                            <select id="deleteSearchField">
-                                <option value="">Selecciona un campo...</option>
-                            </select>
-                        </div>
-                        <div class="search-buttons">
-                            <button onclick="searchRecordsForDelete()" class="btn">🔍 Buscar</button>
-                            <button onclick="loadRecordsForDelete()" class="btn btn-danger">📋 Ver Todos</button>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Eliminación múltiple -->
                 <div class="search-container" style="background: #ffebee;">
                     <h3>⚠️ Eliminación Múltiple</h3>
@@ -648,11 +622,108 @@
         // API Base URL (usa la URL actual)
         const API_BASE = window.location.origin;
 
-                // Variables globales para filtros
+        // Variables globales
+        let currentRecords = [];
         let availableFields = [];
-        let filterCount = 0;
-        let searchFields = [];
-        let searchResults = [];
+        let currentEditingRow = null;
+
+                // Función principal para cambiar pestañas
+        function showTab(tabName) {
+            // Ocultar todas las pestañas
+            const allTabs = document.querySelectorAll('.tab-content');
+            const allTabButtons = document.querySelectorAll('.tab');
+            
+            allTabs.forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            allTabButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Mostrar la pestaña seleccionada
+            const selectedTab = document.getElementById(tabName);
+            const selectedButton = document.querySelector(`[onclick="showTab('${tabName}')"]`);
+            
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+            
+            if (selectedButton) {
+                selectedButton.classList.add('active');
+            }
+
+            // Mostrar/ocultar barra de búsqueda global según la pestaña
+            const globalSearch = document.getElementById('global-search');
+            const tabsWithSearch = ['search', 'update', 'delete'];
+            
+            if (tabsWithSearch.includes(tabName)) {
+                globalSearch.style.display = 'block';
+                loadFieldsForGlobalSearch();
+            } else {
+                globalSearch.style.display = 'none';
+            }
+
+            // Cargar contenido específico de la pestaña si es necesario
+            if (tabName === 'search') {
+                loadFieldsForSearch();
+            } else if (tabName === 'delete') {
+                loadFieldsForDelete();
+            }
+        }
+
+                // Funciones de búsqueda global
+        function loadFieldsForGlobalSearch() {
+            fetch('/webhook/fields')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const select = document.getElementById('globalSearchField');
+                        select.innerHTML = '<option value="">Selecciona un campo...</option>';
+                        data.fields.forEach(field => {
+                            select.innerHTML += `<option value="${field}">${field}</option>`;
+                        });
+                        availableFields = data.fields;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading fields:', error);
+                });
+        }
+
+        function performGlobalSearch() {
+            const searchText = document.getElementById('globalSearchText').value.trim();
+            const searchField = document.getElementById('globalSearchField').value;
+            
+            if (!searchText || !searchField) {
+                showMessage('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
+                return;
+            }
+
+            const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        currentRecords = data.data;
+                        displayRecordsInCurrentTab(data.data);
+                        showMessage(`Se encontraron ${data.total} registro(s)`, 'success');
+                    } else {
+                        showMessage('Error en la búsqueda: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage('Error al realizar la búsqueda', 'error');
+                });
+        }
+
+        function clearGlobalSearch() {
+            document.getElementById('globalSearchText').value = '';
+            document.getElementById('globalSearchField').value = '';
+
+
 
                 // Configuración de listados para dropdowns
         const dropdownLists = {
