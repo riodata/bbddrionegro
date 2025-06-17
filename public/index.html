@@ -217,6 +217,21 @@
         .record:last-child {
             border-bottom: none;
         }
+        .record-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        .record-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .record .btn {
+            padding: 6px 14px;
+            font-size: 0.92rem;
+            margin-right: 0;
+            margin-bottom: 0;
+        }
 
         .loading {
             text-align: center;
@@ -736,6 +751,28 @@ function populateSearchFieldSelect() {
     }
 }
 
+// Helper: Render a single record with Edit/Borrar buttons
+function recordHtmlWithButtons(record) {
+    // Exclude _rowIndex from display fields, but keep for actions
+    const fieldsHtml = Object.entries(record)
+        .filter(([k]) => k !== '_rowIndex')
+        .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+        .join('<br>');
+
+    const rowIndex = record._rowIndex;
+    return `
+    <div class="record-header">
+        <div style="flex: 1 1 auto;">
+            ${fieldsHtml}
+        </div>
+        <div class="record-buttons" style="flex-shrink:0; margin-left:10px;">
+            <button class="btn btn-success" onclick="editRecord(${rowIndex})">✏️ Editar</button>
+            <button class="btn btn-danger" onclick="deleteRecord(${rowIndex})">🗑️ Borrar</button>
+        </div>
+    </div>
+    `;
+}
+
 function displaySearchResults(records) {
     const container = document.getElementById('search-records-container');
     if (!records.length) {
@@ -746,17 +783,7 @@ function displaySearchResults(records) {
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
-        div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
-        // Add Edit/Borrar buttons (use the _rowIndex for identification)
-        if (typeof record._rowIndex !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
-            `;
-        }
+        div.innerHTML = recordHtmlWithButtons(record);
         container.appendChild(div);
     });
 }
@@ -788,6 +815,44 @@ function loadFieldsForGlobalSearch() {
         });
 }
 
+function displayUpdateTabRecords(records) {
+    const container = document.getElementById('update-records-container');
+    if (!container) return;
+    if (!records.length) {
+        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
+        return;
+    }
+    container.innerHTML = '';
+    records.forEach(record => {
+        const div = document.createElement('div');
+        div.className = 'record';
+        div.innerHTML = recordHtmlWithButtons(record);
+        container.appendChild(div);
+    });
+}
+    
+function displayDeleteTabRecords(records) {
+    const container = document.getElementById('delete-records');
+    if (!container) return;
+    if (!records.length) {
+        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
+        return;
+    }
+    container.innerHTML = '';
+    records.forEach(record => {
+        const div = document.createElement('div');
+        div.className = 'record';
+        div.innerHTML = recordHtmlWithButtons(record);
+        container.appendChild(div);
+    });
+}
+
+function displayRecordsInAllTabs(records) {
+    displaySearchResults(records);
+    displayUpdateTabRecords(records);
+    displayDeleteTabRecords(records);
+}
+    
 function performGlobalSearch() {
     const searchText = document.getElementById('globalSearchText').value.trim();
     const searchField = document.getElementById('globalSearchField').value;
@@ -801,7 +866,7 @@ function performGlobalSearch() {
         .then(data => {
             if (data.success) {
                 currentRecords = data.data;
-                displaySearchResults(data.data); // Muestra igual que búsqueda normal
+                displayRecordsInAllTabs(data.data);
                 updateSearchResultsInfo(`Se encontraron ${data.total} registro(s)`);
                 showStatus(`Se encontraron ${data.total} registro(s)`, 'success');
             } else {
@@ -813,7 +878,7 @@ function performGlobalSearch() {
             showStatus('Error al realizar la búsqueda', 'error');
         });
 }
-
+    
 function clearGlobalSearch() {
     document.getElementById('globalSearchText').value = '';
     document.getElementById('globalSearchField').value = '';
@@ -826,7 +891,7 @@ function loadAllGlobalRecords() {
         .then(data => {
             if (data.success) {
                 currentRecords = data.data;
-                displaySearchResults(data.data);
+                displayRecordsInAllTabs(data.data);
                 updateSearchResultsInfo(`Se cargaron ${data.total} registro(s)`);
                 document.getElementById('globalSearchText').value = '';
                 document.getElementById('globalSearchField').value = '';
@@ -838,6 +903,48 @@ function loadAllGlobalRecords() {
             console.error('Error:', error);
             showStatus('Error al cargar todos los registros', 'error');
         });
+}
+
+/ --- Ensure update/delete tabs clear confirmation/message area when new search is performed ---
+function clearDeleteTab() {
+    document.getElementById('delete-records').innerHTML = '';
+    currentDeletingRow = null;
+}
+function clearUpdateTab() {
+    document.getElementById('update-form-container').style.display = 'none';
+    currentEditingRow = null;
+}
+
+// --- When showing a record for edit/delete, keep showing the list below ---
+function editRecord(rowIndex) {
+    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
+    if (!rec) return alert('No se encontró el registro');
+    currentEditingRow = rec;
+    showTab('update');
+    showUpdateForm(rec);
+    // Still display full record list below the form
+    displayUpdateTabRecords(currentRecords);
+}
+function deleteRecord(rowIndex) {
+    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
+    if (!rec) return alert('No se encontró el registro');
+    currentDeletingRow = rec;
+    showTab('delete');
+    showDeleteConfirmation(rec);
+    // Still display full record list below the confirmation
+    displayDeleteTabRecords(currentRecords);
+}
+
+// --- When canceling edit/delete, keep the list visible ---
+function cancelUpdate() {
+    currentEditingRow = null;
+    document.getElementById('update-form-container').style.display = 'none';
+    displayUpdateTabRecords(currentRecords);
+}
+function cancelDelete() {
+    document.getElementById('delete-records').innerHTML = '';
+    currentDeletingRow = null;
+    displayDeleteTabRecords(currentRecords);
 }
 
 // -------- ADVANCED SEARCH --------
