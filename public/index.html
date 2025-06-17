@@ -627,7 +627,136 @@
         let availableFields = [];
         let currentEditingRow = null;
 
-                // Función principal para cambiar pestañas
+        const dropdownLists = {
+            tipo: [
+                "Agrícola",
+                "Agrícola-ganadera",
+                "Consumo",
+                "Federación",
+                "Frutícola",
+                "Frutihortícola",
+                "Ganadera",
+                "Producción",
+                "Provisión",
+                "Servicios",
+                "Servicios públicos",
+                "Trabajo",
+                "Vivienda"
+            ],
+            subtipo: [
+                "Atención de personas",
+                "Audiovisual",
+                "Bienes y servicios",
+                "Comercialización e industrialización",
+                "Comercialización y consumo",
+                "Comercialización y explotación", 
+                "Comercialización y producción",
+                "Comercialización y provisión",
+                "Comercialización y transporte",
+                "Construcción",
+                "Construcción de estaciones transformadores de transmisión",
+                "Cultura",
+                "Diseño y producción",
+                "Educativa",
+                "Empaque y embalaje de frutas",
+                "Estacionamiento medido y pago",
+                "No aplica",
+                "Producción y consumo",
+                "Radiodifusión",
+                "Rurales",
+                "Servicio de crédito",
+                "Servicios contables",
+                "Servicios de agua potable",
+                "Servicios de asesoria",
+                "Servicios de carga y descarga",
+                "Servicios de electricidad",
+                "Servicios de empaque",
+                "Servicios de lavadero",
+                "Servicios de mantenimiento",
+                "Servicios de recolección",
+                "Servicios en bienes móviles",
+                "Servicios generales",
+                "Servicios médicos",
+                "Servicios metalúrgicos",
+                "Servicios telefónicos",
+                "Servivcios hoteleros",
+                "Textil",
+                "Transporte",
+                "Turismo"
+            ]
+        };
+
+        // Función para manejar el cambio en selects con opción "Otros"
+        function handleSelectChange(selectElement, customFieldId) {
+            const customField = document.getElementById(customFieldId);
+            const customInput = document.getElementById(customFieldId + '_text');
+            
+            if (selectElement.value === 'otros') {
+                customField.classList.add('show');
+                customInput.required = true;
+                // Limpiar el valor del select principal cuando se usa "otros"
+                selectElement.setAttribute('data-original-value', selectElement.value);
+            } else {
+                customField.classList.remove('show');
+                customInput.required = false;
+                customInput.value = '';
+            }
+
+        async function loadAllRecords() {
+            try {
+                document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
+                
+                const response = await fetch(`${API_BASE}/webhook/read`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    searchResults = result.data;
+                    displaySearchResults(result.data);
+                    updateSearchResultsInfo(`Mostrando todos los registros (${result.total} total)`);
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading records:', error);
+                document.getElementById('search-records-container').innerHTML = 
+                    `<div class="error">Error al cargar registros: ${error.message}</div>`;
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Función para cargar campos disponibles para la pestaña BUSCAR
+        async function loadFieldsForSearch() {
+            try {
+                const response = await fetch(`${API_BASE}/webhook/fields`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    searchFields = result.fields;
+                    populateSearchFieldSelect();
+                } else {
+                    console.error('Error loading fields:', result.message);
+                }
+            } catch (error) {
+                console.error('Error loading fields:', error);
+            }
+        }
+        
+        // Función para poblar el select de campos en la pestaña BUSCAR
+        function populateSearchFieldSelect() {
+            const searchFieldSelect = document.getElementById('searchField');
+            if (searchFieldSelect) {
+                searchFieldSelect.innerHTML = '<option value="">Selecciona un campo...</option>';
+                
+                searchFields.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.textContent = field;
+                    searchFieldSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Función principal para cambiar pestañas
         function showTab(tabName) {
             // Ocultar todas las pestañas
             const allTabs = document.querySelectorAll('.tab-content');
@@ -720,172 +849,110 @@
         }
 
         function clearGlobalSearch() {
+            // Limpiar campos de búsqueda
             document.getElementById('globalSearchText').value = '';
             document.getElementById('globalSearchField').value = '';
-
-
-
-                // Configuración de listados para dropdowns
-        const dropdownLists = {
-            tipo: [
-                "Agrícola",
-                "Agrícola-ganadera",
-                "Consumo",
-                "Federación",
-                "Frutícola",
-                "Frutihortícola",
-                "Ganadera",
-                "Producción",
-                "Provisión",
-                "Servicios",
-                "Servicios públicos",
-                "Trabajo",
-                "Vivienda"
-            ],
-            subtipo: [
-                "Atención de personas",
-                "Audiovisual",
-                "Bienes y servicios",
-                "Comercialización e industrialización",
-                "Comercialización y consumo",
-                "Comercialización y explotación", 
-                "Comercialización y producción",
-                "Comercialización y provisión",
-                "Comercialización y transporte",
-                "Construcción",
-                "Construcción de estaciones transformadores de transmisión",
-                "Cultura",
-                "Diseño y producción",
-                "Educativa",
-                "Empaque y embalaje de frutas",
-                "Estacionamiento medido y pago",
-                "No aplica",
-                "Producción y consumo",
-                "Radiodifusión",
-                "Rurales",
-                "Servicio de crédito",
-                "Servicios contables",
-                "Servicios de agua potable",
-                "Servicios de asesoria",
-                "Servicios de carga y descarga",
-                "Servicios de electricidad",
-                "Servicios de empaque",
-                "Servicios de lavadero",
-                "Servicios de mantenimiento",
-                "Servicios de recolección",
-                "Servicios en bienes móviles",
-                "Servicios generales",
-                "Servicios médicos",
-                "Servicios metalúrgicos",
-                "Servicios telefónicos",
-                "Servivcios hoteleros",
-                "Textil",
-                "Transporte",
-                "Turismo"
-            ]
-        };
-
-        // Función para manejar el cambio en selects con opción "Otros"
-        function handleSelectChange(selectElement, customFieldId) {
-            const customField = document.getElementById(customFieldId);
-            const customInput = document.getElementById(customFieldId + '_text');
             
-            if (selectElement.value === 'otros') {
-                customField.classList.add('show');
-                customInput.required = true;
-                // Limpiar el valor del select principal cuando se usa "otros"
-                selectElement.setAttribute('data-original-value', selectElement.value);
-            } else {
-                customField.classList.remove('show');
-                customInput.required = false;
-                customInput.value = '';
+            // Mostrar mensaje de confirmación
+            showMessage('Búsqueda limpiada', 'info');
+            
+            // Opcional: Recargar todos los registros automáticamente
+            // loadAllGlobalRecords();
+        }
+        
+        function loadAllGlobalRecords() {
+            // Mostrar indicador de carga
+            showMessage('Cargando todos los registros...', 'info');
+            
+            fetch('/webhook/all')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        currentRecords = data.data;
+                        displayRecordsInCurrentTab(data.data);
+                        showMessage(`Se cargaron ${data.total} registro(s)`, 'success');
+                        
+                        // Limpiar campos de búsqueda
+                        document.getElementById('globalSearchText').value = '';
+                        document.getElementById('globalSearchField').value = '';
+                    } else {
+                        showMessage('Error al cargar registros: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showMessage('Error al cargar todos los registros', 'error');
+                });
+        }
+        
+        // Función auxiliar para mostrar registros en la pestaña actual
+        function displayRecordsInCurrentTab(records) {
+            // Esta función debe adaptarse según cómo manejes la visualización en tu aplicación
+            // Ejemplo genérico:
+            
+            const currentTab = document.querySelector('.tab-content.active') || 
+                              document.querySelector('.content-area');
+            
+            if (!currentTab) {
+                console.error('No se encontró contenedor para mostrar registros');
+                return;
             }
-
-async function loadAllRecords() {
-    try {
-        document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
-        
-        const response = await fetch(`${API_BASE}/webhook/read`);
-        const result = await response.json();
-        
-        if (result.success) {
-            searchResults = result.data;
-            displaySearchResults(result.data);
-            updateSearchResultsInfo(`Mostrando todos los registros (${result.total} total)`);
-        } else {
-            throw new Error(result.message);
+            
+            // Buscar tabla o contenedor de registros en la pestaña actual
+            let tableBody = currentTab.querySelector('tbody');
+            let recordsContainer = currentTab.querySelector('.records-container');
+            
+            if (tableBody) {
+                // Si hay una tabla, limpiar y llenar con nuevos datos
+                tableBody.innerHTML = '';
+                
+                records.forEach(record => {
+                    const row = document.createElement('tr');
+                    
+                    // Crear celdas basadas en las propiedades del registro
+                    Object.values(record).forEach(value => {
+                        const cell = document.createElement('td');
+                        cell.textContent = value || '';
+                        row.appendChild(cell);
+                    });
+                    
+                    tableBody.appendChild(row);
+                });
+            } else if (recordsContainer) {
+                // Si hay un contenedor de registros, limpiar y llenar
+                recordsContainer.innerHTML = '';
+                
+                records.forEach(record => {
+                    const recordDiv = document.createElement('div');
+                    recordDiv.className = 'record-item';
+                    recordDiv.innerHTML = Object.entries(record)
+                        .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
+                        .join('<br>');
+                    recordsContainer.appendChild(recordDiv);
+                });
+            } else {
+                console.warn('No se encontró contenedor apropiado para mostrar registros');
+            }
         }
-    } catch (error) {
-        console.error('Error loading records:', error);
-        document.getElementById('search-records-container').innerHTML = 
-            `<div class="error">Error al cargar registros: ${error.message}</div>`;
-        showStatus(`❌ Error: ${error.message}`, 'error');
-    }
-}
-
-// Función para cargar campos disponibles para la pestaña BUSCAR
-async function loadFieldsForSearch() {
-    try {
-        const response = await fetch(`${API_BASE}/webhook/fields`);
-        const result = await response.json();
         
-        if (result.success) {
-            searchFields = result.fields;
-            populateSearchFieldSelect();
-        } else {
-            console.error('Error loading fields:', result.message);
+        // Función para inicializar la búsqueda global cuando se carga la página
+        function initializeGlobalSearch() {
+            // Cargar campos disponibles al inicializar
+            loadFieldsForGlobalSearch();
+            
+            // Configurar evento Enter en el campo de búsqueda
+            const searchInput = document.getElementById('globalSearchText');
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        performGlobalSearch();
+                    }
+                });
+            }
         }
-    } catch (error) {
-        console.error('Error loading fields:', error);
-    }
-}
-
-// Función para poblar el select de campos en la pestaña BUSCAR
-function populateSearchFieldSelect() {
-    const searchFieldSelect = document.getElementById('searchField');
-    if (searchFieldSelect) {
-        searchFieldSelect.innerHTML = '<option value="">Selecciona un campo...</option>';
         
-        searchFields.forEach(field => {
-            const option = document.createElement('option');
-            option.value = field;
-            option.textContent = field;
-            searchFieldSelect.appendChild(option);
-        });
-    }
-}
-
-// Función para realizar búsqueda simple en la pestaña BUSCAR
-async function performSimpleSearch() {
-    const searchText = document.getElementById('searchText').value.trim();
-    const searchField = document.getElementById('searchField').value;
-    
-    if (!searchText || !searchField) {
-        showStatus('❌ Por favor, ingresa un texto y selecciona un campo para buscar.', 'error');
-        return;
-    }
-    
-    try {
-        document.getElementById('search-records-container').innerHTML = '<div class="loading">Buscando...</div>';
-        
-        const response = await fetch(`${API_BASE}/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
-        const result = await response.json();
-        
-        if (result.success) {
-            searchResults = result.data;
-            displaySearchResults(result.data);
-            updateSearchResultsInfo(`Búsqueda: "${searchText}" en campo "${searchField}" - ${result.total} resultado(s) encontrado(s)`);
-            showStatus(`📋 ${result.total} registros encontrados`, 'success');
-        } else {
-            throw new Error(result.message);
-        }
-    } catch (error) {
-        console.error('Error searching:', error);
-        document.getElementById('search-records-container').innerHTML = 
-            `<div class="error">Error en la búsqueda: ${error.message}</div>`;
-        showStatus(`❌ Error: ${error.message}`, 'error');
-    }
-}
+        // Llamar a la inicialización cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', initializeGlobalSearch);
 
 // Función para realizar búsqueda avanzada en la pestaña BUSCAR
 async function performAdvancedSearch() {
