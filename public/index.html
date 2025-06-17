@@ -350,7 +350,7 @@
         </div>
 
         <div class="tabs">
-            <button class="tab" onclick="showTab('create')">➕ Crear</button>
+            <button class="tab active" onclick="showTab('create')">➕ Crear</button>
             <button class="tab" onclick="showTab('search')">📋 Buscar</button>
             <button class="tab" onclick="showTab('update')">✏️ Actualizar</button>
             <button class="tab" onclick="showTab('delete')">🗑️ Eliminar</button>
@@ -687,19 +687,21 @@
                 document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
                 // Mostrar la seleccionada
                 const selectedTab = document.getElementById(tabName);
-                const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
                 if (selectedTab) selectedTab.classList.add('active');
+                
+                 // Find and set active the correct tab button
+                const selectedButton = Array.from(document.querySelectorAll('.tab')).find(btn =>
+                    btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`showTab('${tabName}')`)
+                );
                 if (selectedButton) selectedButton.classList.add('active');
             
-                // Mostrar barra búsqueda global si corresponde
+                // Show/hide the global search bar
                 document.getElementById('global-search').style.display =
                     ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
             
-                // Cargar campos si es necesario
+                // Per-tab logic
                 if (tabName === 'search') loadFieldsForSearch();
                 if (tabName === 'delete') loadFieldsForDelete();
-            
-                // Si hay registro seleccionado para editar/eliminar, mostrarlo
                 if (tabName === 'update' && currentEditingRow) showUpdateForm(currentEditingRow);
                 if (tabName === 'delete' && currentDeletingRow) showDeleteConfirmation(currentDeletingRow);
             }
