@@ -81,7 +81,7 @@
         }
 
         .tab-content.active {
-            display: block;
+            display: block !important;
         }
 
         .form-group {
@@ -677,50 +677,78 @@ function handleSelectChange(selectElement, customFieldId) {
 
 // -------- TAB MANAGEMENT --------
 function showTab(tabName) {
-    // Ocultar todas las pestañas y remover .active
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    console.log('Switching to tab:', tabName); // Debug logging
     
-    // Mostrar la seleccionada
+    // Hide all tab contents and deactivate all tab buttons
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.display = 'none';
+    });
+    
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show the selected tab content and activate its button
     const selectedTab = document.getElementById(tabName);
-    const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
-    if (selectedTab) selectedTab.classList.add('active');
-    if (selectedButton) selectedButton.classList.add('active');
-
-    // Mostrar barra búsqueda global si corresponde
-    const globalSearch = document.getElementById('global-search');
-    globalSearch.style.display = ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        selectedTab.style.display = 'block';
+        console.log('Tab element found and activated');
+    } else {
+        console.error('Tab element not found:', tabName);
+    }
     
-    // Handle tab specific actions except when navigating from another tab with data
-    if (tabName === 'update') {
-        if (!currentEditingRow) {
-            document.getElementById('update-form-container').style.display = 'none';
-            document.getElementById('update-records-container').style.display = 'block';
-            document.getElementById('update-records-container').innerHTML = 
-                '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+    // Activate the tab button
+    const selectedButton = document.querySelector(`.tab[onclick*="'${tabName}'"]`);
+    if (selectedButton) {
+        selectedButton.classList.add('active');
+    }
+
+    // Show global search bar for certain tabs
+    const globalSearch = document.getElementById('global-search');
+    if (globalSearch) {
+        globalSearch.style.display = ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
+    }
+    
+    // Tab-specific actions
+    switch (tabName) {
+        case 'update':
+            if (!currentEditingRow) {
+                const formContainer = document.getElementById('update-form-container');
+                const recordsContainer = document.getElementById('update-records-container');
+                
+                if (formContainer) formContainer.style.display = 'none';
+                if (recordsContainer) {
+                    recordsContainer.style.display = 'block';
+                    recordsContainer.innerHTML = '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+                }
+                loadFieldsForGlobalSearch();
+            }
+            break;
+            
+        case 'delete':
+            if (!currentDeletingRow) {
+                const deleteContainer = document.getElementById('delete-records');
+                if (deleteContainer) {
+                    deleteContainer.innerHTML = '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+                }
+                loadFieldsForGlobalSearch();
+            }
+            break;
+            
+        case 'search':
             loadFieldsForGlobalSearch();
-        }
-    }
-    else if (tabName === 'delete') {
-        if (!currentDeletingRow) {
-            document.getElementById('delete-records').innerHTML = 
-                '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
-            loadFieldsForGlobalSearch();
-        }
-    }
-    else if (tabName === 'search') {
-        loadFieldsForGlobalSearch();
-        // Reset edit and delete states when switching to search
-        currentEditingRow = null;
-        currentDeletingRow = null;
-    }
-    else if (tabName === 'create') {
-        // Reset edit and delete states when switching to create
-        currentEditingRow = null;
-        currentDeletingRow = null;
+            currentEditingRow = null;
+            currentDeletingRow = null;
+            break;
+            
+        case 'create':
+            currentEditingRow = null;
+            currentDeletingRow = null;
+            break;
     }
 }
-
 // Function to show status messages
 function showStatus(message, type = 'success') {
     const statusElement = document.getElementById('status-message');
@@ -1669,6 +1697,12 @@ document.getElementById('createForm').addEventListener('submit', async function(
 // Initialize the page with the current date for date fields
 document.addEventListener('DOMContentLoaded', function() {
     // Load fields for global search bar
+    showTab('create');
+    document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+        const tabName = this.getAttribute('onclick').match(/'([^']+)'/)[1];
+        showTab(tabName);
+        });    
     loadFieldsForGlobalSearch();
     
     // Set current date for date fields
