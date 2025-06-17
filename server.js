@@ -45,6 +45,28 @@ async function readRecords() {
   }));
 }
 
+// Helper function to find row index by legajo
+async function findRowIndexByLegajo(legajo) {
+  const records = await readRecords();
+  
+  // Find the record with the matching legajo (case insensitive)
+  const rowIndex = records.findIndex(record => {
+    // Find the legajo field regardless of case
+    const legajoField = Object.keys(record).find(key => 
+      key.toLowerCase() === 'legajo'
+    );
+    
+    return legajoField && String(record[legajoField]) === String(legajo);
+  });
+  
+  if (rowIndex === -1) {
+    throw new Error('Registro no encontrado');
+  }
+  
+  return rowIndex;
+}
+
+
 // Helper function to update a record
 async function updateRecord(rowIndex, data) {
   const sheet = await initializeSheet();
@@ -313,15 +335,8 @@ app.put('/webhook/update-by-legajo/:legajo', async (req, res) => {
         const { legajo } = req.params;
         const data = req.body;
         
-        // Get all records
-        const records = await readRecords();
-        
         // Find the record with the matching legajo
-        const rowIndex = records.findIndex(record => String(record.legajo) === String(legajo));
-        
-        if (rowIndex === -1) {
-            return res.status(404).json({ success: false, message: 'Registro no encontrado.' });
-        }
+        const rowIndex = await findRowIndexByLegajo(legajo);
         
         // Update the record in Google Sheets
         await updateRecord(rowIndex, data);
@@ -338,15 +353,8 @@ app.delete('/webhook/delete-by-legajo/:legajo', async (req, res) => {
     try {
         const { legajo } = req.params;
         
-        // Get all records
-        const records = await readRecords();
-        
         // Find the record with the matching legajo
-        const rowIndex = records.findIndex(record => String(record.legajo) === String(legajo));
-        
-        if (rowIndex === -1) {
-            return res.status(404).json({ success: false, message: 'Registro no encontrado.' });
-        }
+        const rowIndex = await findRowIndexByLegajo(legajo);
         
         // Delete the record from Google Sheets
         await deleteRecord(rowIndex);
