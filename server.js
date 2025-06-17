@@ -63,13 +63,42 @@ app.post('/webhook/create', async (req, res) => {
   }
 });
 
-// READ - Leer todos los registros con filtros opcionales
+// READ - Leer todos los registros (sin filtros)
 app.get('/webhook/read', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
     
-    let data = rows.map(row => row.toObject());
+    let data = rows.map(row => ({
+      ...row.toObject(),
+      _rowIndex: row.rowIndex // Incluir índice de fila para operaciones UPDATE/DELETE
+    }));
+    
+    res.json({
+      success: true,
+      data: data,
+      total: data.length
+    });
+  } catch (error) {
+    console.error('Error reading records:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al leer los registros',
+      error: error.message 
+    });
+  }
+});
+
+// SIMPLE SEARCH - Búsqueda simple con un campo y texto
+app.get('/webhook/search', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+    
+    let data = rows.map(row => ({
+      ...row.toObject(),
+      _rowIndex: row.rowIndex
+    }));
     
     // Aplicar filtros si existen en los query parameters
     const { searchText, searchField } = req.query;
@@ -88,19 +117,21 @@ app.get('/webhook/read', async (req, res) => {
       success: true,
       data: data,
       total: data.length,
-      filtered: !!(searchText && searchField)
+      filtered: !!(searchText && searchField),
+      searchText: searchText || null,
+      searchField: searchField || null
     });
   } catch (error) {
-    console.error('Error reading records:', error);
+    console.error('Error searching records:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error al leer los registros',
+      message: 'Error al buscar los registros',
       error: error.message 
     });
   }
 });
 
-// READ - Obtener campos disponibles para filtrado
+// FIELDS - Obtener campos disponibles para filtrado
 app.get('/webhook/fields', async (req, res) => {
   try {
     const sheet = await initializeSheet();
@@ -114,8 +145,8 @@ app.get('/webhook/fields', async (req, res) => {
       });
     }
     
-    // Obtener los nombres de las columnas del primer registro
-    const fields = Object.keys(rows[0].toObject());
+    // Obtener los nombres de las columnas del primer registro (excluir _rowIndex)
+    const fields = Object.keys(rows[0].toObject()).filter(field => field !== '_rowIndex');
     
     res.json({
       success: true,
@@ -131,13 +162,17 @@ app.get('/webhook/fields', async (req, res) => {
   }
 });
 
-// SEARCH - Búsqueda avanzada con múltiples filtros
-app.post('/webhook/search', async (req, res) => {
+// ADVANCED SEARCH - Búsqueda avanzada con múltiples filtros
+app.post('/webhook/search/advanced', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
     
-    let data = rows.map(row => row.toObject());
+    let data = rows.map(row => ({
+      ...row.toObject(),
+      _rowIndex: row.rowIndex
+    }));
+    
     const { filters } = req.body; // Array de objetos: [{field, value, operator}]
     
     if (filters && Array.isArray(filters) && filters.length > 0) {
@@ -173,68 +208,61 @@ app.post('/webhook/search', async (req, res) => {
       success: true,
       data: data,
       total: data.length,
-      filtersApplied: filters?.length || 0
+      filtersApplied: filters?.length || 0,
+      filters: filters || []
     });
   } catch (error) {
-    console.error('Error searching records:', error);
+    console.error('Error in advanced search:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error al buscar registros',
+      message: 'Error al realizar búsqueda avanzada',
       error: error.message 
     });
   }
 });
 
-// UPDATE - Actualizar registro con búsqueda previa
-app.put('/webhook/update', async (req, res) => {
+// UPDATE - Actualizar un registro específico
+app.put('/webhook/update/:rowIndex', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const { searchCriteria, updateData } = req.body;
+    const { rowIndex } = req.params;
+    const updateData = req.body;
     
+    const sheet = await initializeSheet();
     const rows = await sheet.getRows();
     
-    // Buscar la fila usando criterios de búsqueda más flexibles
-    const rowToUpdate = rows.find(row => {
-      const rowData = row.toObject();
-      
-      if (searchCriteria.originalRecord) {
-        // Método original - buscar por registro completo
-        return Object.keys(searchCriteria.originalRecord).every(key => 
-          rowData[key] === searchCriteria.originalRecord[key]
-        );
-      } else if (searchCriteria.field && searchCriteria.value) {
-        // Nuevo método - buscar por campo específico
-        return rowData[searchCriteria.field] === searchCriteria.value;
-      }
-      
-      return false;
-    });
+    // Encontrar la fila por índice
+    const rowToUpdate = rows.find(row => row.rowIndex === parseInt(rowIndex));
     
     if (!rowToUpdate) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registro no encontrado con los criterios especificados' 
+      return res.status(404).json({
+        success: false,
+        message: 'Registro no encontrado'
       });
     }
     
-    // Actualizar los datos
+    // Actualizar los campos
     Object.keys(updateData).forEach(key => {
-      rowToUpdate.set(key, updateData[key]);
+      if (key !== '_rowIndex') { // No actualizar el índice interno
+        rowToUpdate[key] = updateData[key];
+      }
     });
     
     await rowToUpdate.save();
     
-    res.json({ 
-      success: true, 
-      message: 'Registro actualizado exitosamente',
-      updatedRecord: rowToUpdate.toObject()
+    res.json({
+      success: true,
+      message: 'Registro actualizado correctamente',
+      data: {
+        ...rowToUpdate.toObject(),
+        _rowIndex: rowToUpdate.rowIndex
+      }
     });
   } catch (error) {
     console.error('Error updating record:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error al actualizar el registro',
-      error: error.message 
+      error: error.message
     });
   }
 });
