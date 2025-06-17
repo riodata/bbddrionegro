@@ -788,59 +788,44 @@ function populateSearchFieldSelect() {
 
 function displaySearchResults(records) {
     const container = document.getElementById('search-records-container');
-    if (!records.length) {
-        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
-        return;
-    }
-    
-    container.innerHTML = '';
+    container.innerHTML = ''; // Clear existing results
+
     records.forEach(record => {
-        // Find the legajo field regardless of case
-        const legajoField = Object.keys(record).find(key => 
-            key.toLowerCase() === 'legajo'
-        );
-        const legajoValue = legajoField ? record[legajoField] : 'No definido';
-        
-        const div = document.createElement('div');
-        div.className = 'record';
-        
-        // Create header with edit/delete buttons
+        const recordDiv = document.createElement('div');
+        recordDiv.className = 'record';
+
         const headerDiv = document.createElement('div');
         headerDiv.className = 'record-header';
-        
+
         const titleDiv = document.createElement('div');
-        titleDiv.innerHTML = `<strong>Legajo: ${legajoValue}</strong>`;
-        
+        titleDiv.innerHTML = `<strong>Legajo: ${record.legajo || 'No definido'}</strong>`;
+
         const buttonsDiv = document.createElement('div');
         buttonsDiv.className = 'record-buttons';
-        
-        // Use legajo as the identifier if it exists
-        if (legajoValue && legajoValue !== 'No definido') {
-            buttonsDiv.innerHTML = `
-                <button class="btn btn-success" onclick="navigateToEdit('${legajoValue}')">✏️</button>
-                <button class="btn btn-danger" onclick="navigateToDelete('${legajoValue}')">🗑️</button>
-            `;
-        }
-        
+        buttonsDiv.innerHTML = `
+            <button class="btn btn-success" onclick="showUpdateForm(${JSON.stringify(record)})">✏️ Editar</button>
+            <button class="btn btn-danger" onclick="confirmDelete('${record.legajo}')">🗑️ Borrar</button>
+        `;
+
         headerDiv.appendChild(titleDiv);
         headerDiv.appendChild(buttonsDiv);
-        div.appendChild(headerDiv);
-        
-        // Create content for record details
+
+        recordDiv.appendChild(headerDiv);
+
         const contentDiv = document.createElement('div');
         contentDiv.className = 'record-content';
-        
-        Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
-            .forEach(([k, v]) => {
-                contentDiv.innerHTML += `<strong>${k}:</strong> ${v || ''}<br>`;
-            });
-        
-        div.appendChild(contentDiv);
-        container.appendChild(div);
+
+        for (const [key, value] of Object.entries(record)) {
+            const fieldDiv = document.createElement('div');
+            fieldDiv.textContent = `${key}: ${value}`;
+            contentDiv.appendChild(fieldDiv);
+        }
+
+        recordDiv.appendChild(contentDiv);
+        container.appendChild(recordDiv);
     });
 }
-
+    
 function updateSearchResultsInfo(message) {
     const infoDiv = document.getElementById('searchResultsInfo');
     if (infoDiv) {
@@ -1019,56 +1004,24 @@ function loadAllGlobalRecords() {
 }
 
 // Replace the performGlobalSearch function
-function performGlobalSearch() {
-    const searchText = document.getElementById('globalSearchText').value.trim();
+async function performGlobalSearch() {
+    const searchText = document.getElementById('globalSearchText').value;
     const searchField = document.getElementById('globalSearchField').value;
-    if (!searchText || !searchField) {
-        showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
-        return;
-    }
-    
-    // Show loading status in the active tab
-    const activeTabId = document.querySelector('.tab-content.active').id;
-    let container;
-    
-    if (activeTabId === 'update') {
-        container = document.getElementById('update-records-container');
-    } else if (activeTabId === 'delete') {
-        container = document.getElementById('delete-records');
-    } else {
-        container = document.getElementById('search-records-container');
-    }
-    
-    container.innerHTML = '<div class="loading">Buscando...</div>';
-    
+
     const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                currentRecords = data.data;
-                
-                // Display results based on active tab
-                if (activeTabId === 'search') {
-                    displaySearchResults(data.data);
-                    updateSearchResultsInfo(`Se encontraron ${data.total} registro(s)`);
-                } else if (activeTabId === 'update') {
-                    displayUpdateResults(data.data);
-                } else if (activeTabId === 'delete') {
-                    displayDeleteResults(data.data);
-                }
-                
-                showStatus(`Se encontraron ${data.total} registro(s)`, 'success');
-            } else {
-                container.innerHTML = '<div class="error">No se encontraron registros.</div>';
-                showStatus('Error en la búsqueda: ' + data.message, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            container.innerHTML = '<div class="error">Error al realizar la búsqueda.</div>';
-            showStatus('Error al realizar la búsqueda', 'error');
-        });
+
+    try {
+        const response = await fetch(url);
+        const result = await response.json();
+
+        if (result.success) {
+            displaySearchResults(result.data); // Show results in the corresponding tab
+        } else {
+            alert('Error en la búsqueda: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
 }
 
 function clearGlobalSearch() {
@@ -1224,54 +1177,29 @@ function formatDateForInput(dateString) {
 }
 
 // For deleting a record
-function deleteRecord(legajoValue) {
-    // Find record regardless of case sensitivity of the legajo field
-    const rec = (currentRecords || []).find(r => {
-        const legajoField = Object.keys(r).find(key => 
-            key.toLowerCase() === 'legajo'
-        );
-        return legajoField && r[legajoField] == legajoValue;
-    });
-    
-    if (!rec) return alert('No se encontró el registro');
-    
-    if (confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
-        fetch(`/webhook/delete-by-legajo/${legajoValue}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                showStatus('✅ Registro eliminado correctamente', 'success');
-                
-                // Remove from current records
-                const index = currentRecords.findIndex(r => {
-                    const legajoField = Object.keys(r).find(key => 
-                        key.toLowerCase() === 'legajo'
-                    );
-                    return legajoField && r[legajoField] == legajoValue;
-                });
-                
-                if (index !== -1) {
-                    currentRecords.splice(index, 1);
-                }
-                
-                // Clear the delete display and reset state
-                document.getElementById('delete-records').innerHTML = 
-                    '<div class="success-message" style="padding: 20px; background-color: #d4edda; border-radius: 8px; margin-top: 20px; text-align: center;">' +
-                    '<h3>✅ Registro eliminado correctamente</h3>' +
-                    '<p>El registro ha sido eliminado de la base de datos.</p>' +
-                    '</div>';
-                
-                currentDeletingRow = null;
-            } else {
-                showStatus(`❌ Error al eliminar: ${result.message}`, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showStatus('❌ Error al procesar la eliminación', 'error');
+async function deleteRecordByLegajo(legajo) {
+    try {
+        const response = await fetch(`/webhook/delete-by-legajo/${legajo}`, {
+            method: 'DELETE',
         });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Registro eliminado correctamente.');
+            performGlobalSearch(); // Refresh the search results
+        } else {
+            alert('Error al eliminar el registro: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error deleting record:', error);
+    }
+}
+
+// Confirm and trigger delete
+function confirmDelete(legajo) {
+    if (confirm('¿Estás seguro de que deseas eliminar este registro?')) {
+        deleteRecordByLegajo(legajo);
     }
 }
 
@@ -1289,110 +1217,62 @@ function editRecord(legajoValue) {
     showUpdateForm(rec);
 }
 
+async function updateRecordByLegajo(legajo, updateData) {
+    try {
+        const response = await fetch(`/webhook/update-by-legajo/${legajo}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Registro actualizado correctamente.');
+            performGlobalSearch(); // Refresh the search results
+        } else {
+            alert('Error al actualizar el registro: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error updating record:', error);
+    }
+}
+
 // Function to show the update form
 function showUpdateForm(record) {
-    // Show the form container
-    document.getElementById('update-form-container').style.display = 'block';
-    document.getElementById('update-records-container').style.display = 'none';
-    
-    // Find the legajo field regardless of case
-    const legajoField = Object.keys(record).find(key => 
-        key.toLowerCase() === 'legajo'
-    );
-    const legajoValue = legajoField ? record[legajoField] : '';
-    
-    // Store the legajo in a hidden field
-    document.getElementById('update-legajo').value = legajoValue;
-    
-    // Clone the createForm structure
-    const createForm = document.getElementById('createForm').cloneNode(true);
-    const updateFormFields = document.getElementById('update-fields');
-    updateFormFields.innerHTML = ''; // Clear existing fields
-    
-    // Get all form field elements from the create form
-    const formFields = createForm.querySelectorAll('.form-group');
-    
-    // Process each field from create form and populate with record data
-    formFields.forEach(field => {
-        const clonedField = field.cloneNode(true);
-        const input = clonedField.querySelector('input, select, textarea');
-        
-        if (input) {
-            const fieldName = input.name;
-            // Skip submit buttons
-            if (input.type === 'submit') return;
-            
-            const updateInputId = `update-${fieldName}`;
-            input.id = updateInputId;
-            
-            // Find the matching field in the record, case insensitive
-            const recordField = Object.keys(record).find(key => 
-                key.toLowerCase() === fieldName.toLowerCase()
-            );
-            
-            // Set value from record data if available
-            if (recordField !== undefined) {
-                if (input.type === 'date') {
-                    // Ensure date is in YYYY-MM-DD format
-                    const dateValue = record[recordField] ? formatDateForInput(record[recordField]) : '';
-                    input.value = dateValue;
-                } else if (input.tagName === 'SELECT') {
-                    // For dropdown selects
-                    const options = input.querySelectorAll('option');
-                    let foundMatch = false;
-                    
-                    options.forEach(option => {
-                        if (option.value === record[recordField]) {
-                            option.selected = true;
-                            foundMatch = true;
-                        } else {
-                            option.selected = false;
-                        }
-                    });
-                    
-                    // If no match found and there's an 'otros' option, select it and set custom value
-                    if (!foundMatch && input.querySelector('option[value="otros"]')) {
-                        const otrosOption = input.querySelector('option[value="otros"]');
-                        otrosOption.selected = true;
-                        
-                        // Get the custom field
-                        const customFieldId = input.getAttribute('onchange').match(/['"]([^'"]+)['"]/)[1];
-                        const customField = clonedField.querySelector(`#${customFieldId}`);
-                        if (customField) {
-                            customField.classList.add('show');
-                            const customInput = customField.querySelector('input');
-                            if (customInput) {
-                                customInput.value = record[recordField];
-                                customInput.required = true;
-                            }
-                        }
-                    }
-                } else {
-                    // For normal inputs
-                    input.value = record[recordField] || '';
-                }
-            }
-            
-            // Add event listener for select fields with custom options
-            if (input.tagName === 'SELECT' && input.getAttribute('onchange')) {
-                input.onchange = function() {
-                    const customFieldId = this.getAttribute('onchange').match(/['"]([^'"]+)['"]/)[1];
-                    handleSelectChange(this, customFieldId);
-                };
-            }
-        }
-        
-        updateFormFields.appendChild(clonedField);
-    });
-    
-    // Replace the submit button with update button
-    const submitBtnContainer = document.createElement('div');
-    submitBtnContainer.style.marginTop = '20px';
-    submitBtnContainer.innerHTML = `
-        <button type="button" onclick="submitUpdateForm()" class="btn btn-success">💾 Guardar Cambios</button>
-        <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
-    `;
-    updateFormFields.appendChild(submitBtnContainer);
+    const formFields = document.getElementById('update-fields');
+    formFields.innerHTML = ''; // Clear the form
+
+    for (const [key, value] of Object.entries(record)) {
+        if (key === '_rowIndex') continue; // Skip internal fields
+
+        const fieldWrapper = document.createElement('div');
+        fieldWrapper.className = 'form-group';
+
+        const label = document.createElement('label');
+        label.textContent = key + ':';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = key;
+        input.value = value;
+
+        fieldWrapper.appendChild(label);
+        fieldWrapper.appendChild(input);
+        formFields.appendChild(fieldWrapper);
+    }
+}
+
+function triggerUpdate() {
+    const legajo = document.getElementById('update-legajo').value; // Get the legajo of the record
+    const formData = new FormData(document.getElementById('updateForm'));
+
+    const updateData = {};
+    for (const [key, value] of formData.entries()) {
+        updateData[key] = value;
+    }
+
+    updateRecordByLegajo(legajo, updateData);
 }
 
 // Function to handle form submission for updates
