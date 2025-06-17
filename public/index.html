@@ -677,34 +677,34 @@ function handleSelectChange(selectElement, customFieldId) {
 
 // -------- TAB MANAGEMENT --------
 function showTab(tabName) {
-  // Hide all tab-contents and remove 'active' from all tab buttons
-  document.querySelectorAll('.tab-content').forEach(div => {
-    div.classList.remove('active');
-    div.style.display = 'none';
-  });
-  document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+    // Hide all tab-contents and remove 'active' from all tab buttons
+    document.querySelectorAll('.tab-content').forEach(div => {
+        div.classList.remove('active');
+        div.style.display = 'none';
+    });
+    document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
 
-  // Show the selected tab content and activate its button
-  const selectedTab = document.getElementById(tabName);
-  if (selectedTab) {
-    selectedTab.classList.add('active');
-    selectedTab.style.display = 'block';
-  } else {
-    console.error('Tab element not found:', tabName);
-  }
-  const selectedButton = document.querySelector(`.tab[onclick*="'${tabName}'"]`);
-  if (selectedButton) selectedButton.classList.add('active');
+    // Show the selected tab content and activate its button
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        selectedTab.style.display = 'block';
+    } else {
+        console.error('Tab element not found:', tabName);
+    }
+    const selectedButton = document.querySelector(`.tab[onclick*="'${tabName}'"]`);
+    if (selectedButton) selectedButton.classList.add('active');
 
-  // Show or hide global search bar
-  const globalSearch = document.getElementById('global-search');
-  if (globalSearch) {
-    globalSearch.style.display = ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
-  }
+    // Show or hide global search bar
+    const globalSearch = document.getElementById('global-search');
+    if (globalSearch) {
+        globalSearch.style.display = ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
+    }
 
-  // Optional: load fields for global search when needed
-  if (['search', 'update', 'delete'].includes(tabName)) {
-    loadFieldsForGlobalSearch();
-  }
+    // Optional: load fields for global search when needed
+    if (['search', 'update', 'delete'].includes(tabName)) {
+        loadFieldsForGlobalSearch();
+    }
 }
     
 // Function to show status messages
