@@ -606,7 +606,7 @@
                 <div id="update-form-container" style="display: none;">
                     <h3>✏️ Editando Registro</h3>
                     <form id="updateForm">
-                        <input type="hidden" id="update-rowIndex" name="rowIndex">
+                        <input type="hidden" id="update-legajo" name="legajo">
                         <!-- Los campos se generarán dinámicamente -->
                         <div id="update-fields"></div>
                     </form>
@@ -785,16 +785,16 @@ function displaySearchResults(records) {
         headerDiv.className = 'record-header';
         
         const titleDiv = document.createElement('div');
-        titleDiv.innerHTML = `<strong>Registro #${record._rowIndex}</strong>`;
+        titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
         
         const buttonsDiv = document.createElement('div');
         buttonsDiv.className = 'record-buttons';
         
-        // Only add buttons if we have a row index
-        if (typeof record._rowIndex !== 'undefined') {
+        // Use legajo as the identifier
+        if (record.legajo) {
             buttonsDiv.innerHTML = `
-                <button class="btn btn-success" onclick="navigateToEdit(${record._rowIndex})">✏️</button>
-                <button class="btn btn-danger" onclick="navigateToDelete(${record._rowIndex})">🗑️</button>
+                <button class="btn btn-success" onclick="navigateToEdit('${record.legajo}')">✏️</button>
+                <button class="btn btn-danger" onclick="navigateToDelete('${record.legajo}')">🗑️</button>
             `;
         }
         
@@ -826,8 +826,8 @@ function updateSearchResultsInfo(message) {
 }
 
 // Function to navigate to edit tab with record data
-function navigateToEdit(rowIndex) {
-    const record = currentRecords.find(r => r._rowIndex == rowIndex);
+function navigateToEdit(legajo) {
+    const record = currentRecords.find(r => r.legajo == legajo);
     if (!record) {
         showStatus('❌ No se pudo encontrar el registro para editar', 'error');
         return;
@@ -841,9 +841,8 @@ function navigateToEdit(rowIndex) {
     showUpdateForm(record);
 }
 
-// Function to navigate to delete tab with record data
-function navigateToDelete(rowIndex) {
-    const record = currentRecords.find(r => r._rowIndex == rowIndex);
+function navigateToDelete(legajo) {
+    const record = currentRecords.find(r => r.legajo == legajo);
     if (!record) {
         showStatus('❌ No se pudo encontrar el registro para eliminar', 'error');
         return;
@@ -867,12 +866,12 @@ function navigateToDelete(rowIndex) {
     headerDiv.className = 'record-header';
     
     const titleDiv = document.createElement('div');
-    titleDiv.innerHTML = `<strong>Registro #${record._rowIndex}</strong>`;
+    titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
     
     const buttonsDiv = document.createElement('div');
     buttonsDiv.className = 'record-buttons';
     buttonsDiv.innerHTML = `
-        <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
+        <button class="btn btn-danger" onclick="deleteRecord('${record.legajo}')">🗑️ Borrar</button>
     `;
     
     headerDiv.appendChild(titleDiv);
@@ -902,7 +901,7 @@ function navigateToDelete(rowIndex) {
         </div>
     `;
     container.appendChild(confirmationDiv);
-}    
+}
 
 // -------- GLOBAL SEARCH (barra superior) --------
 function loadFieldsForGlobalSearch() {
@@ -1002,12 +1001,12 @@ function displayUpdateResults(records) {
         headerDiv.className = 'record-header';
         
         const titleDiv = document.createElement('div');
-        titleDiv.innerHTML = `<strong>Registro #${record._rowIndex}</strong>`;
+        titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
         
         const buttonsDiv = document.createElement('div');
         buttonsDiv.className = 'record-buttons';
         buttonsDiv.innerHTML = `
-            <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
+            <button class="btn btn-success" onclick="editRecord('${record.legajo}')">✏️ Editar</button>
         `;
         
         headerDiv.appendChild(titleDiv);
@@ -1037,26 +1036,39 @@ function displayDeleteResults(records) {
     }
     
     container.innerHTML = '';
+    
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
         
-        // Create the record display content
-        let recordContent = '';
+        // Create header
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'record-header';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
+        
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.className = 'record-buttons';
+        buttonsDiv.innerHTML = `
+            <button class="btn btn-danger" onclick="deleteRecord('${record.legajo}')">🗑️ Borrar</button>
+        `;
+        
+        headerDiv.appendChild(titleDiv);
+        headerDiv.appendChild(buttonsDiv);
+        div.appendChild(headerDiv);
+        
+        // Create content
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'record-content';
+        
         Object.entries(record)
             .filter(([k]) => k !== '_rowIndex')
             .forEach(([k, v]) => {
-                recordContent += `<strong>${k}:</strong> ${v || ''}<br>`;
+                contentDiv.innerHTML += `<strong>${k}:</strong> ${v || ''}<br>`;
             });
-            
-        div.innerHTML = recordContent;
         
-        // Add Delete button
-        if (typeof record._rowIndex !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
-            `;
-        }
+        div.appendChild(contentDiv);
         container.appendChild(div);
     });
 }
@@ -1204,8 +1216,8 @@ function clearAdvancedSearch() {
 }
 
 // -------- EDIT/UPDATE FLOW --------
-function editRecord(rowIndex) {
-    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
+function editRecord(legajo) {
+    const rec = (currentRecords || []).find(r => r.legajo == legajo);
     if (!rec) return alert('No se encontró el registro');
     currentEditingRow = rec;
     showUpdateForm(rec);
@@ -1215,7 +1227,9 @@ function showUpdateForm(record) {
     // Show the form container
     document.getElementById('update-form-container').style.display = 'block';
     document.getElementById('update-records-container').style.display = 'none';
-    document.getElementById('update-rowIndex').value = record._rowIndex;
+    
+    // Store the legajo in a hidden field
+    document.getElementById('update-legajo').value = record.legajo;
     
     // Clone the createForm structure
     const createForm = document.getElementById('createForm').cloneNode(true);
@@ -1331,15 +1345,15 @@ function formatDateForInput(dateString) {
 document.getElementById('updateForm').onsubmit = async function(e) {
     e.preventDefault();
     
-    const rowIndex = document.getElementById('update-rowIndex').value;
+    const legajo = document.getElementById('update-legajo').value;
     const data = {};
     
     // Get all form inputs
     const inputs = this.querySelectorAll('input, select, textarea');
     
     inputs.forEach(el => {
-        // Skip submit buttons and rowIndex
-        if (el.type === 'submit' || el.name === 'rowIndex') return;
+        // Skip submit buttons and legajo field (we'll handle it separately)
+        if (el.type === 'submit' || el.id === 'update-legajo') return;
         
         // Handle custom fields for dropdowns with "otros" option
         if (el.tagName === 'SELECT' && el.value === 'otros') {
@@ -1358,7 +1372,7 @@ document.getElementById('updateForm').onsubmit = async function(e) {
     });
     
     try {
-        const res = await fetch(`/webhook/update/${rowIndex}`, {
+        const res = await fetch(`/webhook/update-by-legajo/${legajo}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -1369,7 +1383,7 @@ document.getElementById('updateForm').onsubmit = async function(e) {
             showStatus('✅ Registro actualizado correctamente', 'success');
             
             // Update the record in currentRecords
-            const index = currentRecords.findIndex(r => r._rowIndex == rowIndex);
+            const index = currentRecords.findIndex(r => r.legajo == legajo);
             if (index !== -1) {
                 currentRecords[index] = { ...currentRecords[index], ...data };
             }
@@ -1399,12 +1413,12 @@ function cancelUpdate() {
 
 // -------- DELETE FLOW --------
 // Add or update the deleteRecord function
-function deleteRecord(rowIndex) {
-    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
+function deleteRecord(legajo) {
+    const rec = (currentRecords || []).find(r => r.legajo == legajo);
     if (!rec) return alert('No se encontró el registro');
     
     if (confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
-        fetch(`/webhook/delete/${rowIndex}`, {
+        fetch(`/webhook/delete-by-legajo/${legajo}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -1413,7 +1427,7 @@ function deleteRecord(rowIndex) {
                 showStatus('✅ Registro eliminado correctamente', 'success');
                 
                 // Remove from current records
-                const index = currentRecords.findIndex(r => r._rowIndex == rowIndex);
+                const index = currentRecords.findIndex(r => r.legajo == legajo);
                 if (index !== -1) {
                     currentRecords.splice(index, 1);
                 }
@@ -1436,6 +1450,7 @@ function deleteRecord(rowIndex) {
         });
     }
 }
+
     
 function showDeleteConfirmation(record) {
     const div = document.getElementById('delete-records');
