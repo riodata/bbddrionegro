@@ -268,6 +268,17 @@
             border: 1px solid #f5c6cb;
         }
 
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+            position: relative;
+            padding: 0.75rem 1.25rem;
+            margin-bottom: 1rem;
+            border: 1px solid transparent;
+            border-radius: 0.25rem;
+        }
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -680,25 +691,33 @@ function showTab(tabName) {
     const globalSearch = document.getElementById('global-search');
     globalSearch.style.display = ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
     
-    // Reset current states when changing tabs
-    currentEditingRow = null;
-    currentDeletingRow = null;
-    
-    // Cargar campos si es necesario
-    if (['search', 'update', 'delete'].includes(tabName)) {
-        loadFieldsForGlobalSearch();
-    }
-    
-    // Reset view states
+    // Handle tab specific actions except when navigating from another tab with data
     if (tabName === 'update') {
-        document.getElementById('update-form-container').style.display = 'none';
-        document.getElementById('update-records-container').innerHTML = 
-            '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+        if (!currentEditingRow) {
+            document.getElementById('update-form-container').style.display = 'none';
+            document.getElementById('update-records-container').style.display = 'block';
+            document.getElementById('update-records-container').innerHTML = 
+                '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+            loadFieldsForGlobalSearch();
+        }
     }
-    
-    if (tabName === 'delete') {
-        document.getElementById('delete-records').innerHTML = 
-            '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+    else if (tabName === 'delete') {
+        if (!currentDeletingRow) {
+            document.getElementById('delete-records').innerHTML = 
+                '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+            loadFieldsForGlobalSearch();
+        }
+    }
+    else if (tabName === 'search') {
+        loadFieldsForGlobalSearch();
+        // Reset edit and delete states when switching to search
+        currentEditingRow = null;
+        currentDeletingRow = null;
+    }
+    else if (tabName === 'create') {
+        // Reset edit and delete states when switching to create
+        currentEditingRow = null;
+        currentDeletingRow = null;
     }
 }
 
@@ -755,21 +774,45 @@ function displaySearchResults(records) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
     }
+    
     container.innerHTML = '';
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
-        div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
-        // Add Edit/Borrar buttons (use the _rowIndex for identification)
+        
+        // Create header with edit/delete buttons
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'record-header';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.innerHTML = `<strong>Registro #${record._rowIndex}</strong>`;
+        
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.className = 'record-buttons';
+        
+        // Only add buttons if we have a row index
         if (typeof record._rowIndex !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
+            buttonsDiv.innerHTML = `
+                <button class="btn btn-success" onclick="navigateToEdit(${record._rowIndex})">✏️</button>
+                <button class="btn btn-danger" onclick="navigateToDelete(${record._rowIndex})">🗑️</button>
             `;
         }
+        
+        headerDiv.appendChild(titleDiv);
+        headerDiv.appendChild(buttonsDiv);
+        div.appendChild(headerDiv);
+        
+        // Create content for record details
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'record-content';
+        
+        Object.entries(record)
+            .filter(([k]) => k !== '_rowIndex')
+            .forEach(([k, v]) => {
+                contentDiv.innerHTML += `<strong>${k}:</strong> ${v || ''}<br>`;
+            });
+        
+        div.appendChild(contentDiv);
         container.appendChild(div);
     });
 }
@@ -781,6 +824,85 @@ function updateSearchResultsInfo(message) {
         infoDiv.style.display = 'block';
     }
 }
+
+// Function to navigate to edit tab with record data
+function navigateToEdit(rowIndex) {
+    const record = currentRecords.find(r => r._rowIndex == rowIndex);
+    if (!record) {
+        showStatus('❌ No se pudo encontrar el registro para editar', 'error');
+        return;
+    }
+    
+    // Store the record to edit
+    currentEditingRow = record;
+    
+    // Switch to edit tab and show the form
+    showTab('update');
+    showUpdateForm(record);
+}
+
+// Function to navigate to delete tab with record data
+function navigateToDelete(rowIndex) {
+    const record = currentRecords.find(r => r._rowIndex == rowIndex);
+    if (!record) {
+        showStatus('❌ No se pudo encontrar el registro para eliminar', 'error');
+        return;
+    }
+    
+    // Store the record to delete
+    currentDeletingRow = record;
+    
+    // Switch to delete tab and show confirmation
+    showTab('delete');
+    
+    // Display the record in the delete container
+    const container = document.getElementById('delete-records');
+    container.innerHTML = '';
+    
+    const div = document.createElement('div');
+    div.className = 'record';
+    
+    // Create header
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'record-header';
+    
+    const titleDiv = document.createElement('div');
+    titleDiv.innerHTML = `<strong>Registro #${record._rowIndex}</strong>`;
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'record-buttons';
+    buttonsDiv.innerHTML = `
+        <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
+    `;
+    
+    headerDiv.appendChild(titleDiv);
+    headerDiv.appendChild(buttonsDiv);
+    div.appendChild(headerDiv);
+    
+    // Create content
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'record-content';
+    
+    Object.entries(record)
+        .filter(([k]) => k !== '_rowIndex')
+        .forEach(([k, v]) => {
+            contentDiv.innerHTML += `<strong>${k}:</strong> ${v || ''}<br>`;
+        });
+    
+    div.appendChild(contentDiv);
+    container.appendChild(div);
+    
+    // Add confirmation message
+    const confirmationDiv = document.createElement('div');
+    confirmationDiv.className = 'delete-confirmation';
+    confirmationDiv.innerHTML = `
+        <div class="alert-warning" style="margin-top: 15px; padding: 15px; border-radius: 8px; background-color: #fff3cd; border: 1px solid #ffeeba;">
+            <strong>⚠️ Advertencia:</strong> Estás a punto de eliminar este registro. 
+            Esta acción no se puede deshacer. Haz clic en el botón "Borrar" para confirmar.
+        </div>
+    `;
+    container.appendChild(confirmationDiv);
+}    
 
 // -------- GLOBAL SEARCH (barra superior) --------
 function loadFieldsForGlobalSearch() {
@@ -1282,8 +1404,6 @@ function deleteRecord(rowIndex) {
     if (!rec) return alert('No se encontró el registro');
     
     if (confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
-        currentDeletingRow = null; // Clear any previous deleting row
-        
         fetch(`/webhook/delete/${rowIndex}`, {
             method: 'DELETE'
         })
@@ -1292,30 +1412,20 @@ function deleteRecord(rowIndex) {
             if (result.success) {
                 showStatus('✅ Registro eliminado correctamente', 'success');
                 
-                // Refresh the current view
-                const activeTabId = document.querySelector('.tab-content.active').id;
-                if (activeTabId === 'delete') {
-                    // Remove the deleted record from the display
-                    const container = document.getElementById('delete-records');
-                    const records = container.querySelectorAll('.record');
-                    records.forEach(record => {
-                        if (record.querySelector(`button[onclick="deleteRecord(${rowIndex})"]`)) {
-                            record.remove();
-                        }
-                    });
-                    
-                    // Also remove from currentRecords
-                    const index = currentRecords.findIndex(r => r._rowIndex == rowIndex);
-                    if (index !== -1) {
-                        currentRecords.splice(index, 1);
-                    }
-                    
-                    // Show message if no records left
-                    if (!document.querySelector('#delete-records .record')) {
-                        document.getElementById('delete-records').innerHTML = 
-                            '<div class="no-records">No hay registros para mostrar.</div>';
-                    }
+                // Remove from current records
+                const index = currentRecords.findIndex(r => r._rowIndex == rowIndex);
+                if (index !== -1) {
+                    currentRecords.splice(index, 1);
                 }
+                
+                // Clear the delete display and reset state
+                document.getElementById('delete-records').innerHTML = 
+                    '<div class="success-message" style="padding: 20px; background-color: #d4edda; border-radius: 8px; margin-top: 20px; text-align: center;">' +
+                    '<h3>✅ Registro eliminado correctamente</h3>' +
+                    '<p>El registro ha sido eliminado de la base de datos.</p>' +
+                    '</div>';
+                
+                currentDeletingRow = null;
             } else {
                 showStatus(`❌ Error al eliminar: ${result.message}`, 'error');
             }
