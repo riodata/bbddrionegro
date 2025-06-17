@@ -163,44 +163,29 @@ app.get('/webhook/read', async (req, res) => {
 
 // SIMPLE SEARCH - Búsqueda simple con un campo y texto
 app.get('/webhook/search', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-    
-    let data = rows.map(row => ({
-      ...row.toObject(),
-      _rowIndex: row.rowIndex
-    }));
-    
-    // Aplicar filtros si existen en los query parameters
-    const { searchText, searchField } = req.query;
-    
-    if (searchText && searchField) {
-      data = data.filter(record => {
-        const fieldValue = record[searchField];
-        if (fieldValue === undefined || fieldValue === null) return false;
-        
-        // Búsqueda case-insensitive y parcial
-        return fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
-      });
+    try {
+        const { searchText, searchField } = req.query;
+        const sheet = await initializeSheet();
+        const rows = await sheet.getRows();
+
+        let data = rows.map(row => ({
+            ...row.toObject(),
+            _rowIndex: row.rowIndex
+        }));
+
+        // Filter by searchField and searchText
+        if (searchText && searchField) {
+            data = data.filter(record => {
+                const fieldValue = record[searchField];
+                return fieldValue && fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
+            });
+        }
+
+        res.json({ success: true, data: data, total: data.length });
+    } catch (error) {
+        console.error('Error searching records:', error);
+        res.status(500).json({ success: false, message: 'Error al realizar la búsqueda.', error: error.message });
     }
-    
-    res.json({
-      success: true,
-      data: data,
-      total: data.length,
-      filtered: !!(searchText && searchField),
-      searchText: searchText || null,
-      searchField: searchField || null
-    });
-  } catch (error) {
-    console.error('Error searching records:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al buscar los registros',
-      error: error.message 
-    });
-  }
 });
 
 // FIELDS - Obtener campos disponibles para filtrado
@@ -329,40 +314,40 @@ app.delete('/webhook/delete/:rowIndex', async (req, res) => {
   }
 });
 
-// Update record by legajo
+// Update Record by Legajo
 app.put('/webhook/update-by-legajo/:legajo', async (req, res) => {
     try {
         const { legajo } = req.params;
         const data = req.body;
-        
+
         // Find the record with the matching legajo
         const rowIndex = await findRowIndexByLegajo(legajo);
-        
+
         // Update the record in Google Sheets
         await updateRecord(rowIndex, data);
-        
+
         res.json({ success: true, message: 'Registro actualizado correctamente.' });
     } catch (error) {
         console.error('Error updating record by legajo:', error);
-        res.status(500).json({ success: false, message: 'Error al actualizar el registro.' });
+        res.status(500).json({ success: false, message: 'Error al actualizar el registro.', error: error.message });
     }
 });
 
-// Delete record by legajo
+// Delete Record by Legajo
 app.delete('/webhook/delete-by-legajo/:legajo', async (req, res) => {
     try {
         const { legajo } = req.params;
-        
+
         // Find the record with the matching legajo
         const rowIndex = await findRowIndexByLegajo(legajo);
-        
+
         // Delete the record from Google Sheets
         await deleteRecord(rowIndex);
-        
+
         res.json({ success: true, message: 'Registro eliminado correctamente.' });
     } catch (error) {
         console.error('Error deleting record by legajo:', error);
-        res.status(500).json({ success: false, message: 'Error al eliminar el registro.' });
+        res.status(500).json({ success: false, message: 'Error al eliminar el registro.', error: error.message });
     }
 });
 
