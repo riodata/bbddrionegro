@@ -777,6 +777,12 @@ function displaySearchResults(records) {
     
     container.innerHTML = '';
     records.forEach(record => {
+        // Find the legajo field regardless of case
+        const legajoField = Object.keys(record).find(key => 
+            key.toLowerCase() === 'legajo'
+        );
+        const legajoValue = legajoField ? record[legajoField] : 'No definido';
+        
         const div = document.createElement('div');
         div.className = 'record';
         
@@ -785,16 +791,16 @@ function displaySearchResults(records) {
         headerDiv.className = 'record-header';
         
         const titleDiv = document.createElement('div');
-        titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
+        titleDiv.innerHTML = `<strong>Legajo: ${legajoValue}</strong>`;
         
         const buttonsDiv = document.createElement('div');
         buttonsDiv.className = 'record-buttons';
         
-        // Use legajo as the identifier
-        if (record.legajo) {
+        // Use legajo as the identifier if it exists
+        if (legajoValue && legajoValue !== 'No definido') {
             buttonsDiv.innerHTML = `
-                <button class="btn btn-success" onclick="navigateToEdit('${record.legajo}')">✏️</button>
-                <button class="btn btn-danger" onclick="navigateToDelete('${record.legajo}')">🗑️</button>
+                <button class="btn btn-success" onclick="navigateToEdit('${legajoValue}')">✏️</button>
+                <button class="btn btn-danger" onclick="navigateToDelete('${legajoValue}')">🗑️</button>
             `;
         }
         
@@ -826,8 +832,15 @@ function updateSearchResultsInfo(message) {
 }
 
 // Function to navigate to edit tab with record data
-function navigateToEdit(legajo) {
-    const record = currentRecords.find(r => r.legajo == legajo);
+function navigateToEdit(legajoValue) {
+    // Find record regardless of case sensitivity of the legajo field
+    const record = currentRecords.find(r => {
+        const legajoField = Object.keys(r).find(key => 
+            key.toLowerCase() === 'legajo'
+        );
+        return legajoField && r[legajoField] == legajoValue;
+    });
+    
     if (!record) {
         showStatus('❌ No se pudo encontrar el registro para editar', 'error');
         return;
@@ -841,8 +854,15 @@ function navigateToEdit(legajo) {
     showUpdateForm(record);
 }
 
-function navigateToDelete(legajo) {
-    const record = currentRecords.find(r => r.legajo == legajo);
+function navigateToDelete(legajoValue) {
+    // Find record regardless of case sensitivity of the legajo field
+    const record = currentRecords.find(r => {
+        const legajoField = Object.keys(r).find(key => 
+            key.toLowerCase() === 'legajo'
+        );
+        return legajoField && r[legajoField] == legajoValue;
+    });
+    
     if (!record) {
         showStatus('❌ No se pudo encontrar el registro para eliminar', 'error');
         return;
@@ -853,6 +873,12 @@ function navigateToDelete(legajo) {
     
     // Switch to delete tab and show confirmation
     showTab('delete');
+    
+    // Get the legajo field name and value
+    const legajoField = Object.keys(record).find(key => 
+        key.toLowerCase() === 'legajo'
+    );
+    const legajoValue = legajoField ? record[legajoField] : 'No definido';
     
     // Display the record in the delete container
     const container = document.getElementById('delete-records');
@@ -866,12 +892,12 @@ function navigateToDelete(legajo) {
     headerDiv.className = 'record-header';
     
     const titleDiv = document.createElement('div');
-    titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
+    titleDiv.innerHTML = `<strong>Legajo: ${legajoValue}</strong>`;
     
     const buttonsDiv = document.createElement('div');
     buttonsDiv.className = 'record-buttons';
     buttonsDiv.innerHTML = `
-        <button class="btn btn-danger" onclick="deleteRecord('${record.legajo}')">🗑️ Borrar</button>
+        <button class="btn btn-danger" onclick="deleteRecord('${legajoValue}')">🗑️ Borrar</button>
     `;
     
     headerDiv.appendChild(titleDiv);
@@ -993,6 +1019,12 @@ function displayUpdateResults(records) {
     container.style.display = 'block';
     
     records.forEach(record => {
+        // Find the legajo field regardless of case
+        const legajoField = Object.keys(record).find(key => 
+            key.toLowerCase() === 'legajo'
+        );
+        const legajoValue = legajoField ? record[legajoField] : 'No definido';
+        
         const div = document.createElement('div');
         div.className = 'record';
         
@@ -1001,12 +1033,12 @@ function displayUpdateResults(records) {
         headerDiv.className = 'record-header';
         
         const titleDiv = document.createElement('div');
-        titleDiv.innerHTML = `<strong>Legajo: ${record.legajo}</strong>`;
+        titleDiv.innerHTML = `<strong>Legajo: ${legajoValue}</strong>`;
         
         const buttonsDiv = document.createElement('div');
         buttonsDiv.className = 'record-buttons';
         buttonsDiv.innerHTML = `
-            <button class="btn btn-success" onclick="editRecord('${record.legajo}')">✏️ Editar</button>
+            <button class="btn btn-success" onclick="editRecord('${legajoValue}')">✏️ Editar</button>
         `;
         
         headerDiv.appendChild(titleDiv);
@@ -1216,8 +1248,14 @@ function clearAdvancedSearch() {
 }
 
 // -------- EDIT/UPDATE FLOW --------
-function editRecord(legajo) {
-    const rec = (currentRecords || []).find(r => r.legajo == legajo);
+function editRecord(legajoValue) {
+    const rec = (currentRecords || []).find(r => {
+        const legajoField = Object.keys(r).find(key => 
+            key.toLowerCase() === 'legajo'
+        );
+        return legajoField && r[legajoField] == legajoValue;
+    });
+    
     if (!rec) return alert('No se encontró el registro');
     currentEditingRow = rec;
     showUpdateForm(rec);
@@ -1228,8 +1266,14 @@ function showUpdateForm(record) {
     document.getElementById('update-form-container').style.display = 'block';
     document.getElementById('update-records-container').style.display = 'none';
     
+    // Find the legajo field regardless of case
+    const legajoField = Object.keys(record).find(key => 
+        key.toLowerCase() === 'legajo'
+    );
+    const legajoValue = legajoField ? record[legajoField] : '';
+    
     // Store the legajo in a hidden field
-    document.getElementById('update-legajo').value = record.legajo;
+    document.getElementById('update-legajo').value = legajoValue;
     
     // Clone the createForm structure
     const createForm = document.getElementById('createForm').cloneNode(true);
@@ -1252,11 +1296,16 @@ function showUpdateForm(record) {
             const updateInputId = `update-${fieldName}`;
             input.id = updateInputId;
             
+            // Find the matching field in the record, case insensitive
+            const recordField = Object.keys(record).find(key => 
+                key.toLowerCase() === fieldName.toLowerCase()
+            );
+            
             // Set value from record data if available
-            if (record[fieldName] !== undefined) {
+            if (recordField !== undefined) {
                 if (input.type === 'date') {
                     // Ensure date is in YYYY-MM-DD format
-                    const dateValue = record[fieldName] ? formatDateForInput(record[fieldName]) : '';
+                    const dateValue = record[recordField] ? formatDateForInput(record[recordField]) : '';
                     input.value = dateValue;
                 } else if (input.tagName === 'SELECT') {
                     // For dropdown selects
@@ -1264,7 +1313,7 @@ function showUpdateForm(record) {
                     let foundMatch = false;
                     
                     options.forEach(option => {
-                        if (option.value === record[fieldName]) {
+                        if (option.value === record[recordField]) {
                             option.selected = true;
                             foundMatch = true;
                         } else {
@@ -1284,14 +1333,14 @@ function showUpdateForm(record) {
                             customField.classList.add('show');
                             const customInput = customField.querySelector('input');
                             if (customInput) {
-                                customInput.value = record[fieldName];
+                                customInput.value = record[recordField];
                                 customInput.required = true;
                             }
                         }
                     }
                 } else {
                     // For normal inputs
-                    input.value = record[fieldName] || '';
+                    input.value = record[recordField] || '';
                 }
             }
             
@@ -1383,9 +1432,25 @@ document.getElementById('updateForm').onsubmit = async function(e) {
             showStatus('✅ Registro actualizado correctamente', 'success');
             
             // Update the record in currentRecords
-            const index = currentRecords.findIndex(r => r.legajo == legajo);
+            const index = currentRecords.findIndex(r => {
+                const legajoField = Object.keys(r).find(key => 
+                    key.toLowerCase() === 'legajo'
+                );
+                return legajoField && r[legajoField] == legajo;
+            });
+            
             if (index !== -1) {
-                currentRecords[index] = { ...currentRecords[index], ...data };
+                // Preserve the original case of fields
+                Object.keys(data).forEach(key => {
+                    const originalKey = Object.keys(currentRecords[index]).find(k => 
+                        k.toLowerCase() === key.toLowerCase()
+                    );
+                    if (originalKey) {
+                        currentRecords[index][originalKey] = data[key];
+                    } else {
+                        currentRecords[index][key] = data[key];
+                    }
+                });
             }
             
             // Reset form state
@@ -1413,12 +1478,19 @@ function cancelUpdate() {
 
 // -------- DELETE FLOW --------
 // Add or update the deleteRecord function
-function deleteRecord(legajo) {
-    const rec = (currentRecords || []).find(r => r.legajo == legajo);
+function deleteRecord(legajoValue) {
+    // Find record regardless of case sensitivity of the legajo field
+    const rec = (currentRecords || []).find(r => {
+        const legajoField = Object.keys(r).find(key => 
+            key.toLowerCase() === 'legajo'
+        );
+        return legajoField && r[legajoField] == legajoValue;
+    });
+    
     if (!rec) return alert('No se encontró el registro');
     
     if (confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
-        fetch(`/webhook/delete-by-legajo/${legajo}`, {
+        fetch(`/webhook/delete-by-legajo/${legajoValue}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -1427,7 +1499,13 @@ function deleteRecord(legajo) {
                 showStatus('✅ Registro eliminado correctamente', 'success');
                 
                 // Remove from current records
-                const index = currentRecords.findIndex(r => r.legajo == legajo);
+                const index = currentRecords.findIndex(r => {
+                    const legajoField = Object.keys(r).find(key => 
+                        key.toLowerCase() === 'legajo'
+                    );
+                    return legajoField && r[legajoField] == legajoValue;
+                });
+                
                 if (index !== -1) {
                     currentRecords.splice(index, 1);
                 }
@@ -1450,7 +1528,6 @@ function deleteRecord(legajo) {
         });
     }
 }
-
     
 function showDeleteConfirmation(record) {
     const div = document.getElementById('delete-records');
