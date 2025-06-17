@@ -512,9 +512,9 @@
                 </form>
             </div>
 
-                        <!-- READ TAB -->
-            <div id="read" class="tab-content">
-                <h2>Registros Existentes</h2>
+                        <!-- SEARCH TAB -->
+            <div id="search" class="tab-content">
+                <h2>Buscar Registros Existentes</h2>
                 
                 <!-- Búsqueda Simple -->
                 <div class="search-container">
@@ -531,7 +531,7 @@
                             </select>
                         </div>
                         <div class="search-buttons">
-                            <button onclick="searchRecords()" class="btn">🔍 Buscar</button>
+                            <button onclick="performSimpleSearch()" class="btn">🔍 Buscar</button>
                             <button onclick="clearSearch()" class="btn btn-clear">🧹 Limpiar</button>
                         </div>
                     </div>
@@ -539,29 +539,29 @@
                     <!-- Botón para mostrar búsqueda avanzada -->
                     <button onclick="toggleAdvancedSearch()" class="btn btn-warning">⚙️ Búsqueda Avanzada</button>
                 </div>
-
+            
                 <!-- Búsqueda Avanzada (inicialmente oculta) -->
                 <div id="advancedSearch" class="advanced-search" style="display: none;">
                     <h3>🔧 Búsqueda Avanzada</h3>
                     <p>Agrega múltiples filtros para búsquedas más específicas:</p>
                     <div id="filtersContainer"></div>
                     <button onclick="addFilter()" class="btn btn-success">➕ Agregar Filtro</button>
-                    <button onclick="executeAdvancedSearch()" class="btn">🔍 Buscar Avanzado</button>
+                    <button onclick="performAdvancedSearch()" class="btn">🔍 Buscar Avanzado</button>
                     <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar Filtros</button>
                 </div>
-
+            
                 <!-- Controles principales -->
                 <div style="margin: 20px 0;">
-                    <button onclick="loadRecords()" class="btn">🔄 Cargar Todos</button>
-                    <button onclick="loadFields()" class="btn btn-warning">📋 Actualizar Campos</button>
+                    <button onclick="loadAllRecords()" class="btn">📋 Cargar Todos los Registros</button>
+                    <button onclick="loadFieldsForSearch()" class="btn btn-warning">🔄 Actualizar Campos</button>
                 </div>
-
+            
                 <!-- Información de resultados -->
-                <div id="resultsInfo" style="display: none;"></div>
-
+                <div id="searchResultsInfo" style="display: none;"></div>
+            
                 <!-- Contenedor de registros -->
-                <div id="records-container" class="records-container">
-                    <div class="loading">Cargando registros...</div>
+                <div id="search-records-container" class="records-container">
+                    <div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>
                 </div>
             </div>
 
@@ -738,392 +738,297 @@
                 customInput.value = '';
             }
 
-        // Funciones de utilidad
-        function showStatus(message, type = 'success') {
-            const statusDiv = document.getElementById('status-message');
-            statusDiv.innerHTML = `<div class="status-message ${type}">${message}</div>`;
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
+async function loadAllRecords() {
+    try {
+        document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
+        
+        const response = await fetch(`${API_BASE}/webhook/read`);
+        const result = await response.json();
+        
+        if (result.success) {
+            searchResults = result.data;
+            displaySearchResults(result.data);
+            updateSearchResultsInfo(`Mostrando todos los registros (${result.total} total)`);
+        } else {
+            throw new Error(result.message);
         }
+    } catch (error) {
+        console.error('Error loading records:', error);
+        document.getElementById('search-records-container').innerHTML = 
+            `<div class="error">Error al cargar registros: ${error.message}</div>`;
+        showStatus(`❌ Error: ${error.message}`, 'error');
+    }
+}
 
-        function showTab(tabName) {
-            // Ocultar todos los tabs
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-
-            // Mostrar el tab seleccionado
-            document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
-
-            // Cargar campos cuando se abren tabs que los necesitan
-            if (['read', 'update', 'delete'].includes(tabName)) {
-                loadFields();
-            }
+// Función para cargar campos disponibles para la pestaña BUSCAR
+async function loadFieldsForSearch() {
+    try {
+        const response = await fetch(`${API_BASE}/webhook/fields`);
+        const result = await response.json();
+        
+        if (result.success) {
+            searchFields = result.fields;
+            populateSearchFieldSelect();
+        } else {
+            console.error('Error loading fields:', result.message);
         }
+    } catch (error) {
+        console.error('Error loading fields:', error);
+    }
+}
 
-        // Cargar campos disponibles
-        async function loadFields() {
-            try {
-                const response = await fetch(`${API_BASE}/webhook/fields`);
-                const result = await response.json();
-                
-                if (result.success && result.fields) {
-                    availableFields = result.fields;
-                    populateFieldDropdowns();
-                }
-            } catch (error) {
-                console.error('Error loading fields:', error);
-            }
-        }
-
-        function populateFieldDropdowns() {
-            const dropdowns = [
-                'searchField', 'updateSearchField', 'deleteSearchField', 'bulkDeleteField'
-            ];
-            
-            dropdowns.forEach(dropdownId => {
-                const dropdown = document.getElementById(dropdownId);
-                if (dropdown) {
-                    dropdown.innerHTML = '<option value="">Selecciona un campo...</option>';
-                    availableFields.forEach(field => {
-                        dropdown.innerHTML += `<option value="${field}">${field}</option>`;
-                    });
-                }
-            });
-        }
-
-        // Funciones de búsqueda avanzada
-        function toggleAdvancedSearch() {
-            const advancedDiv = document.getElementById('advancedSearch');
-            advancedDiv.style.display = advancedDiv.style.display === 'none' ? 'block' : 'none';
-        }
-
-        function addFilter() {
-            const container = document.getElementById('filtersContainer');
-            const filterId = `filter_${filterCount++}`;
-            
-            const filterHtml = `
-                <div class="filter-row" id="${filterId}">
-                    <div class="filter-field">
-                        <label>Campo:</label>
-                        <select class="filter-field-select">
-                            <option value="">Selecciona un campo...</option>
-                            ${availableFields.map(field => `<option value="${field}">${field}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="filter-operator">
-                        <label>Operador:</label>
-                        <select class="filter-operator-select">
-                            <option value="contains">Contiene</option>
-                            <option value="equals">Igual a</option>
-                            <option value="startsWith">Comienza con</option>
-                            <option value="endsWith">Termina con</option>
-                            <option value="notEquals">Diferente de</option>
-                        </select>
-                    </div>
-                    <div class="filter-value">
-                        <label>Valor:</label>
-                        <input type="text" class="filter-value-input" placeholder="Valor a buscar...">
-                    </div>
-                    <div class="filter-actions">
-                        <button onclick="removeFilter('${filterId}')" class="btn btn-danger">❌</button>
-                    </div>
-                </div>
-            `;
-            
-            container.innerHTML += filterHtml;
-        }
-
-        function removeFilter(filterId) {
-            document.getElementById(filterId).remove();
-        }
-
-        function clearAdvancedSearch() {
-            document.getElementById('filtersContainer').innerHTML = '';
-            filterCount = 0;
-        }
-
-        async function executeAdvancedSearch() {
-            const filterRows = document.querySelectorAll('#filtersContainer .filter-row');
-            const filters = [];
-            
-            filterRows.forEach(row => {
-                const field = row.querySelector('.filter-field-select').value;
-                const operator = row.querySelector('.filter-operator-select').value;
-                const value = row.querySelector('.filter-value-input').value;
-                
-                if (field && value) {
-                    filters.push({ field, operator, value });
-                }
-            });
-            
-            if (filters.length === 0) {
-                showStatus('❌ Agrega al menos un filtro válido', 'error');
-                return;
-            }
-            
-            const container = document.getElementById('records-container');
-            container.innerHTML = '<div class="loading">Buscando registros...</div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/webhook/search`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ filters })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayRecords(result.data, `Búsqueda avanzada: ${result.total} resultados encontrados`);
-                } else {
-                    showStatus(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
-            }
-        }
-
-            
-        // CREATE
-        document.getElementById('createForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData);
-            
-            try {
-                const response = await fetch(`${API_BASE}/webhook/create`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showStatus('✅ Registro creado exitosamente!', 'success');
-                    e.target.reset();
-                } else {
-                    showStatus(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
-            }
+// Función para poblar el select de campos en la pestaña BUSCAR
+function populateSearchFieldSelect() {
+    const searchFieldSelect = document.getElementById('searchField');
+    if (searchFieldSelect) {
+        searchFieldSelect.innerHTML = '<option value="">Selecciona un campo...</option>';
+        
+        searchFields.forEach(field => {
+            const option = document.createElement('option');
+            option.value = field;
+            option.textContent = field;
+            searchFieldSelect.appendChild(option);
         });
+    }
+}
 
-                // READ - Funciones de búsqueda
-        async function searchRecords() {
-            const searchText = document.getElementById('searchText').value.trim();
-            const searchField = document.getElementById('searchField').value;
-            
-            if (!searchText || !searchField) {
-                showStatus('❌ Por favor completa ambos campos de búsqueda', 'error');
-                return;
-            }
-            
-            const container = document.getElementById('records-container');
-            container.innerHTML = '<div class="loading">Buscando registros...</div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/webhook/read?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayRecords(result.data, `Búsqueda: "${searchText}" en campo "${searchField}" - ${result.total} resultados`);
-                } else {
-                    showStatus(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
-            }
+// Función para realizar búsqueda simple en la pestaña BUSCAR
+async function performSimpleSearch() {
+    const searchText = document.getElementById('searchText').value.trim();
+    const searchField = document.getElementById('searchField').value;
+    
+    if (!searchText || !searchField) {
+        showStatus('❌ Por favor, ingresa un texto y selecciona un campo para buscar.', 'error');
+        return;
+    }
+    
+    try {
+        document.getElementById('search-records-container').innerHTML = '<div class="loading">Buscando...</div>';
+        
+        const response = await fetch(`${API_BASE}/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            searchResults = result.data;
+            displaySearchResults(result.data);
+            updateSearchResultsInfo(`Búsqueda: "${searchText}" en campo "${searchField}" - ${result.total} resultado(s) encontrado(s)`);
+            showStatus(`📋 ${result.total} registros encontrados`, 'success');
+        } else {
+            throw new Error(result.message);
         }
+    } catch (error) {
+        console.error('Error searching:', error);
+        document.getElementById('search-records-container').innerHTML = 
+            `<div class="error">Error en la búsqueda: ${error.message}</div>`;
+        showStatus(`❌ Error: ${error.message}`, 'error');
+    }
+}
 
-        function clearSearch() {
-            document.getElementById('searchText').value = '';
-            document.getElementById('searchField').value = '';
-            document.getElementById('resultsInfo').style.display = 'none';
-            loadRecords();
+// Función para realizar búsqueda avanzada en la pestaña BUSCAR
+async function performAdvancedSearch() {
+    const filters = collectAdvancedFilters();
+    
+    if (filters.length === 0) {
+        showStatus('❌ Por favor, agrega al menos un filtro para la búsqueda avanzada.', 'error');
+        return;
+    }
+    
+    try {
+        document.getElementById('search-records-container').innerHTML = '<div class="loading">Buscando...</div>';
+        
+        const response = await fetch(`${API_BASE}/webhook/search/advanced`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ filters })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            searchResults = result.data;
+            displaySearchResults(result.data);
+            updateSearchResultsInfo(`Búsqueda avanzada con ${result.filtersApplied} filtro(s) - ${result.total} resultado(s) encontrado(s)`);
+            showStatus(`📋 ${result.total} registros encontrados con búsqueda avanzada`, 'success');
+        } else {
+            throw new Error(result.message);
         }
+    } catch (error) {
+        console.error('Error in advanced search:', error);
+        document.getElementById('search-records-container').innerHTML = 
+            `<div class="error">Error en la búsqueda avanzada: ${error.message}</div>`;
+        showStatus(`❌ Error: ${error.message}`, 'error');
+    }
+}
 
-        async function loadRecords() {
-            const container = document.getElementById('records-container');
-            container.innerHTML = '<div class="loading">Cargando registros...</div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/webhook/read`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayRecords(result.data, `Todos los registros: ${result.total} encontrados`);
-                } else {
-                    showStatus(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                container.innerHTML = '<div class="loading">Error al cargar registros</div>';
-                showStatus(`❌ Error: ${error.message}`, 'error');
+// Función para mostrar resultados de búsqueda en la pestaña BUSCAR
+function displaySearchResults(records) {
+    const container = document.getElementById('search-records-container');
+    
+    if (records.length === 0) {
+        container.innerHTML = '<div class="no-records">No se encontraron registros que coincidan con los criterios de búsqueda.</div>';
+        return;
+    }
+    
+    // Crear tabla de resultados
+    const fields = Object.keys(records[0]).filter(key => key !== '_rowIndex');
+    
+    let html = '<div class="table-container"><table class="records-table">';
+    
+    // Encabezados
+    html += '<thead><tr>';
+    fields.forEach(field => {
+        html += `<th>${field}</th>`;
+    });
+    html += '</tr></thead>';
+    
+    // Filas de datos
+    html += '<tbody>';
+    records.forEach(record => {
+        html += '<tr>';
+        fields.forEach(field => {
+            html += `<td>${record[field] || ''}</td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    
+    container.innerHTML = html;
+}
+
+// Función para actualizar información de resultados en la pestaña BUSCAR
+function updateSearchResultsInfo(message) {
+    const infoDiv = document.getElementById('searchResultsInfo');
+    if (infoDiv) {
+        infoDiv.innerHTML = `<div class="results-info">${message}</div>`;
+        infoDiv.style.display = 'block';
+    }
+}
+
+// Función para limpiar búsqueda simple en la pestaña BUSCAR
+function clearSearch() {
+    document.getElementById('searchText').value = '';
+    document.getElementById('searchField').value = '';
+    const infoDiv = document.getElementById('searchResultsInfo');
+    if (infoDiv) {
+        infoDiv.style.display = 'none';
+    }
+    document.getElementById('search-records-container').innerHTML = 
+        '<div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>';
+}
+
+// Función para mostrar/ocultar búsqueda avanzada (modificada para no interferir con la existente)
+function toggleAdvancedSearch() {
+    const advancedDiv = document.getElementById('advancedSearch');
+    if (advancedDiv) {
+        if (advancedDiv.style.display === 'none') {
+            advancedDiv.style.display = 'block';
+            if (searchFields.length === 0) {
+                loadFieldsForSearch();
             }
+        } else {
+            advancedDiv.style.display = 'none';
         }
+    }
+}
 
-        function displayRecords(records, infoText) {
-            const container = document.getElementById('records-container');
-            const infoDiv = document.getElementById('resultsInfo');
-            
-            // Mostrar información de resultados
-            if (infoText) {
-                infoDiv.innerHTML = `<div class="results-info">📊 ${infoText}</div>`;
-                infoDiv.style.display = 'block';
-            }
-            
-            if (records.length === 0) {
-                container.innerHTML = '<div class="loading">No se encontraron registros</div>';
-                return;
-            }
-            
-            let html = '';
-            records.forEach((record, index) => {
-                html += `
-                    <div class="record">
-                        <strong>Registro #${index + 1}</strong><br>
-                        ${Object.entries(record).map(([key, value]) => 
-                            `<strong>${key}:</strong> ${value || 'N/A'}`
-                        ).join('<br>')}
-                    </div>
-                `;
-            });
-            
-            container.innerHTML = html;
-            showStatus(`📋 ${records.length} registros mostrados`, 'success');
+// Función para agregar filtro avanzado (adaptada para usar searchFields)
+function addFilter() {
+    if (searchFields.length === 0) {
+        showStatus('❌ Primero carga los campos disponibles.', 'error');
+        return;
+    }
+    
+    const container = document.getElementById('filtersContainer');
+    const filterId = `filter_${filterCount++}`;
+    
+    const filterHtml = `
+        <div class="filter-row" id="${filterId}">
+            <div class="filter-field">
+                <label>Campo:</label>
+                <select class="filter-field-select">
+                    <option value="">Selecciona un campo...</option>
+                    ${searchFields.map(field => `<option value="${field}">${field}</option>`).join('')}
+                </select>
+            </div>
+            <div class="filter-operator">
+                <label>Operador:</label>
+                <select class="filter-operator-select">
+                    <option value="contains">Contiene</option>
+                    <option value="equals">Igual a</option>
+                    <option value="startsWith">Comienza con</option>
+                    <option value="endsWith">Termina con</option>
+                    <option value="notEquals">Diferente de</option>
+                </select>
+            </div>
+            <div class="filter-value">
+                <label>Valor:</label>
+                <input type="text" class="filter-value-input" placeholder="Valor a buscar...">
+            </div>
+            <div class="filter-actions">
+                <button onclick="removeFilter('${filterId}')" class="btn btn-danger">❌</button>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML += filterHtml;
+}
+
+// Función para recopilar filtros avanzados
+function collectAdvancedFilters() {
+    const filters = [];
+    const filterRows = document.querySelectorAll('#filtersContainer .filter-row');
+    
+    filterRows.forEach(row => {
+        const field = row.querySelector('.filter-field-select').value;
+        const operator = row.querySelector('.filter-operator-select').value;
+        const value = row.querySelector('.filter-value-input').value.trim();
+        
+        if (field && value) {
+            filters.push({ field, operator, value });
         }
+    });
+    
+    return filters;
+}
 
-        // UPDATE - con búsqueda
-        async function searchRecordsForUpdate() {
-            const searchText = document.getElementById('updateSearchText').value.trim();
-            const searchField = document.getElementById('updateSearchField').value;
-            
-            if (!searchText || !searchField) {
-                showStatus('❌ Por favor completa ambos campos de búsqueda', 'error');
-                return;
-            }
-            
-            const container = document.getElementById('update-records');
-            container.innerHTML = '<div class="loading">Buscando registros...</div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/webhook/read?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayRecordsForUpdate(result.data, `Búsqueda: "${searchText}" en "${searchField}"`);
-                } else {
-                    showStatus(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
-            }
-        }
+// Función para limpiar búsqueda avanzada (adaptada)
+function clearAdvancedSearch() {
+    document.getElementById('filtersContainer').innerHTML = '';
+    filterCount = 0;
+    const infoDiv = document.getElementById('searchResultsInfo');
+    if (infoDiv) {
+        infoDiv.style.display = 'none';
+    }
+    document.getElementById('search-records-container').innerHTML = 
+        '<div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>';
+}
 
-        async function loadRecordsForUpdate() {
-            const container = document.getElementById('update-records');
-            container.innerHTML = '<div class="loading">Cargando registros...</div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/webhook/read`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayRecordsForUpdate(result.data, 'Todos los registros');
-                } else {
-                    showStatus(`❌ Error: ${result.message}`, 'error');
-                }
-            } catch (error) {
-                showStatus(`❌ Error de conexión: ${error.message}`, 'error');
-            }
-        }              
+// Modificar la función showTab existente para cargar campos de búsqueda
+function showTab(tabName) {
+    // Ocultar todos los tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
 
-        function displayRecordsForUpdate(records, searchInfo) {
-            const container = document.getElementById('update-records');
-            
-            if (records.length === 0) {
-                container.innerHTML = '<div class="loading">No se encontraron registros</div>';
-                return;
-            }
-            
-            let html = `<h3>📝 ${searchInfo} - Selecciona un registro para actualizar:</h3>`;
-            records.forEach((record, index) => {
-                html += `
-                    <div class="record" style="cursor: pointer;" onclick="editRecord(${index}, ${JSON.stringify(record).replace(/"/g, '&quot;')})">
-                        <strong>Registro #${index + 1}</strong><br>
-                        ${Object.entries(record).map(([key, value]) => 
-                            `<strong>${key}:</strong> ${value || 'N/A'}`
-                        ).join('<br>')}
-                    </div>
-                `;
-            });
-            
-            container.innerHTML = html;
-        }
+    // Mostrar el tab seleccionado
+    document.getElementById(tabName).classList.add('active');
+    event.target.classList.add('active');
 
-        function editRecord(index, record) {
-            const container = document.getElementById('update-records');
-            
-            let formHtml = '<h3>Editar Registro:</h3><form id="updateForm">';
-            Object.entries(record).forEach(([key, value]) => {
-                formHtml += `
-                    <div class="form-group">
-                        <label for="update_${key}">${key}:</label>
-                        <input type="text" id="update_${key}" name="${key}" value="${value || ''}" required>
-                    </div>
-                `;
-            });
-            formHtml += `
-                <button type="submit" class="btn btn-success">Actualizar Registro</button>
-                <button type="button" onclick="loadRecordsForUpdate()" class="btn">Cancelar</button>
-                </form>
-            `;
-            
-            container.innerHTML = formHtml;
-            
-            document.getElementById('updateForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const formData = new FormData(e.target);
-                const updateData = Object.fromEntries(formData);
-                
-                try {
-                    const response = await fetch(`${API_BASE}/webhook/update`, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            originalRecord: record,
-                            ...updateData
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showStatus('✅ Registro actualizado exitosamente!', 'success');
-                        loadRecordsForUpdate();
-                    } else {
-                        showStatus(`❌ Error: ${result.message}`, 'error');
-                    }
-                } catch (error) {
-                    showStatus(`❌ Error de conexión: ${error.message}`, 'error');
-                }
-            });
-        }
+    // Cargar campos cuando se abren tabs que los necesitan
+    if (['read', 'update', 'delete'].includes(tabName)) {
+        loadFields();
+    }
+    
+    // Cargar campos específicos para la pestaña de búsqueda
+    if (tabName === 'search') {
+        loadFieldsForSearch();
+    }
+}
 
         // DELETE
         async function loadRecordsForDelete() {
