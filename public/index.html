@@ -208,7 +208,32 @@
             border-radius: 8px;
             transition: all 0.3s ease;
         }
-
+        
+        .record-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 10px;
+        }
+        
+        .record-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .record-content {
+            margin-top: 10px;
+        }
+        
+        .record .btn {
+            padding: 6px 14px;
+            font-size: 0.92rem;
+            margin-right: 0;
+            margin-bottom: 0;
+        }
+        
         .record:hover {
             background: #e9ecef;
             transform: translateX(5px);
@@ -217,22 +242,7 @@
         .record:last-child {
             border-bottom: none;
         }
-        .record-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-        .record-buttons {
-            display: flex;
-            gap: 8px;
-        }
-        .record .btn {
-            padding: 6px 14px;
-            font-size: 0.92rem;
-            margin-right: 0;
-            margin-bottom: 0;
-        }
-
+        
         .loading {
             text-align: center;
             padding: 40px;
@@ -581,7 +591,6 @@
             <div id="update" class="tab-content">
                 <h2>Actualizar Registro</h2>
                 
-                <!-- Búsqueda para actualizar -->
                 <!-- Formulario de actualización (oculto inicialmente) -->
                 <div id="update-form-container" style="display: none;">
                     <h3>✏️ Editando Registro</h3>
@@ -589,24 +598,20 @@
                         <input type="hidden" id="update-rowIndex" name="rowIndex">
                         <!-- Los campos se generarán dinámicamente -->
                         <div id="update-fields"></div>
-                        <div style="margin-top: 20px;">
-                            <button type="submit" class="btn">💾 Guardar Cambios</button>
-                            <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
-                        </div>
                     </form>
                 </div>
-
+            
                 <!-- Contenedor de registros para actualizar -->
                 <div id="update-records-container" class="records-container">
                     <div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>
                 </div>
             </div>
-
+            
             <!-- DELETE TAB -->
             <div id="delete" class="tab-content">
                 <h2>Eliminar Registro</h2>
                 
-                <!-- Container for delete records -->
+                <!-- Contenedor de registros para eliminar -->
                 <div id="delete-records" class="records-container">
                     <div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>
                 </div>
@@ -664,6 +669,7 @@ function showTab(tabName) {
     // Ocultar todas las pestañas y remover .active
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    
     // Mostrar la seleccionada
     const selectedTab = document.getElementById(tabName);
     const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
@@ -671,17 +677,29 @@ function showTab(tabName) {
     if (selectedButton) selectedButton.classList.add('active');
 
     // Mostrar barra búsqueda global si corresponde
-    document.getElementById('global-search').style.display =
-        ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
-
+    const globalSearch = document.getElementById('global-search');
+    globalSearch.style.display = ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
+    
+    // Reset current states when changing tabs
+    currentEditingRow = null;
+    currentDeletingRow = null;
+    
     // Cargar campos si es necesario
-    if (tabName === 'search') loadFieldsForSearch();
-    if (['update', 'delete'].includes(tabName)) loadFieldsForGlobalSearch();
-    if (tabName === 'delete') loadFieldsForDelete();
-
-    // Si hay registro seleccionado para editar/eliminar, mostrarlo
-    if (tabName === 'update' && currentEditingRow) showUpdateForm(currentEditingRow);
-    if (tabName === 'delete' && currentDeletingRow) showDeleteConfirmation(currentDeletingRow);
+    if (['search', 'update', 'delete'].includes(tabName)) {
+        loadFieldsForGlobalSearch();
+    }
+    
+    // Reset view states
+    if (tabName === 'update') {
+        document.getElementById('update-form-container').style.display = 'none';
+        document.getElementById('update-records-container').innerHTML = 
+            '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+    }
+    
+    if (tabName === 'delete') {
+        document.getElementById('delete-records').innerHTML = 
+            '<div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>';
+    }
 }
 
 // -------- SEARCH TAB --------
@@ -783,6 +801,13 @@ function loadFieldsForGlobalSearch() {
         });
 }
 
+// Add this initialization function to make sure all necessary globals are loaded when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Load fields for global search bar
+    loadFieldsForGlobalSearch();
+});
+
+// Replace the performGlobalSearch function
 function performGlobalSearch() {
     const searchText = document.getElementById('globalSearchText').value.trim();
     const searchField = document.getElementById('globalSearchField').value;
@@ -793,11 +818,17 @@ function performGlobalSearch() {
     
     // Show loading status in the active tab
     const activeTabId = document.querySelector('.tab-content.active').id;
+    let container;
+    
     if (activeTabId === 'update') {
-        document.getElementById('update-records-container').innerHTML = '<div class="loading">Buscando...</div>';
+        container = document.getElementById('update-records-container');
     } else if (activeTabId === 'delete') {
-        document.getElementById('delete-records').innerHTML = '<div class="loading">Buscando...</div>';
+        container = document.getElementById('delete-records');
+    } else {
+        container = document.getElementById('search-records-container');
     }
+    
+    container.innerHTML = '<div class="loading">Buscando...</div>';
     
     const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
     fetch(url)
@@ -818,54 +849,85 @@ function performGlobalSearch() {
                 
                 showStatus(`Se encontraron ${data.total} registro(s)`, 'success');
             } else {
+                container.innerHTML = '<div class="error">No se encontraron registros.</div>';
                 showStatus('Error en la búsqueda: ' + data.message, 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
+            container.innerHTML = '<div class="error">Error al realizar la búsqueda.</div>';
             showStatus('Error al realizar la búsqueda', 'error');
         });
 }
 
+// Add these display functions for update and delete tabs
 function displayUpdateResults(records) {
     const container = document.getElementById('update-records-container');
-    if (!records.length) {
+    if (!records || !records.length) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
     }
+    
     container.innerHTML = '';
+    container.style.display = 'block';
+    
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
-        div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
         
-        // Add Edit button
-        if (typeof record._rowIndex !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
-            `;
-        }
+        // Create record header with edit button in top right
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'record-header';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.innerHTML = `<strong>Registro #${record._rowIndex}</strong>`;
+        
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.className = 'record-buttons';
+        buttonsDiv.innerHTML = `
+            <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
+        `;
+        
+        headerDiv.appendChild(titleDiv);
+        headerDiv.appendChild(buttonsDiv);
+        div.appendChild(headerDiv);
+        
+        // Create content for record details
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'record-content';
+        
+        Object.entries(record)
+            .filter(([k]) => k !== '_rowIndex')
+            .forEach(([k, v]) => {
+                contentDiv.innerHTML += `<strong>${k}:</strong> ${v || ''}<br>`;
+            });
+        
+        div.appendChild(contentDiv);
         container.appendChild(div);
     });
 }
-
+    
 function displayDeleteResults(records) {
     const container = document.getElementById('delete-records');
-    if (!records.length) {
+    if (!records || !records.length) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
     }
+    
     container.innerHTML = '';
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
-        div.innerHTML = Object.entries(record)
+        
+        // Create the record display content
+        let recordContent = '';
+        Object.entries(record)
             .filter(([k]) => k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
+            .forEach(([k, v]) => {
+                recordContent += `<strong>${k}:</strong> ${v || ''}<br>`;
+            });
+            
+        div.innerHTML = recordContent;
         
         // Add Delete button
         if (typeof record._rowIndex !== 'undefined') {
@@ -875,30 +937,53 @@ function displayDeleteResults(records) {
         }
         container.appendChild(div);
     });
-}    
-
-function clearGlobalSearch() {
-    document.getElementById('globalSearchText').value = '';
-    document.getElementById('globalSearchField').value = '';
-    showStatus('Búsqueda limpiada', 'info');
 }
+
+// Update the loadAllGlobalRecords function
 function loadAllGlobalRecords() {
     showStatus('Cargando todos los registros...', 'info');
+    
+    // Show loading status in the active tab
+    const activeTabId = document.querySelector('.tab-content.active').id;
+    let container;
+    
+    if (activeTabId === 'update') {
+        container = document.getElementById('update-records-container');
+    } else if (activeTabId === 'delete') {
+        container = document.getElementById('delete-records');
+    } else {
+        container = document.getElementById('search-records-container');
+    }
+    
+    container.innerHTML = '<div class="loading">Cargando registros...</div>';
+    
     fetch('/webhook/read')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 currentRecords = data.data;
-                displaySearchResults(data.data);
-                updateSearchResultsInfo(`Se cargaron ${data.total} registro(s)`);
+                
+                // Display results based on active tab
+                if (activeTabId === 'search') {
+                    displaySearchResults(data.data);
+                    updateSearchResultsInfo(`Se cargaron ${data.total} registro(s)`);
+                } else if (activeTabId === 'update') {
+                    displayUpdateResults(data.data);
+                } else if (activeTabId === 'delete') {
+                    displayDeleteResults(data.data);
+                }
+                
                 document.getElementById('globalSearchText').value = '';
                 document.getElementById('globalSearchField').value = '';
+                showStatus(`Se cargaron ${data.total} registro(s)`, 'success');
             } else {
+                container.innerHTML = '<div class="error">Error al cargar registros.</div>';
                 showStatus('Error al cargar registros: ' + data.message, 'error');
             }
         })
         .catch(error => {
             console.error('Error:', error);
+            container.innerHTML = '<div class="error">Error al cargar registros.</div>';
             showStatus('Error al cargar todos los registros', 'error');
         });
 }
@@ -1001,66 +1086,247 @@ function editRecord(rowIndex) {
     const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
     if (!rec) return alert('No se encontró el registro');
     currentEditingRow = rec;
-    showTab('update');
     showUpdateForm(rec);
 }
+
 function showUpdateForm(record) {
+    // Show the form container
     document.getElementById('update-form-container').style.display = 'block';
+    document.getElementById('update-records-container').style.display = 'none';
     document.getElementById('update-rowIndex').value = record._rowIndex;
-    // Dynamically create fields
-    const fieldsDiv = document.getElementById('update-fields');
-    fieldsDiv.innerHTML = '';
-    Object.entries(record).forEach(([k, v]) => {
-        if (k === '_rowIndex') return;
-        fieldsDiv.innerHTML += `
-            <div class="form-group">
-                <label for="update-${k}">${k}:</label>
-                <input type="text" id="update-${k}" name="${k}" value="${v || ''}">
-            </div>
-        `;
+    
+    // Clone the createForm structure
+    const createForm = document.getElementById('createForm').cloneNode(true);
+    const updateFormFields = document.getElementById('update-fields');
+    updateFormFields.innerHTML = ''; // Clear existing fields
+    
+    // Get all form field elements from the create form
+    const formFields = createForm.querySelectorAll('.form-group');
+    
+    // Process each field from create form and populate with record data
+    formFields.forEach(field => {
+        const clonedField = field.cloneNode(true);
+        const input = clonedField.querySelector('input, select, textarea');
+        
+        if (input) {
+            const fieldName = input.name;
+            // Skip submit buttons
+            if (input.type === 'submit') return;
+            
+            const updateInputId = `update-${fieldName}`;
+            input.id = updateInputId;
+            
+            // Set value from record data if available
+            if (record[fieldName] !== undefined) {
+                if (input.type === 'date') {
+                    // Ensure date is in YYYY-MM-DD format
+                    const dateValue = record[fieldName] ? formatDateForInput(record[fieldName]) : '';
+                    input.value = dateValue;
+                } else if (input.tagName === 'SELECT') {
+                    // For dropdown selects
+                    const options = input.querySelectorAll('option');
+                    let foundMatch = false;
+                    
+                    options.forEach(option => {
+                        if (option.value === record[fieldName]) {
+                            option.selected = true;
+                            foundMatch = true;
+                        } else {
+                            option.selected = false;
+                        }
+                    });
+                    
+                    // If no match found and there's an 'otros' option, select it and set custom value
+                    if (!foundMatch && input.querySelector('option[value="otros"]')) {
+                        const otrosOption = input.querySelector('option[value="otros"]');
+                        otrosOption.selected = true;
+                        
+                        // Get the custom field
+                        const customFieldId = input.getAttribute('onchange').match(/['"]([^'"]+)['"]/)[1];
+                        const customField = clonedField.querySelector(`#${customFieldId}`);
+                        if (customField) {
+                            customField.classList.add('show');
+                            const customInput = customField.querySelector('input');
+                            if (customInput) {
+                                customInput.value = record[fieldName];
+                                customInput.required = true;
+                            }
+                        }
+                    }
+                } else {
+                    // For normal inputs
+                    input.value = record[fieldName] || '';
+                }
+            }
+            
+            // Add event listener for select fields with custom options
+            if (input.tagName === 'SELECT' && input.getAttribute('onchange')) {
+                input.onchange = function() {
+                    const customFieldId = this.getAttribute('onchange').match(/['"]([^'"]+)['"]/)[1];
+                    handleSelectChange(this, customFieldId);
+                };
+            }
+        }
+        
+        updateFormFields.appendChild(clonedField);
     });
+    
+    // Replace the submit button with update button
+    const submitBtnContainer = document.createElement('div');
+    submitBtnContainer.style.marginTop = '20px';
+    submitBtnContainer.innerHTML = `
+        <button type="submit" class="btn btn-success">💾 Guardar Cambios</button>
+        <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
+    `;
+    updateFormFields.appendChild(submitBtnContainer);
 }
+
+// Helper function to format date strings
+function formatDateForInput(dateString) {
+    if (!dateString) return '';
+    
+    // Try to parse the date string
+    try {
+        const parts = dateString.split('/');
+        if (parts.length === 3) {
+            // If format is DD/MM/YYYY
+            return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+        
+        const date = new Date(dateString);
+        if (!isNaN(date.getTime())) {
+            return date.toISOString().split('T')[0];
+        }
+    } catch (e) {
+        console.error('Error parsing date:', e);
+    }
+    
+    return dateString;
+}
+    
 // On submit updateForm, send to backend
+// Update the form submission handler
 document.getElementById('updateForm').onsubmit = async function(e) {
     e.preventDefault();
+    
     const rowIndex = document.getElementById('update-rowIndex').value;
     const data = {};
-    Array.from(this.elements).forEach(el => {
-        if (el.name && el.type !== 'submit' && el.name !== 'rowIndex') {
+    
+    // Get all form inputs
+    const inputs = this.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(el => {
+        // Skip submit buttons and rowIndex
+        if (el.type === 'submit' || el.name === 'rowIndex') return;
+        
+        // Handle custom fields for dropdowns with "otros" option
+        if (el.tagName === 'SELECT' && el.value === 'otros') {
+            const customFieldId = el.getAttribute('onchange').match(/['"]([^'"]+)['"]/)[1];
+            const customInput = document.getElementById(`${customFieldId}_text`);
+            if (customInput && customInput.value) {
+                data[el.name] = customInput.value;
+                return;
+            }
+        }
+        
+        // Normal input handling
+        if (el.name) {
             data[el.name] = el.value;
         }
     });
+    
     try {
         const res = await fetch(`/webhook/update/${rowIndex}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
+        
         const result = await res.json();
         if (result.success) {
-            showStatus('Registro actualizado correctamente', 'success');
-            currentEditingRow = null;
-            document.getElementById('update-form-container').style.display = 'none';
+            showStatus('✅ Registro actualizado correctamente', 'success');
+            
+            // Update the record in currentRecords
+            const index = currentRecords.findIndex(r => r._rowIndex == rowIndex);
+            if (index !== -1) {
+                currentRecords[index] = { ...currentRecords[index], ...data };
+            }
+            
+            // Reset form state
+            cancelUpdate();
+            
+            // Refresh the display
+            displayUpdateResults(currentRecords);
         } else {
-            showStatus('Error al actualizar: ' + result.message, 'error');
+            showStatus(`❌ Error al actualizar: ${result.message}`, 'error');
         }
     } catch (err) {
-        showStatus('Error en la actualización', 'error');
+        console.error('Error:', err);
+        showStatus('❌ Error en la actualización', 'error');
     }
-}
+    
+    return false;
+};
+    
 function cancelUpdate() {
-    currentEditingRow = null;
     document.getElementById('update-form-container').style.display = 'none';
+    document.getElementById('update-records-container').style.display = 'block';
+    document.getElementById('update-fields').innerHTML = '';
+    currentEditingRow = null;
 }
 
 // -------- DELETE FLOW --------
+// Add or update the deleteRecord function
 function deleteRecord(rowIndex) {
     const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
     if (!rec) return alert('No se encontró el registro');
-    currentDeletingRow = rec;
-    showTab('delete');
-    showDeleteConfirmation(rec);
+    
+    if (confirm('¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.')) {
+        currentDeletingRow = null; // Clear any previous deleting row
+        
+        fetch(`/webhook/delete/${rowIndex}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                showStatus('✅ Registro eliminado correctamente', 'success');
+                
+                // Refresh the current view
+                const activeTabId = document.querySelector('.tab-content.active').id;
+                if (activeTabId === 'delete') {
+                    // Remove the deleted record from the display
+                    const container = document.getElementById('delete-records');
+                    const records = container.querySelectorAll('.record');
+                    records.forEach(record => {
+                        if (record.querySelector(`button[onclick="deleteRecord(${rowIndex})"]`)) {
+                            record.remove();
+                        }
+                    });
+                    
+                    // Also remove from currentRecords
+                    const index = currentRecords.findIndex(r => r._rowIndex == rowIndex);
+                    if (index !== -1) {
+                        currentRecords.splice(index, 1);
+                    }
+                    
+                    // Show message if no records left
+                    if (!document.querySelector('#delete-records .record')) {
+                        document.getElementById('delete-records').innerHTML = 
+                            '<div class="no-records">No hay registros para mostrar.</div>';
+                    }
+                }
+            } else {
+                showStatus(`❌ Error al eliminar: ${result.message}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showStatus('❌ Error al procesar la eliminación', 'error');
+        });
+    }
 }
+    
 function showDeleteConfirmation(record) {
     const div = document.getElementById('delete-records');
     div.innerHTML = `
@@ -1102,11 +1368,16 @@ function cancelDelete() {
 }
 
 // -------- UTIL --------
-function showStatus(msg, type) {
-    const el = document.getElementById('status-message');
-    el.innerHTML = msg;
-    el.className = 'status-message ' + (type || '');
-    setTimeout(() => { el.innerHTML = ''; el.className = 'status-message'; }, 3500);
+function showStatus(message, type = 'info') {
+    const statusEl = document.getElementById('status-message');
+    statusEl.className = `status-message ${type}`;
+    statusEl.textContent = message;
+    statusEl.style.display = 'block';
+    
+    // Auto-hide after 4 seconds
+    setTimeout(() => {
+        statusEl.style.display = 'none';
+    }, 4000);
 }
 
 // -------- INIT --------
