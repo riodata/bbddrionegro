@@ -44,21 +44,22 @@ app.post('/webhook/create', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const data = req.body;
-    
-    // Agregar fila
+
+    console.log('Datos recibidos:', data); // Log para depuración
+
     const row = await sheet.addRow(data);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Registro creado exitosamente',
-      rowNumber: row.rowNumber 
+      rowNumber: row.rowNumber,
     });
   } catch (error) {
-    console.error('Error creating record:', error);
-    res.status(500).json({ 
-      success: false, 
+    console.error('Error creando el registro:', error); // Log detallado
+    res.status(500).json({
+      success: false,
       message: 'Error al crear el registro',
-      error: error.message 
+      error: error.message,
     });
   }
 });
