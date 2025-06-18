@@ -110,26 +110,6 @@
             box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
         }
 
-        /* Estilos para campos de texto personalizados (otros) */
-        .custom-field {
-            display: none;
-            margin-top: 10px;
-        }
-
-        .custom-field.show {
-            display: block;
-        }
-
-        .custom-field input {
-            border-color: #28a745;
-            background-color: #f8fff9;
-        }
-
-        .custom-field label {
-            color: #28a745;
-            font-style: italic;
-        }
-
         .btn {
             background: linear-gradient(135deg, #4a90e2, #357abd);
             color: white;
@@ -638,21 +618,6 @@ const dropdownLists = {
         "Servivcios hoteleros", "Textil", "Transporte", "Turismo"
     ]
 };
-
-// Función para manejar selects con opción "otros"
-function handleSelectChange(selectElement, customFieldId) {
-    const customField = document.getElementById(customFieldId);
-    const customInput = document.getElementById(customFieldId + '_text');
-    if (selectElement.value === 'otros') {
-        customField.classList.add('show');
-        customInput.required = true;
-        selectElement.setAttribute('data-original-value', selectElement.value);
-    } else {
-        customField.classList.remove('show');
-        customInput.required = false;
-        customInput.value = '';
-    }
-}
 
 // -------- TAB MANAGEMENT --------
 function showTab(tabName) {
