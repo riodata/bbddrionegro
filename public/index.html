@@ -384,167 +384,162 @@
             <!-- CREATE TAB -->
             <div id="create" class="tab-content active">
                 <h2>Crear Nuevo Registro</h2>
-                <form id="createForm">
-                <div class="form-group">
-                        <label for="legajo">Legajo:</label>
-                        <input type="text" id="legajo" name="legajo" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="cooperativa">Cooperativa:</label>
-                        <input type="text" id="cooperativa" name="cooperativa" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="matricula">Matrícula:</label>
-                        <input type="text" id="matricula" name="matricula" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="actapcial">Acta provincial:</label>
-                        <input type="text" id="actapcial" name="actapcial" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="emismatr">Fecha de emisión matrícula:</label>
-                        <input type="date" id="emismatr" name="emismatr" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="direccion">Dirección:</label>
-                        <input type="text" id="direccion" name="direccion" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="direccionverif">Dirección verificada:</label>
-                        <input type="text" id="direccionverif" name="direccionverif" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="telefono">Teléfono:</label>
-                        <input type="tel" id="telefono" name="telefono">
-                    </div>
-                    <div class="form-group">
-                        <label for="presid">Presidente:</label>
-                        <input type="text" id="presid" name="presid" required>
-                    </div> 
-                    <div class="form-group">
-                        <label for="estadoentid">Fecha Estado Entidad:</label>
-                        <input type="date" id="estadoentid" name="estadoentid" required>
-                    </div>                 
-                    <div class="form-group">
-                        <label for="fechasamb">Fecha Asamblea:</label>
-                        <input type="date" id="fechasamb" name="fechasamb" required>
-                    </div> 
-                    <div class="form-group">
-                        <label for="tipoasamb">Tipo de asamblea:</label>
-                        <select id="tipoasamb" name="tipoasamb" required onchange="handleSelectChange(this, 'tipoasamb_custom')">
-                            <option value="">Seleccionar...</option>
-                            <option value="Ordinaria">Ordinaria</option>
-                            <option value="Ordinaria autoconvocada">Ordinaria autoconvocada</option>
-                            <option value="Extraordinaria">Extraordinaria</option>
-                            <option value="Extraordinaria autoconvocada">Extraordinaria autoconvocada</option>
-                            <option value="otros">Otros</option>
-                        </select>
-                        <div id="tipoasamb_custom" class="custom-field">
-                            <label for="tipoasamb_custom_text">Especificar otro tipo:</label>
-                            <input type="text" id="tipoasamb_custom_text" name="tipoasamb_custom" placeholder="Ingrese otro tipo de asamblea...">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="consejoadm">Consejo administrativo:</label>
-                        <input type="text" id="consejoadm" name="consejoadm">
-                    </div>
-                    <div class="form-group">
-                        <label for="sindicatura">Sindicatura:</label>
-                        <input type="text" id="sindicatura" name="sindicatura">
-                    </div>                    
-                    <div class="form-group">
-                        <label for="localidad">Localidad:</label>
-                        <input type="text" id="localidad" name="localidad">
-                    </div>
-                    <div class="form-group">
-                        <label for="departamento">Departamento:</label>
-                        <select id="departamento" name="departamento" required>
-                            <option value="">Seleccionar departamento...</option>
-                            <option value="Adolfo Alsina">Adolfo Alsina</option>
-                            <option value="Avellaneda">Avellaneda</option>
-                            <option value="Bariloche">Bariloche</option>
-                            <option value="Conesa">Conesa</option>
-                            <option value="El Cuy">El Cuy</option>
-                            <option value="General Roca">General Roca</option>
-                            <option value="9 de Julio">9 de Julio</option>
-                            <option value="Ñorquincó">Ñorquincó</option>
-                            <option value="Pichi Mahuida">Pichi Mahuida</option>
-                            <option value="Pilcaniyeu">Pilcaniyeu</option>
-                            <option value="San Antonio">San Antonio</option>
-                            <option value="Valcheta">Valcheta</option>
-                            <option value="25 de Mayo">25 de Mayo</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="codpost">Código postal:</label>
-                        <input type="text" id="codpost" name="codpost">
-                    </div>
-                    <div class="form-group">
-                        <label for="cuit">CUIT:</label>
-                        <input type="text" id="cuit" name="cuit" placeholder="XX-XXXXXXXX-X" maxlength="13" pattern="[0-9]{2}-[0-9]{8}-[0-9]{1}">
-                    </div>
-                    <!-- DROPDOWN PARA TIPO -->
-                    <div class="form-group">
-                        <label for="tipo">Tipo:</label>
-                        <select id="tipo" name="tipo" required onchange="handleSelectChange(this, 'tipo_custom')">
-                            <option value="">Seleccionar tipo...</option>
-                            <option value="Agrícola">Agrícola</option>
-                            <option value="Agrícola-ganadera">Agrícola-ganadera</option>
-                            <option value="Consumo">Consumo</option>
-                            <option value="Federación">Federación</option>
-                            <option value="Frutícola">Frutícola</option>
-                            <option value="Frutihortícola">Frutihortícola</option>
-                            <option value="Ganadera">Ganadera</option>
-                            <option value="Producción">Producción</option>
-                            <option value="Provisión">Provisión</option>
-                            <option value="Servicios">Servicios</option>
-                            <option value="Servicios públicos">Servicios públicos</option>
-                            <option value="Trabajo">Trabajo</option>
-                            <option value="Vivienda">Vivienda</option>
-                            <option value="otros">Otros</option>
-                        </select>
-                        <div id="tipo_custom" class="custom-field">
-                            <label for="tipo_custom_text">Especificar otro tipo:</label>
-                            <input type="text" id="tipo_custom_text" name="tipo_custom" placeholder="Ingrese otro tipo...">
-                        </div>
-                    </div>                
-                    <!-- DROPDOWN PARA SUBTIPO -->
-                    <div class="form-group">
-                        <label for="subtipo">Subtipo:</label>
-                        <select id="subtipo" name="subtipo" onchange="handleSelectChange(this, 'subtipo_custom')">
-                            <option value="">Seleccionar subtipo...</option>
-                            <option value="Atención de personas">Atención de personas</option>
-                            <option value="Audiovisual">Audiovisual</option>
-                            <option value="Bienes y servicios">Bienes y servicios</option>
-                            <option value="Comercialización e industrialización">Comercialización e industrialización</option>
-                            <option value="Comercialización y consumo">Comercialización y consumo</option>
-                            <option value="Comercialización y explotación">Comercialización y explotación</option>
-                            <option value="Comercialización y producción">Comercialización y producción</option>
-                            <option value="Comercialización y provisión">Comercialización y provisión</option>
-                            <option value="Comercialización y transporte">Comercialización y transporte</option>
-                            <option value="Construcción">Construcción</option>
-                            <option value="Construcción de estaciones transformadores de transmisión">Construcción de estaciones transformadores de transmisión</option>
-                            <option value="Cultura">Cultura</option>
-                            <option value="Diseño y producción">Diseño y producción</option>
-                            <option value="Educativa">Educativa</option>
-                            <option value="Empaque y embalaje de frutas">Empaque y embalaje de frutas</option>
-                            <option value="Estacionamiento medido y pago">Estacionamiento medido y pago</option>
-                            <option value="No aplica">No aplica</option>
-                            <option value="Producción y consumo">Producción y consumo</option>
-                            <option value="Radiodifusión">Radiodifusión</option>
-                            <option value="Rurales">Rurales</option>
-                            <option value="otros">Otros</option>
-                        </select>
-                        <div id="subtipo_custom" class="custom-field">
-                            <label for="subtipo_custom_text">Especificar otro subtipo:</label>
-                            <input type="text" id="subtipo_custom_text" name="subtipo_custom" placeholder="Ingrese otro subtipo...">
-                        </div>
-                    </div>                    
-                    <div class="form-group">
-                        <label for="observaciones">Observaciones:</label>
-                        <textarea id="observaciones" name="observaciones" rows="3"></textarea>
-                    </div>
-                    <button type="submit" class="btn">Crear Registro</button>
+                <form id="createForm">More actions
+                  <div class="form-group">
+                    <label for="Legajo">Legajo:</label>
+                    <input type="text" id="Legajo" name="Legajo" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="Cooperativa">Cooperativa:</label>
+                    <input type="text" id="Cooperativa" name="Cooperativa" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="Matrícula">Matrícula:</label>
+                    <input type="text" id="Matrícula" name="Matrícula" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="ActaPcial">Acta provincial:</label>
+                    <input type="text" id="ActaPcial" name="ActaPcial" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="EmisMat">Fecha de emisión matrícula:</label>
+                    <input type="date" id="EmisMat" name="EmisMat" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="Dirección">Dirección:</label>
+                    <input type="text" id="Dirección" name="Dirección" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="DirecciónVerificada">Dirección verificada:</label>
+                    <input type="text" id="DirecciónVerificada" name="DirecciónVerificada" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="Tel">Teléfono:</label>
+                    <input type="tel" id="Tel" name="Tel">
+                  </div>
+                  <div class="form-group">
+                    <label for="Presid">Presidente:</label>
+                    <input type="text" id="Presid" name="Presid" required>
+                  </div> 
+                  <div class="form-group">
+                    <label for="Mail">Correo electrónico:</label>
+                    <input type="email" id="Mail" name="Mail" required>
+                  </div> 
+                  <div class="form-group">
+                    <label for="EstadoEntid">Fecha Estado Entidad:</label>
+                    <input type="date" id="EstadoEntid" name="EstadoEntid" required>
+                  </div>                 
+                  <div class="form-group">
+                    <label for="FechaAsamb">Fecha Asamblea:</label>
+                    <input type="date" id="FechaAsamb" name="FechaAsamb" required>
+                  </div> 
+                  <div class="form-group">
+                    <label for="TipoAsamb">Tipo de asamblea:</label>
+                    <select id="TipoAsamb" name="TipoAsamb" required>
+                      <option value="">Seleccionar...</option>
+                      <option value="Ordinaria">Ordinaria</option>
+                      <option value="Ordinaria autoconvocada">Ordinaria autoconvocada</option>
+                      <option value="Extraordinaria">Extraordinaria</option>
+                      <option value="Extraordinaria autoconvocada">Extraordinaria autoconvocada</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="ConsejoAdmin">Consejo administrativo:</label>
+                    <input type="text" id="ConsejoAdmin" name="ConsejoAdmin">
+                  </div>
+                  <div class="form-group">
+                    <label for="Sindicatura">Sindicatura:</label>
+                    <input type="text" id="Sindicatura" name="Sindicatura">
+                  </div>                    
+                  <div class="form-group">
+                    <label for="Localidad">Localidad:</label>
+                    <input type="text" id="Localidad" name="Localidad">
+                  </div>
+                  <div class="form-group">
+                    <label for="Departamento">Departamento:</label>
+                    <select id="Departamento" name="Departamento" required>
+                      <option value="">Seleccionar departamento...</option>
+                      <option value="Adolfo Alsina">Adolfo Alsina</option>
+                      <option value="Avellaneda">Avellaneda</option>
+                      <option value="Bariloche">Bariloche</option>
+                      <option value="Conesa">Conesa</option>
+                      <option value="El Cuy">El Cuy</option>
+                      <option value="General Roca">General Roca</option>
+                      <option value="9 de Julio">9 de Julio</option>
+                      <option value="Ñorquincó">Ñorquincó</option>
+                      <option value="Pichi Mahuida">Pichi Mahuida</option>
+                      <option value="Pilcaniyeu">Pilcaniyeu</option>
+                      <option value="San Antonio">San Antonio</option>
+                      <option value="Valcheta">Valcheta</option>
+                      <option value="25 de Mayo">25 de Mayo</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="CodPost">Código postal:</label>
+                    <input type="text" id="CodPost" name="CodPost">
+                  </div>
+                  <div class="form-group">
+                    <label for="Cuit">CUIT:</label>
+                    <input type="text" id="Cuit" name="Cuit" placeholder="XX-XXXXXXXX-X" maxlength="13" pattern="[0-9]{2}-[0-9]{8}-[0-9]{1}">
+                  </div>
+                  <div class="form-group">
+                    <label for="Tipo">Tipo:</label>
+                    <select id="Tipo" name="Tipo" required>
+                      <option value="">Seleccionar tipo...</option>
+                      <option value="Agrícola">Agrícola</option>
+                      <option value="Agrícola-ganadera">Agrícola-ganadera</option>
+                      <option value="Consumo">Consumo</option>
+                      <option value="Federación">Federación</option>
+                      <option value="Frutícola">Frutícola</option>
+                      <option value="Frutihortícola">Frutihortícola</option>
+                      <option value="Ganadera">Ganadera</option>
+                      <option value="Producción">Producción</option>
+                      <option value="Provisión">Provisión</option>
+                      <option value="Servicios">Servicios</option>
+                      <option value="Servicios públicos">Servicios públicos</option>
+                      <option value="Trabajo">Trabajo</option>
+                      <option value="Vivienda">Vivienda</option>
+                    </select>
+                  </div>                
+                  <div class="form-group">
+                    <label for="Subtipo">Subtipo:</label>
+                    <select id="Subtipo" name="Subtipo">
+                      <option value="">Seleccionar subtipo...</option>
+                      <option value="Atención de personas">Atención de personas</option>
+                      <option value="Audiovisual">Audiovisual</option>
+                      <option value="Bienes y servicios">Bienes y servicios</option>
+                      <option value="Comercialización e industrialización">Comercialización e industrialización</option>
+                      <option value="Comercialización y consumo">Comercialización y consumo</option>
+                      <option value="Comercialización y explotación">Comercialización y explotación</option>
+                      <option value="Comercialización y producción">Comercialización y producción</option>
+                      <option value="Comercialización y provisión">Comercialización y provisión</option>
+                      <option value="Comercialización y transporte">Comercialización y transporte</option>
+                      <option value="Construcción">Construcción</option>
+                      <option value="Construcción de estaciones transformadores de transmisión">Construcción de estaciones transformadores de transmisión</option>
+                      <option value="Cultura">Cultura</option>
+                      <option value="Diseño y producción">Diseño y producción</option>
+                      <option value="Educativa">Educativa</option>
+                      <option value="Empaque y embalaje de frutas">Empaque y embalaje de frutas</option>
+                      <option value="Estacionamiento medido y pago">Estacionamiento medido y pago</option>
+                      <option value="No aplica">No aplica</option>
+                      <option value="Producción y consumo">Producción y consumo</option>
+                      <option value="Radiodifusión">Radiodifusión</option>
+                      <option value="Rurales">Rurales</option>
+                    </select>
+                  </div>                    
+                  <div class="form-group">
+                    <label for="Observaciones">Observaciones:</label>
+                    <textarea id="Observaciones" name="Observaciones" rows="3"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label for="Latitud">Latitud:</label>
+                    <input type="text" id="Latitud" name="Latitud">
+                  </div>
+                  <div class="form-group">
+                    <label for="Longitud">Longitud:</label>
+                    <input type="text" id="Longitud" name="Longitud">
+                  </div>
+                  <button type="submit" class="btn">Crear Registro</button>
                 </form>
             </div>
 
