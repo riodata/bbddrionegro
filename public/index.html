@@ -755,7 +755,6 @@ function displaySearchResults(records) {
 
         // Mostrar el resto de los campos excepto Legajo
         div.innerHTML += Object.entries(record)
-            .filter(([key]) => key !== 'Legajo')  // Excluir la clave Legajo ya que se mostró antes
             .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
             .join('<br>');
 
