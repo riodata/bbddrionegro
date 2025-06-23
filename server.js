@@ -51,9 +51,6 @@ app.post('/webhook/create', async (req, res) => {
 
     const row = await sheet.addRow(data);
     
-    res.json({ 
-      success: true, 
-
     res.json({
       success: true,
       message: 'Registro creado exitosamente',
