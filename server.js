@@ -88,21 +88,35 @@ app.get('/webhook/read', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
+    
+    // Obtener el índice (posición) de la columna Legajo
+    const headerRow = await sheet.headerValues;
+    const legajoIndex = headerRow.findIndex(header => header === 'Legajo');
 
-    // Obtener todas las columnas y sus valores
-    const data = rows.map(row => row.toObject());
+    // Generar datos con Legajo explícito
+    let data = rows.map((row, index) => {
+      const rowObject = row.toObject();
+      
+      // Asegurarse de que el campo Legajo esté incluido explícitamente
+      // (en caso de que no esté en el objeto por alguna razón)
+      return {
+        _Legajo: row.get('Legajo'), // Usar el valor real de la columna Legajo
+        ...rowObject,  // Resto de los datos del registro
+        _rowIndex: row.rowIndex // Mantener el índice por compatibilidad
+      };
+    });
 
     res.json({
       success: true,
       data: data,
-      total: data.length,
+      total: data.length
     });
   } catch (error) {
-    console.error('Error leyendo los registros:', error);
-    res.status(500).json({
-      success: false,
+    console.error('Error reading records:', error);
+    res.status(500).json({ 
+      success: false, 
       message: 'Error al leer los registros',
-      error: error.message,
+      error: error.message 
     });
   }
 });
@@ -144,10 +158,18 @@ app.get('/webhook/search', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    let data = rows.map(row => ({
-      ...row.toObject(),
-      Legajo: row.Legajo,
-    }));
+    // Obtener el índice de la columna Legajo
+    const headerRow = await sheet.headerValues;
+    const legajoIndex = headerRow.findIndex(header => header === 'Legajo');
+
+    let data = rows.map(row => {
+      const rowObject = row.toObject();
+      return {
+        _Legajo: row.get('Legajo'), // Agregar explícitamente el campo Legajo
+        ...rowObject,
+        _rowIndex: row.rowIndex
+      };
+    });
 
     // Aplicar filtros si existen en los query parameters
     const { searchText, searchField } = req.query;
@@ -168,14 +190,14 @@ app.get('/webhook/search', async (req, res) => {
       total: data.length,
       filtered: !!(searchText && searchField),
       searchText: searchText || null,
-      searchField: searchField || null,
+      searchField: searchField || null
     });
   } catch (error) {
     console.error('Error searching records:', error);
-    res.status(500).json({
-      success: false,
+    res.status(500).json({ 
+      success: false, 
       message: 'Error al buscar los registros',
-      error: error.message,
+      error: error.message 
     });
   }
 });
@@ -217,12 +239,17 @@ app.post('/webhook/search/advanced', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    let data = rows.map(row => ({
-      ...row.toObject(),
-      _Legajo: row.Legajo
-    }));
+    // Obtener explícitamente el Legajo para cada registro
+    let data = rows.map(row => {
+      const rowObject = row.toObject();
+      return {
+        _Legajo: row.get('Legajo'), // Agregar explícitamente el campo Legajo
+        ...rowObject,
+        _rowIndex: row.rowIndex
+      };
+    });
 
-    const { filters } = req.body; // Array de objetos: [{field, value, operator}]
+    const { filters } = req.body;
 
     if (filters && Array.isArray(filters) && filters.length > 0) {
       data = data.filter(record => {
