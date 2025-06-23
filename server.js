@@ -223,6 +223,35 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
+app.get('/webhook/get/:rowIndex', async (req, res) => {
+    try {
+        const { rowIndex } = req.params;
+
+        const sheet = await initializeSheet();
+        const rows = await sheet.getRows();
+
+        const record = rows.find(row => row.rowIndex === parseInt(rowIndex));
+        if (!record) {
+            return res.status(404).json({
+                success: false,
+                message: 'Registro no encontrado'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: record.toObject()
+        });
+    } catch (error) {
+        console.error('Error fetching record:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener el registro',
+            error: error.message
+        });
+    }
+});
+
 // UPDATE - Actualizar un registro específico
 app.put('/webhook/update/:rowIndex', async (req, res) => {
   try {
