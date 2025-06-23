@@ -744,31 +744,25 @@ function displaySearchResults(records) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
     }
-
     container.innerHTML = '';
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
-
-        // Mostrar el valor correcto del campo Legajo
-        const legajoValue = record['Legajo'] || 'Sin datos';
-        div.innerHTML = `<strong>Legajo:</strong> ${legajoValue}<br>`;
-
-        // Mostrar el resto de los campos en orden
-        div.innerHTML += Object.entries(record)
-            .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
+        div.innerHTML = Object.entries(record)
+            .filter(([k]) => k !== '_Legajo')
+            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
 
-        // Añadir botones de acción
-        div.innerHTML += `<br>
-            <button class="btn btn-success" onclick="editRecord('${legajoValue}')">✏️ Editar</button>
-            <button class="btn btn-danger" onclick="deleteRecord('${legajoValue}')">🗑️ Borrar</button>
-        `;
-
+        // Generar botones utilizando el índice manual
+        if (typeof record._Legajo !== 'undefined') {
+            div.innerHTML += `<br>
+                <button class="btn btn-success" onclick="editRecord(${record._Legajo})">✏️ Editar</button>
+                <button class="btn btn-danger" onclick="deleteRecord(${record._Legajo})">🗑️ Borrar</button>
+            `;
+        }
         container.appendChild(div);
     });
 }
-
 
 function updateSearchResultsInfo(message) {
     const infoDiv = document.getElementById('searchResultsInfo');
