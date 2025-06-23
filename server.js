@@ -64,129 +64,42 @@ app.post('/webhook/create', async (req, res) => {
   }
 });
 
-// READ - Leer todos los registros (sin filtros)
-app.get('/webhook/read', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-    
-    let data = rows.map(row => ({
-      ...row.toObject(),
-      _rowIndex: row.rowIndex // Incluir índice de fila para operaciones UPDATE/DELETE
-    }));
-    
-    res.json({
-      success: true,
-      data: data,
-      total: data.length
-    });
-  } catch (error) {
-    console.error('Error reading records:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al leer los registros',
-      error: error.message 
-    });
-  }
-});
-
-// SIMPLE SEARCH - Búsqueda simple con un campo y texto
-app.get('/webhook/search', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-    
-    let data = rows.map(row => ({
-      ...row.toObject(),
-      _rowIndex: row.rowIndex
-    }));
-    
-    // Aplicar filtros si existen en los query parameters
-    const { searchText, searchField } = req.query;
-    
-    if (searchText && searchField) {
-      data = data.filter(record => {
-        const fieldValue = record[searchField];
-        if (fieldValue === undefined || fieldValue === null) return false;
-        
-        // Búsqueda case-insensitive y parcial
-        return fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: data,
-      total: data.length,
-      filtered: !!(searchText && searchField),
-      searchText: searchText || null,
-      searchField: searchField || null
-    });
-  } catch (error) {
-    console.error('Error searching records:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al buscar los registros',
-      error: error.message 
-    });
-  }
-});
-
-// FIELDS - Obtener campos disponibles para filtrado
-app.get('/webhook/fields', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-    
-    if (rows.length === 0) {
-      return res.json({
-        success: true,
-        fields: [],
-        message: 'No hay registros para obtener campos'
-      });
-    }
-    
-    // Obtener los nombres de las columnas del primer registro (excluir _rowIndex)
-    const fields = Object.keys(rows[0].toObject()).filter(field => field !== '_rowIndex');
-    
-    res.json({
-      success: true,
-      fields: fields
-    });
-  } catch (error) {
-    console.error('Error getting fields:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al obtener los campos',
-      error: error.message 
-    });
-  }
-});
-
 // ADVANCED SEARCH - Búsqueda avanzada con múltiples filtros
 app.post('/webhook/search/advanced', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
-    
+
+    // Mapear filas a objetos para filtrar
     let data = rows.map(row => ({
       ...row.toObject(),
-      _rowIndex: row.rowIndex
+      _rowIndex: row.rowIndex,
     }));
-    
+
     const { filters } = req.body; // Array de objetos: [{field, value, operator}]
-    
+
+    // Filtrar solo por las variables especificadas
+    const allowedFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
+      'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
+      'Tipo', 'Subtipo',
+    ];
+
     if (filters && Array.isArray(filters) && filters.length > 0) {
       data = data.filter(record => {
         return filters.every(filter => {
           const { field, value, operator = 'contains' } = filter;
+
+          // Validar si el campo está permitido
+          if (!allowedFields.includes(field)) return false;
+
           const fieldValue = record[field];
-          
           if (fieldValue === undefined || fieldValue === null) return false;
-          
+
           const recordValue = fieldValue.toString().toLowerCase();
           const searchValue = value.toString().toLowerCase();
-          
+
+          // Aplicar operador
           switch (operator) {
             case 'equals':
               return recordValue === searchValue;
@@ -196,28 +109,65 @@ app.post('/webhook/search/advanced', async (req, res) => {
               return recordValue.startsWith(searchValue);
             case 'endsWith':
               return recordValue.endsWith(searchValue);
-            case 'notEquals':
-              return recordValue !== searchValue;
             default:
               return recordValue.includes(searchValue);
           }
         });
       });
     }
-    
+
     res.json({
       success: true,
       data: data,
       total: data.length,
       filtersApplied: filters?.length || 0,
-      filters: filters || []
+      filters: filters || [],
     });
   } catch (error) {
-    console.error('Error in advanced search:', error);
-    res.status(500).json({ 
-      success: false, 
+    console.error('Error en búsqueda avanzada:', error);
+    res.status(500).json({
+      success: false,
       message: 'Error al realizar búsqueda avanzada',
-      error: error.message 
+      error: error.message,
+    });
+  }
+});
+
+// READ - Leer todos los registros (búsqueda global)
+app.get('/webhook/read', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+
+    // Filtrar solo por las variables especificadas
+    const allowedFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
+      'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
+      'Tipo', 'Subtipo',
+    ];
+
+    let data = rows.map(row => {
+      const filteredRow = {};
+      Object.keys(row.toObject()).forEach(key => {
+        if (allowedFields.includes(key)) {
+          filteredRow[key] = row[key];
+        }
+      });
+      filteredRow._rowIndex = row.rowIndex; // Incluir índice de fila para operaciones
+      return filteredRow;
+    });
+
+    res.json({
+      success: true,
+      data: data,
+      total: data.length,
+    });
+  } catch (error) {
+    console.error('Error leyendo registros:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al leer registros',
+      error: error.message,
     });
   }
 });
