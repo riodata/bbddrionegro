@@ -482,7 +482,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Frontend available at /`);More actions
+  console.log(`Frontend available at /`);
   console.log(`Health check available at /health`);
   console.log(`Keep-alive available at /ping`);
 });
