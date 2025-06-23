@@ -89,10 +89,8 @@ app.get('/webhook/read', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-   const data = rows.map(row => ({
-      ...row.toObject(), // Copiar los datos del registro
-      Legajo: row.Legajo, // Incluir Legajo como identificador
-    }));
+    // Obtener todas las columnas y sus valores
+    const data = rows.map(row => row.toObject());
 
     res.json({
       success: true,
@@ -100,10 +98,41 @@ app.get('/webhook/read', async (req, res) => {
       total: data.length,
     });
   } catch (error) {
-    console.error('Error reading records:', error);
+    console.error('Error leyendo los registros:', error);
     res.status(500).json({
       success: false,
       message: 'Error al leer los registros',
+      error: error.message,
+    });
+  }
+});
+
+// Ruta para buscar el registro por Legajo al presionar un botón
+app.get('/webhook/get/:Legajo', async (req, res) => {
+  try {
+    const { Legajo } = req.params;
+
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+
+    const record = rows.find(row => row.Legajo === Legajo);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: `No se encontró un registro con el Legajo: ${Legajo}`,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: record.toObject(),
+    });
+  } catch (error) {
+    console.error('Error obteniendo el registro:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el registro',
       error: error.message,
     });
   }
