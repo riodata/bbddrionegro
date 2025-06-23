@@ -749,16 +749,20 @@ function displaySearchResults(records) {
         const div = document.createElement('div');
         div.className = 'record';
 
-        // Mostrar siempre el Legajo en los resultados
-        div.innerHTML = `<strong>Legajo:</strong> ${record.Legajo || 'Sin datos'}<br>`;
+        // Mostrar el valor correcto del campo Legajo
+        const legajoValue = record['Legajo'] || 'Sin datos';
+        div.innerHTML = `<strong>Legajo:</strong> ${legajoValue}<br>`;
+
+        // Mostrar el resto de los campos excepto Legajo
         div.innerHTML += Object.entries(record)
-            .map(([k, v]) => k !== 'Legajo' ? `<strong>${k}:</strong> ${v || ''}` : '')
+            .filter(([key]) => key !== 'Legajo')  // Excluir la clave Legajo ya que se mostró antes
+            .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
             .join('<br>');
 
-        // Botones para editar y eliminar utilizando el Legajo como identificador
+        // Botones para editar y borrar utilizando el valor de Legajo
         div.innerHTML += `<br>
-            <button class="btn btn-success" onclick="editRecord('${record.Legajo}')">✏️ Editar</button>
-            <button class="btn btn-danger" onclick="deleteRecord('${record.Legajo}')">🗑️ Borrar</button>
+            <button class="btn btn-success" onclick="editRecord('${legajoValue}')">✏️ Editar</button>
+            <button class="btn btn-danger" onclick="deleteRecord('${legajoValue}')">🗑️ Borrar</button>
         `;
         container.appendChild(div);
     });
