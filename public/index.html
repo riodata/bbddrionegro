@@ -527,20 +527,15 @@
             <div id="search" class="tab-content">
                 <h2>Buscar Registros Existentes</h2>
                 
-                <!-- Búsqueda Avanzada -->
-                <div class="search-container">
-                    <h3>🔧 Búsqueda Avanzada</h3>
-                    <p>Agrega múltiples filtros para búsquedas más específicas:</p>
-                    <div id="filtersContainer"></div>
-                    <button onclick="addFilter()" class="btn btn-success">➕ Agregar Filtro</button>
-                    <button onclick="performAdvancedSearch()" class="btn">🔍 Buscar Avanzado</button>
-                    <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar Filtros</button>
-                </div>
-            
-                <!-- Controles principales -->
-                <div style="margin: 20px 0;">
-                    <button onclick="loadAllRecords()" class="btn">📋 Cargar Todos los Registros</button>
-                    <button onclick="loadFieldsForSearch()" class="btn btn-warning">🔄 Actualizar Campos</button>
+               <!-- Búsqueda avanzada -->
+                <div id="filtersContainer"></div>
+                <button onclick="addFilter()" class="btn btn-success">➕ Agregar Filtro</button>
+                <button onclick="performAdvancedSearch()" class="btn">🔍 Buscar Avanzado</button>
+                <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar Filtros</button>
+                
+                <!-- Contenedor de resultados -->
+                <div id="search-records-container" class="records-container">
+                  <div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>
                 </div>
             
                 <!-- Información de resultados -->
@@ -692,30 +687,63 @@ async function loadAllRecords() {
     }
 }
 
-async function loadFieldsForSearch() {
-    try {
-        const response = await fetch(`${API_BASE}/webhook/fields`);
-        const result = await response.json();
-        if (result.success) {
-            searchFields = result.fields;
-            populateSearchFieldSelect();
-        }
-    } catch (error) {
-        console.error('Error loading fields:', error);
-    }
+// Variables permitidas para búsqueda
+const allowedFields = [
+  'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
+  'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
+  'Tipo', 'Subtipo',
+];
+
+// Cargar campos permitidos en el frontend
+function loadFieldsForSearch() {
+  const dropdown = document.getElementById('globalSearchField');
+  dropdown.innerHTML = '<option value="">Selecciona un campo...</option>';
+  allowedFields.forEach(field => {
+    dropdown.innerHTML += `<option value="${field}">${field}</option>`;
+  });
 }
 
-function populateSearchFieldSelect() {
-    const searchFieldSelect = document.getElementById('searchField');
-    if (searchFieldSelect) {
-        searchFieldSelect.innerHTML = '<option value="">Selecciona un campo...</option>';
-        searchFields.forEach(field => {
-            const option = document.createElement('option');
-            option.value = field;
-            option.textContent = field;
-            searchFieldSelect.appendChild(option);
-        });
-    }
+function performAdvancedSearch() {
+  const filters = collectAdvancedFilters();
+  if (filters.length === 0) {
+    return alert('Agrega al menos un filtro para realizar la búsqueda.');
+  }
+
+  fetch('/webhook/search/advanced', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filters }),
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        displaySearchResults(data.data);
+        updateSearchResultsInfo(`Se encontraron ${data.total} registros`);
+      } else {
+        alert('Error en búsqueda avanzada: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Error en búsqueda avanzada');
+    });
+}
+
+function loadAllRecords() {
+  fetch('/webhook/read')
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        displaySearchResults(data.data);
+        updateSearchResultsInfo(`Mostrando todos los registros (${data.total} total)`);
+      } else {
+        alert('Error al cargar registros: ' + data.message);
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Error al cargar todos los registros');
+    });
 }
 
 function displaySearchResults(records) {
