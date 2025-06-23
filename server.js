@@ -71,9 +71,9 @@ app.get('/webhook/read', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    let data = rows.map(row => ({
+    let data = rows.map((row, index) => ({
       ...row.toObject(),
-      _rowIndex: row.rowIndex // Incluir índice de fila para operaciones UPDATE/DELETE
+      _rowIndex: index + 1 // Asignar índice manualmente si `row.rowIndex` no es válido
     }));
 
     res.json({
@@ -224,32 +224,32 @@ app.post('/webhook/search/advanced', async (req, res) => {
 });
 
 app.get('/webhook/get/:rowIndex', async (req, res) => {
-    try {
-        const { rowIndex } = req.params;
+  try {
+    const { rowIndex } = req.params;
 
-        const sheet = await initializeSheet();
-        const rows = await sheet.getRows();
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
 
-        const record = rows.find(row => row.rowIndex === parseInt(rowIndex));
-        if (!record) {
-            return res.status(404).json({
-                success: false,
-                message: 'Registro no encontrado'
-            });
-        }
-
-        res.json({
-            success: true,
-            data: record.toObject()
-        });
-    } catch (error) {
-        console.error('Error fetching record:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error al obtener el registro',
-            error: error.message
-        });
+    const record = rows[rowIndex - 1]; // Acceder al registro usando índice manual
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registro no encontrado'
+      });
     }
+
+    res.json({
+      success: true,
+      data: record.toObject()
+    });
+  } catch (error) {
+    console.error('Error fetching record:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el registro',
+      error: error.message
+    });
+  }
 });
 
 // UPDATE - Actualizar un registro específico
