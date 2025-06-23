@@ -737,13 +737,14 @@ function populateSearchFieldSelect() {
         });
     }
 }
-
+    
 function displaySearchResults(records) {
     const container = document.getElementById('search-records-container');
     if (!records.length) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
     }
+
     container.innerHTML = '';
     records.forEach(record => {
         const div = document.createElement('div');
@@ -753,16 +754,17 @@ function displaySearchResults(records) {
         const legajoValue = record['Legajo'] || 'Sin datos';
         div.innerHTML = `<strong>Legajo:</strong> ${legajoValue}<br>`;
 
-        // Mostrar el resto de los campos excepto Legajo
+        // Mostrar el resto de los campos en orden
         div.innerHTML += Object.entries(record)
             .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
             .join('<br>');
 
-        // Botones para editar y borrar utilizando el valor de Legajo
+        // Añadir botones de acción
         div.innerHTML += `<br>
             <button class="btn btn-success" onclick="editRecord('${legajoValue}')">✏️ Editar</button>
             <button class="btn btn-danger" onclick="deleteRecord('${legajoValue}')">🗑️ Borrar</button>
         `;
+
         container.appendChild(div);
     });
 }
