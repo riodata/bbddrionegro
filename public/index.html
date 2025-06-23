@@ -794,6 +794,7 @@ function performGlobalSearch() {
   const searchText = document.getElementById('globalSearchText').value.trim();
   const searchField = document.getElementById('globalSearchField').value;
 
+  // Validar entrada
   if (!searchText || !searchField) {
     showStatus('Por favor, ingresa texto y selecciona un campo para buscar.', 'error');
     return;
@@ -835,7 +836,7 @@ function displaySearchResults(records) {
     container.appendChild(div);
   });
 }
-
+    
 function displayDeleteResults(records) {
     const container = document.getElementById('delete-records');
     if (!records.length) {
