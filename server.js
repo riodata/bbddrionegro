@@ -133,40 +133,43 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
-// READ - Leer todos los registros (búsqueda global)
-app.get('/webhook/read', async (req, res) => {
+// READ - Búsqueda global con texto y campo
+app.get('/webhook/search', async (req, res) => {
   try {
+    const { searchText, searchField } = req.query;
+
+    // Validar entrada
+    if (!searchText || !searchField) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere texto y campo para la búsqueda.',
+      });
+    }
+
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Filtrar solo por las variables especificadas
-    const allowedFields = [
-      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
-      'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
-      'Tipo', 'Subtipo',
-    ];
-
-    let data = rows.map(row => {
-      const filteredRow = {};
-      Object.keys(row.toObject()).forEach(key => {
-        if (allowedFields.includes(key)) {
-          filteredRow[key] = row[key];
-        }
-      });
-      filteredRow._rowIndex = row.rowIndex; // Incluir índice de fila para operaciones
-      return filteredRow;
+    // Filtrar datos que coincidan exactamente con el texto de búsqueda
+    const filteredRows = rows.filter(row => {
+      const fieldValue = row[searchField];
+      return fieldValue && fieldValue.toString().toLowerCase() === searchText.toLowerCase();
     });
+
+    const data = filteredRows.map(row => ({
+      ...row.toObject(),
+      _rowIndex: row.rowIndex,
+    }));
 
     res.json({
       success: true,
-      data: data,
+      data,
       total: data.length,
     });
   } catch (error) {
-    console.error('Error leyendo registros:', error);
+    console.error('Error en búsqueda global:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al leer registros',
+      message: 'Error al realizar la búsqueda.',
       error: error.message,
     });
   }
