@@ -607,7 +607,6 @@
                             <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
                         </div>
                     </form>
-                </div>
 
                 <!-- Contenedor de registros para actualizar -->
                 <div id="update-records-container" class="records-container">
@@ -1113,8 +1112,21 @@ async function editRecord(legajo) {
 function showUpdateForm(record) {
     document.getElementById('update-form-container').style.display = 'block';
     
+    // Obtener el valor del Legajo
+    const legajo = record._Legajo;
+    if (!legajo) {
+        showStatus('No se pudo identificar el Legajo del registro', 'error');
+        return;
+    }
+    
     // Establecer el Legajo en el campo oculto
-    document.getElementById('update-Legajo').value = record._Legajo;
+    document.getElementById('update-Legajo').value = legajo;
+    
+    // Mostrar el Legajo en el título
+    const formTitle = document.querySelector('#update-form-container h3');
+    if (formTitle) {
+        formTitle.textContent = `✏️ Editando Registro #${legajo}`;
+    }
     
     // Generar los campos del formulario dinámicamente
     const fieldsContainer = document.getElementById('update-fields');
@@ -1136,31 +1148,42 @@ function showUpdateForm(record) {
 // On submit updateForm, send to backend
 document.getElementById('updateForm').onsubmit = async function(e) {
     e.preventDefault();
-    const Legajo = document.getElementById('update-Legajo').value;
-    const data = {};
-    Array.from(this.elements).forEach(el => {
-        if (el.name && el.type !== 'submit' && el.name !== 'Legajo') {
-            data[el.name] = el.value;
-        }
-    });
+    
+    // Obtener los datos del formulario
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+    
+    const legajo = data.Legajo; // Obtener el valor del Legajo del formulario
+    
     try {
-        const res = await fetch(`/webhook/update/${Legajo}`, {
+        // En lugar de usar la URL con el Legajo, usamos la URL con searchCriteria
+        const res = await fetch('/webhook/update', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            body: JSON.stringify({
+                searchCriteria: { field: 'Legajo', value: legajo },
+                updateData: data
+            })
         });
+        
         const result = await res.json();
         if (result.success) {
             showStatus('Registro actualizado correctamente', 'success');
-            currentEditingRow = null;
             document.getElementById('update-form-container').style.display = 'none';
+            // Opcional: Recargar los datos
+            if (document.querySelector('.tab-content.active').id === 'update') {
+                // Si estamos en la pestaña de actualización, actualizar los resultados
+                loadAllRecords();
+            }
         } else {
             showStatus('Error al actualizar: ' + result.message, 'error');
         }
     } catch (err) {
+        console.error('Error en la actualización:', err);
         showStatus('Error en la actualización', 'error');
     }
-}
+};
+    
 function cancelUpdate() {
     currentEditingRow = null;
     document.getElementById('update-form-container').style.display = 'none';
