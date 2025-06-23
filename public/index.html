@@ -302,49 +302,36 @@ function loadFieldsForGlobalSearch() {
             console.error('Error loading fields:', error);
         });
 }
+function performGlobalSearch(tabName) {
+  const searchText = document.getElementById('globalSearchText').value.trim();
+  const searchField = document.getElementById('globalSearchField').value;
+  if (!searchText || !searchField) {
+    showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
+    return;
+  }
 
-function performGlobalSearch() {
-    const searchText = document.getElementById('globalSearchText').value.trim();
-    const searchField = document.getElementById('globalSearchField').value;
-    if (!searchText || !searchField) {
-        showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
-        return;
-    }
-
-    // Show loading status in the active tab
-    const activeTabId = document.querySelector('.tab-content.active').id;
-    if (activeTabId === 'update') {
-        document.getElementById('update-records-container').innerHTML = '<div class="loading">Buscando...</div>';
-    } else if (activeTabId === 'delete') {
-        document.getElementById('delete-records').innerHTML = '<div class="loading">Buscando...</div>';
-    }
-
-    const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+  const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+  try {
     fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                currentRecords = data.data;
-
-                // Display results based on active tab
-                if (activeTabId === 'search') {
-                    displaySearchResults(data.data);
-                    updateSearchResultsInfo(`Se encontraron ${data.total} registro(s)`);
-                } else if (activeTabId === 'update') {
-                    displayUpdateResults(data.data);
-                } else if (activeTabId === 'delete') {
-                    displayDeleteResults(data.data);
-                }
-
-                showStatus(`Se encontraron ${data.total} registro(s)`, 'success');
-            } else {
-                showStatus('Error en la búsqueda: ' + data.message, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showStatus('Error al realizar la búsqueda', 'error');
-        });
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          currentRecords = data.data;
+          if (tabName === 'search') displaySearchResults(data.data);
+          if (tabName === 'update') displayUpdateResults(data.data);
+          if (tabName === 'delete') displayDeleteResults(data.data);
+        } else {
+          throw new Error(data.message);
+        }
+      })
+      .catch(error => {
+        console.error('Error en la búsqueda:', error);
+        showStatus(`Error en la búsqueda: ${error.message}`, 'error');
+      });
+  } catch (error) {
+    console.error('Error en performGlobalSearch:', error);
+    showStatus('Error en la búsqueda global', 'error');
+  }
 }
 
 function displayUpdateResults(records) {
@@ -518,28 +505,24 @@ function clearAdvancedSearch() {
 
 // -------- EDIT/UPDATE FLOW --------
 function editRecord(rowIndex) {
-    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
-    if (!rec) return alert('No se encontró el registro');
-    currentEditingRow = rec;
-    showTab('update');
-    showUpdateForm(rec);
+  const record = currentRecords.find(r => r._rowIndex === rowIndex);
+  if (!record) {
+    alert('No se encontró el registro para editar');
+    return;
+  }
+  currentEditingRow = record;
+  showTab('update');
+  showUpdateForm(record);
 }
+
 function showUpdateForm(record) {
-    document.getElementById('update-form-container').style.display = 'block';
-    document.getElementById('update-rowIndex').value = record._rowIndex;
-    // Dynamically create fields
-    const fieldsDiv = document.getElementById('update-fields');
-    fieldsDiv.innerHTML = '';
-    Object.entries(record).forEach(([k, v]) => {
-        if (k === '_rowIndex') return;
-        fieldsDiv.innerHTML += `
-            <div class="form-group">
-                <label for="update-${k}">${k}:</label>
-                <input type="text" id="update-${k}" name="${k}" value="${v || ''}">
-            </div>
-        `;
-    });
+  const form = document.getElementById('createForm');
+  Object.entries(record).forEach(([key, value]) => {
+    const input = form.querySelector(`[name="${key}"]`);
+    if (input) input.value = value || '';
+  });
 }
+
 // On submit updateForm, send to backend
 document.getElementById('updateForm').onsubmit = async function(e) {
     e.preventDefault();
@@ -594,28 +577,32 @@ function showDeleteConfirmation(record) {
         <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
     `;
 }
+          
 async function confirmDelete(rowIndex) {
-    const record = currentDeletingRow;
-    if (!record) return;
-    try {
-        // Usa el endpoint con searchCriteria por _rowIndex
-        const res = await fetch('/webhook/delete', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ searchCriteria: { field: '_rowIndex', value: rowIndex } })
-        });
-        const result = await res.json();
-        if (result.success) {
-            showStatus('Registro eliminado correctamente', 'success');
-            document.getElementById('delete-records').innerHTML = '';
-            currentDeletingRow = null;
-        } else {
-            showStatus('Error al eliminar: ' + result.message, 'error');
-        }
-    } catch (err) {
-        showStatus('Error en la eliminación', 'error');
+  const record = currentRecords.find(r => r._rowIndex === rowIndex);
+  if (!record) {
+    alert('No se encontró el registro para eliminar');
+    return;
+  }
+  try {
+    const response = await fetch('/webhook/delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ searchCriteria: { field: '_rowIndex', value: rowIndex } })
+    });
+    const result = await response.json();
+    if (result.success) {
+      showStatus('Registro eliminado correctamente', 'success');
+      performGlobalSearch('delete');
+    } else {
+      throw new Error(result.message);
     }
+  } catch (error) {
+    console.error('Error al eliminar:', error);
+    showStatus(`Error al eliminar: ${error.message}`, 'error');
+  }
 }
+          
 function cancelDelete() {
     document.getElementById('delete-records').innerHTML = '';
     currentDeletingRow = null;
