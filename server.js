@@ -1,6 +1,6 @@
 // server.js
 const express = require('express');
-const cors = require('cors');
+const cors = require('cors');More actions
 const path = require('path');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
@@ -44,22 +44,131 @@ app.post('/webhook/create', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const data = req.body;
+    
+    // Agregar fila
 
     console.log('Datos recibidos:', data); // Log para depuración
 
     const row = await sheet.addRow(data);
+    
+    res.json({ 
+      success: true, 
 
     res.json({
       success: true,
       message: 'Registro creado exitosamente',
+      rowNumber: row.rowNumber 
       rowNumber: row.rowNumber,
     });
   } catch (error) {
+    console.error('Error creating record:', error);
+    res.status(500).json({ 
+      success: false, 
     console.error('Error creando el registro:', error); // Log detallado
     res.status(500).json({
       success: false,
       message: 'Error al crear el registro',
+      error: error.message 
       error: error.message,
+    });
+  }
+});
+
+// READ - Leer todos los registros (sin filtros)
+app.get('/webhook/read', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+
+    let data = rows.map(row => ({
+      ...row.toObject(),
+      _rowIndex: row.rowIndex // Incluir índice de fila para operaciones UPDATE/DELETE
+    }));
+
+    res.json({
+      success: true,
+      data: data,
+      total: data.length
+    });
+  } catch (error) {
+    console.error('Error reading records:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al leer los registros',
+      error: error.message 
+    });
+  }
+});
+
+// SIMPLE SEARCH - Búsqueda simple con un campo y texto
+app.get('/webhook/search', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+
+    let data = rows.map(row => ({
+      ...row.toObject(),
+      _rowIndex: row.rowIndex
+    }));
+
+    // Aplicar filtros si existen en los query parameters
+    const { searchText, searchField } = req.query;
+
+    if (searchText && searchField) {
+      data = data.filter(record => {
+        const fieldValue = record[searchField];
+        if (fieldValue === undefined || fieldValue === null) return false;
+
+        // Búsqueda case-insensitive y parcial
+        return fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
+      });
+    }
+
+    res.json({
+      success: true,
+      data: data,
+      total: data.length,
+      filtered: !!(searchText && searchField),
+      searchText: searchText || null,
+      searchField: searchField || null
+    });
+  } catch (error) {
+    console.error('Error searching records:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al buscar los registros',
+      error: error.message 
+    });
+  }
+});
+
+// FIELDS - Obtener campos disponibles para filtrado
+app.get('/webhook/fields', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        fields: [],
+        message: 'No hay registros para obtener campos'
+      });
+    }
+
+    // Obtener los nombres de las columnas del primer registro (excluir _rowIndex)
+    const fields = Object.keys(rows[0].toObject()).filter(field => field !== '_rowIndex');
+
+    res.json({
+      success: true,
+      fields: fields
+    });
+  } catch (error) {
+    console.error('Error getting fields:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al obtener los campos',
+      error: error.message 
     });
   }
 });
@@ -70,36 +179,24 @@ app.post('/webhook/search/advanced', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Mapear filas a objetos para filtrar
     let data = rows.map(row => ({
       ...row.toObject(),
-      _rowIndex: row.rowIndex,
+      _rowIndex: row.rowIndex
     }));
 
     const { filters } = req.body; // Array de objetos: [{field, value, operator}]
-
-    // Filtrar solo por las variables especificadas
-    const allowedFields = [
-      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
-      'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
-      'Tipo', 'Subtipo',
-    ];
 
     if (filters && Array.isArray(filters) && filters.length > 0) {
       data = data.filter(record => {
         return filters.every(filter => {
           const { field, value, operator = 'contains' } = filter;
-
-          // Validar si el campo está permitido
-          if (!allowedFields.includes(field)) return false;
-
           const fieldValue = record[field];
+
           if (fieldValue === undefined || fieldValue === null) return false;
 
           const recordValue = fieldValue.toString().toLowerCase();
           const searchValue = value.toString().toLowerCase();
 
-          // Aplicar operador
           switch (operator) {
             case 'equals':
               return recordValue === searchValue;
@@ -109,6 +206,8 @@ app.post('/webhook/search/advanced', async (req, res) => {
               return recordValue.startsWith(searchValue);
             case 'endsWith':
               return recordValue.endsWith(searchValue);
+            case 'notEquals':
+              return recordValue !== searchValue;
             default:
               return recordValue.includes(searchValue);
           }
@@ -121,101 +220,46 @@ app.post('/webhook/search/advanced', async (req, res) => {
       data: data,
       total: data.length,
       filtersApplied: filters?.length || 0,
-      filters: filters || [],
+      filters: filters || []
     });
   } catch (error) {
-    console.error('Error en búsqueda avanzada:', error);
-    res.status(500).json({
-      success: false,
+    console.error('Error in advanced search:', error);
+    res.status(500).json({ 
+      success: false, 
       message: 'Error al realizar búsqueda avanzada',
-      error: error.message,
+      error: error.message 
     });
   }
 });
 
-// READ - Búsqueda global con texto y campo
-app.get('/webhook/search', async (req, res) => {
-  try {
-    const { searchText, searchField } = req.query;
-
-    // Validar entrada
-    if (!searchText || !searchField) {
-      return res.status(400).json({
-        success: false,
-        message: 'Se requiere texto y campo para la búsqueda.',
-      });
-    }
-
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-
-    // Validar si el campo existe en las filas
-    const allowedFields = [
-      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
-      'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
-      'Tipo', 'Subtipo',
-    ];
-
-    if (!allowedFields.includes(searchField)) {
-      return res.status(400).json({
-        success: false,
-        message: `El campo "${searchField}" no es válido.`,
-      });
-    }
-
-    // Filtrar datos que coincidan exactamente con el texto de búsqueda
-    const filteredRows = rows.filter(row => {
-      const fieldValue = row[searchField];
-      return fieldValue && fieldValue.toString().toLowerCase() === searchText.toLowerCase();
-    });
-
-    const data = filteredRows.map(row => ({
-      ...row.toObject(),
-      _rowIndex: row.rowIndex,
-    }));
-
-    res.json({
-      success: true,
-      data,
-      total: data.length,
-    });
-  } catch (error) {
-    console.error('Error en búsqueda global:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al realizar la búsqueda.',
-      error: error.message,
-    });
-  }
-});
 // UPDATE - Actualizar un registro específico
 app.put('/webhook/update/:rowIndex', async (req, res) => {
   try {
     const { rowIndex } = req.params;
     const updateData = req.body;
-    
+
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
-    
+
     // Encontrar la fila por índice
     const rowToUpdate = rows.find(row => row.rowIndex === parseInt(rowIndex));
-    
+
     if (!rowToUpdate) {
       return res.status(404).json({
         success: false,
         message: 'Registro no encontrado'
       });
     }
-    
+
     // Actualizar los campos
     Object.keys(updateData).forEach(key => {
       if (key !== '_rowIndex') { // No actualizar el índice interno
         rowToUpdate[key] = updateData[key];
       }
     });
-    
+
     await rowToUpdate.save();
-    
+
     res.json({
       success: true,
       message: 'Registro actualizado correctamente',
@@ -239,13 +283,13 @@ app.delete('/webhook/delete', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const { searchCriteria } = req.body;
-    
+
     const rows = await sheet.getRows();
-    
+
     // Buscar la fila usando criterios de búsqueda más flexibles
     const rowToDelete = rows.find(row => {
       const rowData = row.toObject();
-      
+
       if (searchCriteria.recordToDelete) {
         // Método original - buscar por registro completo
         return Object.keys(searchCriteria.recordToDelete).every(key => 
@@ -255,20 +299,20 @@ app.delete('/webhook/delete', async (req, res) => {
         // Nuevo método - buscar por campo específico
         return rowData[searchCriteria.field] === searchCriteria.value;
       }
-      
+
       return false;
     });
-    
+
     if (!rowToDelete) {
       return res.status(404).json({ 
         success: false, 
         message: 'Registro no encontrado con los criterios especificados' 
       });
     }
-    
+
     const deletedRecord = rowToDelete.toObject();
     await rowToDelete.delete();
-    
+
     res.json({ 
       success: true, 
       message: 'Registro eliminado exitosamente',
@@ -289,22 +333,22 @@ app.delete('/webhook/bulk-delete', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const { filters } = req.body; // Misma estructura que search
-    
+
     const rows = await sheet.getRows();
     let rowsToDelete = [];
-    
+
     if (filters && Array.isArray(filters) && filters.length > 0) {
       rowsToDelete = rows.filter(row => {
         const rowData = row.toObject();
         return filters.every(filter => {
           const { field, value, operator = 'contains' } = filter;
           const fieldValue = rowData[field];
-          
+
           if (fieldValue === undefined || fieldValue === null) return false;
-          
+
           const recordValue = fieldValue.toString().toLowerCase();
           const searchValue = value.toString().toLowerCase();
-          
+
           switch (operator) {
             case 'equals':
               return recordValue === searchValue;
@@ -322,18 +366,18 @@ app.delete('/webhook/bulk-delete', async (req, res) => {
         });
       });
     }
-    
+
     if (rowsToDelete.length === 0) {
       return res.status(404).json({ 
         success: false, 
         message: 'No se encontraron registros que coincidan con los filtros' 
       });
     }
-    
+
     // Eliminar las filas encontradas
     const deletedRecords = rowsToDelete.map(row => row.toObject());
     await Promise.all(rowsToDelete.map(row => row.delete()));
-    
+
     res.json({ 
       success: true, 
       message: `${deletedRecords.length} registro(s) eliminado(s) exitosamente`,
@@ -374,7 +418,7 @@ app.get('/stats', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
-    
+
     res.json({
       timestamp: new Date().toISOString(),
       totalRecords: rows.length,
@@ -396,7 +440,7 @@ app.get('/test-connection', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const info = await sheet.doc.loadInfo();
-    
+
     res.json({
       status: 'success',
       sheetTitle: info.title,
