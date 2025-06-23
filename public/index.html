@@ -554,16 +554,15 @@
                 <!-- Búsqueda para actualizar -->
                 <!-- Formulario de actualización (oculto inicialmente) -->
                 <div id="update-form-container" style="display: none;">
-                    <h3>✏️ Editando Registro</h3>
-                    <form id="updateForm">
-                        <input type="hidden" id="update-rowIndex" name="rowIndex">
-                        <!-- Los campos se generarán dinámicamente -->
-                        <div id="update-fields"></div>
-                        <div style="margin-top: 20px;">
-                            <button type="submit" class="btn">💾 Guardar Cambios</button>
-                            <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
-                        </div>
-                    </form>
+                  <h3>✏️ Editando Registro</h3>
+                  <form id="updateForm">
+                    <input type="hidden" id="update-rowIndex" name="rowIndex" />
+                    <div id="update-fields"></div>
+                    <div style="margin-top: 20px;">
+                      <button type="submit" class="btn">💾 Guardar Cambios</button>
+                      <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
+                    </div>
+                  </form>
                 </div>
 
                 <!-- Contenedor de registros para actualizar -->
@@ -762,6 +761,9 @@ function displaySearchResults(records) {
       .filter(([key]) => allowedFields.includes(key)) // Filtrar solo los campos permitidos
       .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
       .join('<br>');
+    div.innerHTML += `<br>
+      <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
+    `;
     container.appendChild(div);
   });
 }
@@ -984,12 +986,33 @@ function clearAdvancedSearch() {
 
 // -------- EDIT/UPDATE FLOW --------
 function editRecord(rowIndex) {
-    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
-    if (!rec) return alert('No se encontró el registro');
-    currentEditingRow = rec;
-    showTab('update');
-    showUpdateForm(rec);
+  const record = currentRecords.find(r => r._rowIndex === rowIndex);
+  if (!record) {
+    alert('No se encontró el registro para editar');
+    return;
+  }
+
+  // Mostrar el formulario de edición
+  document.getElementById('update-form-container').style.display = 'block';
+
+  // Cargar datos en el formulario
+  const fieldsDiv = document.getElementById('update-fields');
+  fieldsDiv.innerHTML = ''; // Limpiar campos existentes
+  Object.entries(record).forEach(([key, value]) => {
+    if (allowedFields.includes(key)) {
+      fieldsDiv.innerHTML += `
+        <div class="form-group">
+          <label for="update-${key}">${key}:</label>
+          <input type="text" id="update-${key}" name="${key}" value="${value || ''}" />
+        </div>
+      `;
+    }
+  });
+
+  // Guardar el índice de fila que se editará
+  document.getElementById('update-rowIndex').value = rowIndex;
 }
+    
 function showUpdateForm(record) {
     document.getElementById('update-form-container').style.display = 'block';
     document.getElementById('update-rowIndex').value = record._rowIndex;
@@ -1007,38 +1030,45 @@ function showUpdateForm(record) {
     });
 }
 // On submit updateForm, send to backend
-document.getElementById('updateForm').onsubmit = async function(e) {
-    e.preventDefault();
-    const rowIndex = document.getElementById('update-rowIndex').value;
-    const data = {};
-    Array.from(this.elements).forEach(el => {
-        if (el.name && el.type !== 'submit' && el.name !== 'rowIndex') {
-            data[el.name] = el.value;
-        }
-    });
-    try {
-        const res = await fetch(`/webhook/update/${rowIndex}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        const result = await res.json();
-        if (result.success) {
-            showStatus('Registro actualizado correctamente', 'success');
-            currentEditingRow = null;
-            document.getElementById('update-form-container').style.display = 'none';
-        } else {
-            showStatus('Error al actualizar: ' + result.message, 'error');
-        }
-    } catch (err) {
-        showStatus('Error en la actualización', 'error');
-    }
-}
-function cancelUpdate() {
-    currentEditingRow = null;
-    document.getElementById('update-form-container').style.display = 'none';
-}
+document.getElementById('updateForm').onsubmit = async function (e) {
+  e.preventDefault();
 
+  const rowIndex = document.getElementById('update-rowIndex').value;
+  const updatedData = {};
+
+  // Obtener datos actualizados del formulario
+  Array.from(this.elements).forEach(el => {
+    if (el.name && el.type !== 'submit') {
+      updatedData[el.name] = el.value;
+    }
+  });
+
+  // Enviar datos actualizados al backend
+  try {
+    const response = await fetch(`/webhook/update/${rowIndex}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedData),
+    });
+    const result = await response.json();
+    if (result.success) {
+      alert('Registro actualizado correctamente');
+      document.getElementById('update-form-container').style.display = 'none';
+      loadAllRecords(); // Actualizar la lista de registros
+    } else {
+      alert('Error al actualizar el registro: ' + result.message);
+    }
+  } catch (err) {
+    console.error('Error:', err);
+    alert('Error al enviar el formulario de actualización');
+  }
+};
+    
+function cancelUpdate() {
+  document.getElementById('update-form-container').style.display = 'none';
+  document.getElementById('update-rowIndex').value = '';
+}
+    
 // -------- DELETE FLOW --------
 function deleteRecord(rowIndex) {
     const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
