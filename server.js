@@ -71,9 +71,10 @@ app.get('/webhook/read', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
+    // Generar índices manuales para cada registro
     let data = rows.map((row, index) => ({
-      ...row.toObject(),
-      _rowIndex: index + 1 // Asignar índice manualmente si `row.rowIndex` no es válido
+      ...row.toObject(),  // Copiar los datos del registro
+      _rowIndex: index + 1 // Asignar un índice basado en la posición del registro en el array
     }));
 
     res.json({
@@ -230,7 +231,8 @@ app.get('/webhook/get/:rowIndex', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    const record = rows[rowIndex - 1]; // Acceder al registro usando índice manual
+    // Acceder al registro usando el índice manual
+    const record = rows[rowIndex - 1]; // El índice manual comienza en 1
     if (!record) {
       return res.status(404).json({
         success: false,
