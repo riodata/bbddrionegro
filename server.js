@@ -44,6 +44,24 @@ app.post('/webhook/create', async (req, res) => {
   try {
     const sheet = await initializeSheet();
     const data = req.body;
+
+    // Validar que el campo Legajo existe
+    if (!data.Legajo) {
+      return res.status(400).json({
+        success: false,
+        message: 'El campo Legajo es obligatorio para crear un registro.',
+      });
+    }
+
+    // Comprobar si ya existe un registro con el mismo Legajo
+    const rows = await sheet.getRows();
+    const existingRow = rows.find(row => row.Legajo === data.Legajo);
+    if (existingRow) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya existe un registro con el Legajo proporcionado.',
+      });
+    }
     
     // Agregar fila
     console.log('Datos recibidos:', data); // Log para depuración
@@ -53,14 +71,14 @@ app.post('/webhook/create', async (req, res) => {
     res.json({
       success: true,
       message: 'Registro creado exitosamente',
-      rowNumber: row.rowNumber
+      Legajo: row.Legajo,
     });
   } catch (error) {
     console.error('Error creando el registro:', error); // Log detallado
     res.status(500).json({
       success: false,
       message: 'Error al crear el registro',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -71,23 +89,22 @@ app.get('/webhook/read', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Generar índices manuales para cada registro
-    let data = rows.map((row, index) => ({
-      ...row.toObject(),  // Copiar los datos del registro
-      _Legajo: index + 1 // Asignar un índice basado en la posición del registro en el array
+   const data = rows.map(row => ({
+      ...row.toObject(), // Copiar los datos del registro
+      Legajo: row.Legajo, // Incluir Legajo como identificador
     }));
 
     res.json({
       success: true,
       data: data,
-      total: data.length
+      total: data.length,
     });
   } catch (error) {
     console.error('Error reading records:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error al leer los registros',
-      error: error.message 
+      error: error.message,
     });
   }
 });
@@ -100,7 +117,7 @@ app.get('/webhook/search', async (req, res) => {
 
     let data = rows.map(row => ({
       ...row.toObject(),
-      _Legajo: row.Legajo
+      Legajo: row.Legajo,
     }));
 
     // Aplicar filtros si existen en los query parameters
@@ -122,14 +139,14 @@ app.get('/webhook/search', async (req, res) => {
       total: data.length,
       filtered: !!(searchText && searchField),
       searchText: searchText || null,
-      searchField: searchField || null
+      searchField: searchField || null,
     });
   } catch (error) {
     console.error('Error searching records:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error al buscar los registros',
-      error: error.message 
+      error: error.message,
     });
   }
 });
@@ -224,35 +241,6 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
-app.get('/webhook/get/:Legajo', async (req, res) => {
-  try {
-    const { Legajo } = req.params;
-
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-
-    // Acceder al registro usando el índice manual
-    const record = rows[Legajo - 1]; // El índice manual comienza en 1
-    if (!record) {
-      return res.status(404).json({
-        success: false,
-        message: 'Registro no encontrado'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: record.toObject()
-    });
-  } catch (error) {
-    console.error('Error fetching record:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener el registro',
-      error: error.message
-    });
-  }
-});
 
 // UPDATE - Actualizar un registro específico
 app.put('/webhook/update/:Legajo', async (req, res) => {
@@ -263,21 +251,19 @@ app.put('/webhook/update/:Legajo', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Encontrar la fila por índice
-    const rowToUpdate = rows.find(row => row.Legajo === parseInt(Legajo));
+    // Encontrar la fila por Legajo
+    const rowToUpdate = rows.find(row => row.Legajo === Legajo);
 
     if (!rowToUpdate) {
       return res.status(404).json({
         success: false,
-        message: 'Registro no encontrado'
+        message: `No se encontró un registro con el Legajo: ${Legajo}`,
       });
     }
 
     // Actualizar los campos
     Object.keys(updateData).forEach(key => {
-      if (key !== '_Legajo') { // No actualizar el índice interno
-        rowToUpdate[key] = updateData[key];
-      }
+      rowToUpdate[key] = updateData[key];
     });
 
     await rowToUpdate.save();
@@ -285,133 +271,50 @@ app.put('/webhook/update/:Legajo', async (req, res) => {
     res.json({
       success: true,
       message: 'Registro actualizado correctamente',
-      data: {
-        ...rowToUpdate.toObject(),
-        _Legajo: rowToUpdate.Legajo
-      }
+      data: rowToUpdate.toObject(),
     });
   } catch (error) {
     console.error('Error updating record:', error);
     res.status(500).json({
       success: false,
       message: 'Error al actualizar el registro',
-      error: error.message
+      error: error.message,
     });
   }
 });
 
 // DELETE - Eliminar registro con búsqueda previa
-app.delete('/webhook/delete', async (req, res) => {
+app.delete('/webhook/delete/:Legajo', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const { searchCriteria } = req.body;
+    const { Legajo } = req.params;
 
+    const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Buscar la fila usando criterios de búsqueda más flexibles
-    const rowToDelete = rows.find(row => {
-      const rowData = row.toObject();
-
-      if (searchCriteria.recordToDelete) {
-        // Método original - buscar por registro completo
-        return Object.keys(searchCriteria.recordToDelete).every(key => 
-          rowData[key] === searchCriteria.recordToDelete[key]
-        );
-      } else if (searchCriteria.field && searchCriteria.value) {
-        // Nuevo método - buscar por campo específico
-        return rowData[searchCriteria.field] === searchCriteria.value;
-      }
-
-      return false;
-    });
+    // Encontrar la fila por Legajo
+    const rowToDelete = rows.find(row => row.Legajo === Legajo);
 
     if (!rowToDelete) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Registro no encontrado con los criterios especificados' 
+      return res.status(404).json({
+        success: false,
+        message: `No se encontró un registro con el Legajo: ${Legajo}`,
       });
     }
 
     const deletedRecord = rowToDelete.toObject();
     await rowToDelete.delete();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Registro eliminado exitosamente',
-      deletedRecord: deletedRecord
+      deletedRecord: deletedRecord,
     });
   } catch (error) {
     console.error('Error deleting record:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       message: 'Error al eliminar el registro',
-      error: error.message 
-    });
-  }
-});
-
-// BULK DELETE - Eliminar múltiples registros
-app.delete('/webhook/bulk-delete', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const { filters } = req.body; // Misma estructura que search
-
-    const rows = await sheet.getRows();
-    let rowsToDelete = [];
-
-    if (filters && Array.isArray(filters) && filters.length > 0) {
-      rowsToDelete = rows.filter(row => {
-        const rowData = row.toObject();
-        return filters.every(filter => {
-          const { field, value, operator = 'contains' } = filter;
-          const fieldValue = rowData[field];
-
-          if (fieldValue === undefined || fieldValue === null) return false;
-
-          const recordValue = fieldValue.toString().toLowerCase();
-          const searchValue = value.toString().toLowerCase();
-
-          switch (operator) {
-            case 'equals':
-              return recordValue === searchValue;
-            case 'contains':
-              return recordValue.includes(searchValue);
-            case 'startsWith':
-              return recordValue.startsWith(searchValue);
-            case 'endsWith':
-              return recordValue.endsWith(searchValue);
-            case 'notEquals':
-              return recordValue !== searchValue;
-            default:
-              return recordValue.includes(searchValue);
-          }
-        });
-      });
-    }
-
-    if (rowsToDelete.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'No se encontraron registros que coincidan con los filtros' 
-      });
-    }
-
-    // Eliminar las filas encontradas
-    const deletedRecords = rowsToDelete.map(row => row.toObject());
-    await Promise.all(rowsToDelete.map(row => row.delete()));
-
-    res.json({ 
-      success: true, 
-      message: `${deletedRecords.length} registro(s) eliminado(s) exitosamente`,
-      deletedCount: deletedRecords.length,
-      deletedRecords: deletedRecords
-    });
-  } catch (error) {
-    console.error('Error bulk deleting records:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al eliminar los registros',
-      error: error.message 
+      error: error.message,
     });
   }
 });
