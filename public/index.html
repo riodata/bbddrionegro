@@ -752,7 +752,7 @@ function displaySearchResults(records) {
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
 
-        // Generar botones solo si `_rowIndex` está definido
+        // Generar botones utilizando el índice manual
         if (typeof record._rowIndex !== 'undefined') {
             div.innerHTML += `<br>
                 <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
