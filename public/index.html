@@ -577,7 +577,6 @@
                 <h2>Actualizar Registro</h2>
 
                 <!-- Búsqueda para actualizar -->
-                <!-- Formulario de actualización (oculto inicialmente) -->
                 <div id="update-form-container" style="display: none;">
                     <h3>✏️ Editando Registro</h3>
                     <form id="updateForm">
@@ -752,7 +751,7 @@ function displaySearchResults(records) {
             .filter(([k]) => k !== '_rowIndex')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
-        // Add Edit/Borrar buttons (use the _rowIndex for identification)
+        // Asegúrate de que _rowIndex esté definido para generar los botones
         if (typeof record._rowIndex !== 'undefined') {
             div.innerHTML += `<br>
                 <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
@@ -1004,13 +1003,41 @@ function clearAdvancedSearch() {
 }
 
 // -------- EDIT/UPDATE FLOW --------
-function editRecord(rowIndex) {
-    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
-    if (!rec) return alert('No se encontró el registro');
-    currentEditingRow = rec;
-    showTab('update');
-    showUpdateForm(rec);
+async function editRecord(rowIndex) {
+    try {
+        const response = await fetch(`${API_BASE}/webhook/get/${rowIndex}`); // Ruta para obtener datos del registro
+        const result = await response.json();
+
+        if (result.success) {
+            const record = result.data;
+
+            // Llenar el formulario con los datos del registro
+            const formContainer = document.getElementById('update-form-container');
+            const fieldsContainer = document.getElementById('update-fields');
+            formContainer.style.display = 'block'; // Mostrar el formulario
+
+            fieldsContainer.innerHTML = ''; // Limpiar campos anteriores
+            Object.entries(record).forEach(([key, value]) => {
+                // Generar inputs para los campos
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = key;
+                input.value = value || '';
+                input.placeholder = key;
+                input.className = 'form-control';
+                fieldsContainer.appendChild(input);
+            });
+
+            // Guardar el índice del registro en un campo oculto
+            document.getElementById('update-rowIndex').value = rowIndex;
+        } else {
+            alert('Error: Registro no encontrado');
+        }
+    } catch (error) {
+        console.error('Error fetching record:', error);
+    }
 }
+    
 function showUpdateForm(record) {
     document.getElementById('update-form-container').style.display = 'block';
     document.getElementById('update-rowIndex').value = record._rowIndex;
