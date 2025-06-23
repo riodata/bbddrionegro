@@ -51,6 +51,9 @@ app.post('/webhook/create', async (req, res) => {
 
     const row = await sheet.addRow(data);
     
+res.json({ 
+      success: true, 
+
     res.json({
       success: true,
       message: 'Registro creado exitosamente',
@@ -488,8 +491,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Frontend available at /`);
+  console.log(`Frontend available at /`);More actions
   console.log(`Health check available at /health`);
   console.log(`Keep-alive available at /ping`);
 });
-
