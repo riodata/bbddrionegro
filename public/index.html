@@ -580,7 +580,7 @@
                 <div id="update-form-container" style="display: none;">
                     <h3>✏️ Editando Registro</h3>
                     <form id="updateForm">
-                        <input type="hidden" id="update-rowIndex" name="rowIndex">
+                        <input type="hidden" id="update-Legajo" name="Legajo">
                         <!-- Los campos se generarán dinámicamente -->
                         <div id="update-fields"></div>
                         <div style="margin-top: 20px;">
@@ -748,15 +748,15 @@ function displaySearchResults(records) {
         const div = document.createElement('div');
         div.className = 'record';
         div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
+            .filter(([k]) => k !== '_Legajo')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
 
         // Generar botones utilizando el índice manual
-        if (typeof record._rowIndex !== 'undefined') {
+        if (typeof record._Legajo !== 'undefined') {
             div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
+                <button class="btn btn-success" onclick="editRecord(${record._Legajo})">✏️ Editar</button>
+                <button class="btn btn-danger" onclick="deleteRecord(${record._Legajo})">🗑️ Borrar</button>
             `;
         }
         container.appendChild(div);
@@ -845,14 +845,14 @@ function displayUpdateResults(records) {
         const div = document.createElement('div');
         div.className = 'record';
         div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
+            .filter(([k]) => k !== '_Legajo')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
 
         // Add Edit button
-        if (typeof record._rowIndex !== 'undefined') {
+        if (typeof record._Legajo !== 'undefined') {
             div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
+                <button class="btn btn-success" onclick="editRecord(${record._Legajo})">✏️ Editar</button>
             `;
         }
         container.appendChild(div);
@@ -870,14 +870,14 @@ function displayDeleteResults(records) {
         const div = document.createElement('div');
         div.className = 'record';
         div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
+            .filter(([k]) => k !== '_Legajo')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
 
         // Add Delete button
-        if (typeof record._rowIndex !== 'undefined') {
+        if (typeof record._Legajo !== 'undefined') {
             div.innerHTML += `<br>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
+                <button class="btn btn-danger" onclick="deleteRecord(${record._Legajo})">🗑️ Borrar</button>
             `;
         }
         container.appendChild(div);
@@ -1004,9 +1004,9 @@ function clearAdvancedSearch() {
 }
 
 // -------- EDIT/UPDATE FLOW --------
-async function editRecord(rowIndex) {
+async function editRecord(Legajo) {
     try {
-        const response = await fetch(`${API_BASE}/webhook/get/${rowIndex}`); // Ruta para obtener datos del registro
+        const response = await fetch(`${API_BASE}/webhook/get/${Legajo}`); // Ruta para obtener datos del registro
         const result = await response.json();
 
         if (result.success) {
@@ -1030,7 +1030,7 @@ async function editRecord(rowIndex) {
             });
 
             // Guardar el índice del registro en un campo oculto
-            document.getElementById('update-rowIndex').value = rowIndex;
+            document.getElementById('update-Legajo').value = Legajo;
         } else {
             alert('Error: Registro no encontrado');
         }
@@ -1041,12 +1041,12 @@ async function editRecord(rowIndex) {
     
 function showUpdateForm(record) {
     document.getElementById('update-form-container').style.display = 'block';
-    document.getElementById('update-rowIndex').value = record._rowIndex;
+    document.getElementById('update-Legajo').value = record._Legajo;
     // Dynamically create fields
     const fieldsDiv = document.getElementById('update-fields');
     fieldsDiv.innerHTML = '';
     Object.entries(record).forEach(([k, v]) => {
-        if (k === '_rowIndex') return;
+        if (k === '_Legajo') return;
         fieldsDiv.innerHTML += `
             <div class="form-group">
                 <label for="update-${k}">${k}:</label>
@@ -1058,15 +1058,15 @@ function showUpdateForm(record) {
 // On submit updateForm, send to backend
 document.getElementById('updateForm').onsubmit = async function(e) {
     e.preventDefault();
-    const rowIndex = document.getElementById('update-rowIndex').value;
+    const Legajo = document.getElementById('update-Legajo').value;
     const data = {};
     Array.from(this.elements).forEach(el => {
-        if (el.name && el.type !== 'submit' && el.name !== 'rowIndex') {
+        if (el.name && el.type !== 'submit' && el.name !== 'Legajo') {
             data[el.name] = el.value;
         }
     });
     try {
-        const res = await fetch(`/webhook/update/${rowIndex}`, {
+        const res = await fetch(`/webhook/update/${Legajo}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -1089,8 +1089,8 @@ function cancelUpdate() {
 }
 
 // -------- DELETE FLOW --------
-function deleteRecord(rowIndex) {
-    const rec = (currentRecords || []).find(r => r._rowIndex == rowIndex);
+function deleteRecord(Legajo) {
+    const rec = (currentRecords || []).find(r => r._Legajo == Legajo);
     if (!rec) return alert('No se encontró el registro');
     currentDeletingRow = rec;
     showTab('delete');
@@ -1100,24 +1100,24 @@ function showDeleteConfirmation(record) {
     const div = document.getElementById('delete-records');
     div.innerHTML = `
         <div class="record">
-        ${Object.entries(record).filter(([k]) => k !== '_rowIndex').map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`).join('<br>')}
+        ${Object.entries(record).filter(([k]) => k !== '_Legajo').map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`).join('<br>')}
         </div>
         <div class="status-message error">
             ¿Seguro que deseas eliminar este registro? Esta acción no se puede deshacer.
         </div>
-        <button class="btn btn-danger" onclick="confirmDelete(${record._rowIndex})">Sí, eliminar</button>
+        <button class="btn btn-danger" onclick="confirmDelete(${record._Legajo})">Sí, eliminar</button>
         <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
     `;
 }
-async function confirmDelete(rowIndex) {
+async function confirmDelete(Legajo) {
     const record = currentDeletingRow;
     if (!record) return;
     try {
-        // Usa el endpoint con searchCriteria por _rowIndex
+        // Usa el endpoint con searchCriteria por _Legajo
         const res = await fetch('/webhook/delete', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ searchCriteria: { field: '_rowIndex', value: rowIndex } })
+            body: JSON.stringify({ searchCriteria: { field: '_Legajo', value: Legajo } })
         });
         const result = await res.json();
         if (result.success) {
