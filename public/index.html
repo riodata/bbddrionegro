@@ -767,19 +767,16 @@ function displaySearchResults(records) {
         // Crear estructura con cabecera para los botones
         let headerHtml = '<div class="record-header">';
         
-        // Almacenar el Legajo como data-attribute para poder accederlo después
-        const legajo = record.Legajo;
-        div.setAttribute('data-legajo', legajo);
-        
-        // Añadir contenedor de contenido
-        headerHtml += '<div class="record-title">Registro #' + legajo + '</div>';
+        // Añadir título - usar el Legajo como identificador visual
+        const legajo = record._Legajo;
+        headerHtml += `<div class="record-title">Registro #${legajo || 'S/N'}</div>`;
         
         // Añadir botones en la cabecera
         headerHtml += '<div class="record-buttons">';
         if (typeof legajo !== 'undefined') {
             headerHtml += `
-                <button class="btn btn-success" onclick="editRecord(${legajo})">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord(${legajo})">🗑️ Borrar</button>
+                <button class="btn btn-success" onclick="editRecord('${legajo}')">✏️ Editar</button>
+                <button class="btn btn-danger" onclick="deleteRecord('${legajo}')">🗑️ Borrar</button>
             `;
         }
         headerHtml += '</div></div>';
@@ -791,9 +788,9 @@ function displaySearchResults(records) {
         const contentDiv = document.createElement('div');
         contentDiv.className = 'record-content';
         
-        // Añadir el contenido del registro
+        // Añadir el contenido del registro exceptuando los campos internos
         contentDiv.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_Legajo')
+            .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
         
@@ -877,7 +874,7 @@ function performGlobalSearch() {
 }
 
 function displayUpdateResults(records) {
-    const container = document.getElementById('update-records-container');
+    const container = document.getElementById('search-records-container');
     if (!records.length) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
@@ -890,18 +887,16 @@ function displayUpdateResults(records) {
         // Crear estructura con cabecera para los botones
         let headerHtml = '<div class="record-header">';
         
-        // Almacenar el Legajo como data-attribute
+        // Añadir título - usar el Legajo como identificador visual
         const legajo = record._Legajo;
-        div.setAttribute('data-legajo', legajo);
-        
-        // Añadir contenedor de contenido
-        headerHtml += '<div class="record-title">Registro #' + legajo + '</div>';
+        headerHtml += `<div class="record-title">Registro #${legajo || 'S/N'}</div>`;
         
         // Añadir botones en la cabecera
         headerHtml += '<div class="record-buttons">';
         if (typeof legajo !== 'undefined') {
             headerHtml += `
-                <button class="btn btn-success" onclick="editRecord(${legajo})">✏️ Editar</button>
+                <button class="btn btn-success" onclick="editRecord('${legajo}')">✏️ Editar</button>
+                <button class="btn btn-danger" onclick="deleteRecord('${legajo}')">🗑️ Borrar</button>
             `;
         }
         headerHtml += '</div></div>';
@@ -913,9 +908,9 @@ function displayUpdateResults(records) {
         const contentDiv = document.createElement('div');
         contentDiv.className = 'record-content';
         
-        // Añadir el contenido del registro
+        // Añadir el contenido del registro exceptuando los campos internos
         contentDiv.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_Legajo')
+            .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
         
@@ -928,7 +923,7 @@ function displayUpdateResults(records) {
 }
 
 function displayDeleteResults(records) {
-    const container = document.getElementById('delete-records');
+    const container = document.getElementById('search-records-container');
     if (!records.length) {
         container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
         return;
@@ -941,18 +936,16 @@ function displayDeleteResults(records) {
         // Crear estructura con cabecera para los botones
         let headerHtml = '<div class="record-header">';
         
-        // Almacenar el Legajo como data-attribute
+        // Añadir título - usar el Legajo como identificador visual
         const legajo = record._Legajo;
-        div.setAttribute('data-legajo', legajo);
-        
-        // Añadir contenedor de contenido
-        headerHtml += '<div class="record-title">Registro #' + legajo + '</div>';
+        headerHtml += `<div class="record-title">Registro #${legajo || 'S/N'}</div>`;
         
         // Añadir botones en la cabecera
         headerHtml += '<div class="record-buttons">';
         if (typeof legajo !== 'undefined') {
             headerHtml += `
-                <button class="btn btn-danger" onclick="deleteRecord(${legajo})">🗑️ Borrar</button>
+                <button class="btn btn-success" onclick="editRecord('${legajo}')">✏️ Editar</button>
+                <button class="btn btn-danger" onclick="deleteRecord('${legajo}')">🗑️ Borrar</button>
             `;
         }
         headerHtml += '</div></div>';
@@ -964,9 +957,9 @@ function displayDeleteResults(records) {
         const contentDiv = document.createElement('div');
         contentDiv.className = 'record-content';
         
-        // Añadir el contenido del registro
+        // Añadir el contenido del registro exceptuando los campos internos
         contentDiv.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_Legajo')
+            .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
             .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
             .join('<br>');
         
@@ -1098,12 +1091,13 @@ function clearAdvancedSearch() {
 }
 
 // -------- EDIT/UPDATE FLOW --------
-async function editRecord(Legajo) {
+async function editRecord(legajo) {
     try {
-        // Obtener el registro usando el Legajo
-        const record = currentRecords.find(r => r._Legajo == Legajo);
+        // Buscar el registro con el Legajo proporcionado
+        const record = currentRecords.find(r => r._Legajo == legajo);
+        
         if (!record) {
-            showStatus('No se encontró el registro con Legajo: ' + Legajo, 'error');
+            showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
             return;
         }
         
@@ -1127,8 +1121,8 @@ function showUpdateForm(record) {
     fieldsContainer.innerHTML = '';
     
     Object.entries(record).forEach(([key, value]) => {
-        // No mostrar el campo _Legajo en el formulario (ya está en el campo oculto)
-        if (key === '_Legajo') return;
+        // No mostrar campos internos en el formulario
+        if (key === '_Legajo' || key === '_rowIndex') return;
         
         const fieldHtml = `
         <div class="form-group">
@@ -1173,12 +1167,13 @@ function cancelUpdate() {
 }
 
 // -------- DELETE FLOW --------
-function deleteRecord(Legajo) {
+function deleteRecord(legajo) {
     try {
-        // Obtener el registro usando el Legajo
-        const record = currentRecords.find(r => r._Legajo == Legajo);
+        // Buscar el registro con el Legajo proporcionado
+        const record = currentRecords.find(r => r._Legajo == legajo);
+        
         if (!record) {
-            showStatus('No se encontró el registro con Legajo: ' + Legajo, 'error');
+            showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
             return;
         }
         
@@ -1204,14 +1199,23 @@ function showDeleteConfirmation(record) {
         <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
     `;
 }
-async function confirmDelete(Legajo) {
+async function confirmDelete(legajo) {
     try {
-        // Usar el Legajo directamente como identificador
+        const record = currentDeletingRow;
+        if (!record) return;
+        
+        // Ahora podemos usar _Legajo para la búsqueda
         const res = await fetch('/webhook/delete', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ searchCriteria: { field: '_Legajo', value: Legajo } })
+            body: JSON.stringify({ 
+                searchCriteria: { 
+                    field: 'Legajo',  // Nota: el campo en Google Sheets es "Legajo" (sin guion bajo)
+                    value: record._Legajo 
+                } 
+            })
         });
+        
         const result = await res.json();
         
         if (result.success) {
@@ -1226,6 +1230,7 @@ async function confirmDelete(Legajo) {
         showStatus('Error en la eliminación', 'error');
     }
 }
+    
 function cancelDelete() {
     document.getElementById('delete-records').innerHTML = '';
     currentDeletingRow = null;
