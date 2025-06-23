@@ -534,9 +534,13 @@
                 <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar Filtros</button>
                 
                 <!-- Contenedor de resultados -->
+                <!-- Contenedor para resultados de búsqueda -->
                 <div id="search-records-container" class="records-container">
-                  <div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>
+                  <div class="loading">Haz clic en "Buscar" para encontrar registros.</div>
                 </div>
+                
+                <!-- Contenedor para mensajes de estado -->
+                <div id="status-message"></div>
             
                 <!-- Información de resultados -->
                 <div id="searchResultsInfo" style="display: none;"></div>
@@ -790,12 +794,12 @@ function performGlobalSearch() {
   const searchText = document.getElementById('globalSearchText').value.trim();
   const searchField = document.getElementById('globalSearchField').value;
 
-  if (!searchText || !searchField || !allowedFields.includes(searchField)) {
-    showStatus('Por favor, ingresa texto y selecciona un campo válido para buscar', 'error');
+  if (!searchText || !searchField) {
+    showStatus('Por favor, ingresa texto y selecciona un campo para buscar.', 'error');
     return;
   }
 
-  fetch(`${API_BASE}/webhook/read?searchText=${searchText}&searchField=${searchField}`)
+  fetch(`/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`)
     .then(response => response.json())
     .then(data => {
       if (data.success) {
@@ -807,33 +811,29 @@ function performGlobalSearch() {
     })
     .catch(error => {
       console.error('Error:', error);
-      showStatus('Error al realizar la búsqueda global', 'error');
+      showStatus('Error al realizar la búsqueda global.', 'error');
     });
 }
 
-function displayUpdateResults(records) {
-    const container = document.getElementById('update-records-container');
-    if (!records.length) {
-        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
-        return;
-    }
-    container.innerHTML = '';
-    records.forEach(record => {
-        const div = document.createElement('div');
-        div.className = 'record';
-        div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
-        
-        // Add Edit button
-        if (typeof record._rowIndex !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
-            `;
-        }
-        container.appendChild(div);
-    });
+function displaySearchResults(records) {
+  const container = document.getElementById('search-records-container');
+  if (!records.length) {
+    container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  records.forEach(record => {
+    const div = document.createElement('div');
+    div.className = 'record';
+    div.innerHTML = Object.entries(record)
+      .filter(([key]) => allowedFields.includes(key)) // Filtrar solo los campos permitidos
+      .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
+      .join('<br>');
+    div.innerHTML += `<br>
+      <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
+    `;
+    container.appendChild(div);
+  });
 }
 
 function displayDeleteResults(records) {
