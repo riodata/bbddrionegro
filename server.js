@@ -90,6 +90,7 @@ app.get('/webhook/read', async (req, res) => {
 });
 
 // SIMPLE SEARCH - Búsqueda simple con un campo y texto
+// Líneas modificadas en el archivo
 app.get('/webhook/search', async (req, res) => {
   try {
     const sheet = await initializeSheet();
@@ -100,7 +101,6 @@ app.get('/webhook/search', async (req, res) => {
       _rowIndex: row.rowIndex,
     }));
 
-    // Aplicar filtros si existen en los query parameters
     const { searchText, searchField } = req.query;
 
     if (searchText && searchField) {
@@ -108,7 +108,6 @@ app.get('/webhook/search', async (req, res) => {
         const fieldValue = record[searchField];
         if (fieldValue === undefined || fieldValue === null) return false;
 
-        // Búsqueda case-insensitive y parcial
         return fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
       });
     }
@@ -128,6 +127,45 @@ app.get('/webhook/search', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
+app.put('/webhook/update/:rowIndex', async (req, res) => {
+  try {
+    const { rowIndex } = req.params;
+    const updateData = req.body;
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+    const rowToUpdate = rows.find(row => row.rowIndex === parseInt(rowIndex));
+
+    if (!rowToUpdate) {
+      return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+    }
+
+    Object.keys(updateData).forEach(key => {
+      rowToUpdate[key] = updateData[key];
+    });
+
+    await rowToUpdate.save();
+    res.json({ success: true, message: 'Registro actualizado correctamente' });
+  } catch (error) {
+    console.error('Error actualizando el registro:', error);
+    res.status(500).json({ success: false, message: 'Error al actualizar el registro', error: error.message });
+  }
+});
+
+app.delete('/webhook/delete', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+    const { searchCriteria } = req.body;
+    const rowToDelete = rows.find(row => row.rowIndex === searchCriteria.value);
+
+    if (!rowToDelete) {
+      return res.status(404).json({ success: false, message: 'Registro no encontrado' });
+    }
+
+    await rowToDelete.delete();
+    res.json({ success: true, message: 'Registro eliminado correctamente' });
+  } catch (error) {
+    console.error('Error eliminando el registro:', error);
+    res.status(500).json({ success: false, message: 'Error al eliminar el registro', error: error.message });
+  }
 });
