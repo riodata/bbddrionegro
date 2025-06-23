@@ -74,7 +74,7 @@ app.get('/webhook/read', async (req, res) => {
     // Generar índices manuales para cada registro
     let data = rows.map((row, index) => ({
       ...row.toObject(),  // Copiar los datos del registro
-      _rowIndex: index + 1 // Asignar un índice basado en la posición del registro en el array
+      _Legajo: index + 1 // Asignar un índice basado en la posición del registro en el array
     }));
 
     res.json({
@@ -100,7 +100,7 @@ app.get('/webhook/search', async (req, res) => {
 
     let data = rows.map(row => ({
       ...row.toObject(),
-      _rowIndex: row.rowIndex
+      _Legajo: row.Legajo
     }));
 
     // Aplicar filtros si existen en los query parameters
@@ -148,8 +148,8 @@ app.get('/webhook/fields', async (req, res) => {
       });
     }
 
-    // Obtener los nombres de las columnas del primer registro (excluir _rowIndex)
-    const fields = Object.keys(rows[0].toObject()).filter(field => field !== '_rowIndex');
+    // Obtener los nombres de las columnas del primer registro (excluir _Legajo)
+    const fields = Object.keys(rows[0].toObject()).filter(field => field !== '_Legajo');
 
     res.json({
       success: true,
@@ -173,7 +173,7 @@ app.post('/webhook/search/advanced', async (req, res) => {
 
     let data = rows.map(row => ({
       ...row.toObject(),
-      _rowIndex: row.rowIndex
+      _Legajo: row.Legajo
     }));
 
     const { filters } = req.body; // Array de objetos: [{field, value, operator}]
@@ -224,15 +224,15 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
-app.get('/webhook/get/:rowIndex', async (req, res) => {
+app.get('/webhook/get/:Legajo', async (req, res) => {
   try {
-    const { rowIndex } = req.params;
+    const { Legajo } = req.params;
 
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
     // Acceder al registro usando el índice manual
-    const record = rows[rowIndex - 1]; // El índice manual comienza en 1
+    const record = rows[Legajo - 1]; // El índice manual comienza en 1
     if (!record) {
       return res.status(404).json({
         success: false,
@@ -255,16 +255,16 @@ app.get('/webhook/get/:rowIndex', async (req, res) => {
 });
 
 // UPDATE - Actualizar un registro específico
-app.put('/webhook/update/:rowIndex', async (req, res) => {
+app.put('/webhook/update/:Legajo', async (req, res) => {
   try {
-    const { rowIndex } = req.params;
+    const { Legajo } = req.params;
     const updateData = req.body;
 
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
     // Encontrar la fila por índice
-    const rowToUpdate = rows.find(row => row.rowIndex === parseInt(rowIndex));
+    const rowToUpdate = rows.find(row => row.Legajo === parseInt(Legajo));
 
     if (!rowToUpdate) {
       return res.status(404).json({
@@ -275,7 +275,7 @@ app.put('/webhook/update/:rowIndex', async (req, res) => {
 
     // Actualizar los campos
     Object.keys(updateData).forEach(key => {
-      if (key !== '_rowIndex') { // No actualizar el índice interno
+      if (key !== '_Legajo') { // No actualizar el índice interno
         rowToUpdate[key] = updateData[key];
       }
     });
@@ -287,7 +287,7 @@ app.put('/webhook/update/:rowIndex', async (req, res) => {
       message: 'Registro actualizado correctamente',
       data: {
         ...rowToUpdate.toObject(),
-        _rowIndex: rowToUpdate.rowIndex
+        _Legajo: rowToUpdate.Legajo
       }
     });
   } catch (error) {
