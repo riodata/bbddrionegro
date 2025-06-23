@@ -1,6 +1,6 @@
 // server.js
 const express = require('express');
-const cors = require('cors');More actions
+const cors = require('cors');
 const path = require('path');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
