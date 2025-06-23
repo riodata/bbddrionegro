@@ -149,6 +149,20 @@ app.get('/webhook/search', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
+    // Validar si el campo existe en las filas
+    const allowedFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat',
+      'Presid', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
+      'Tipo', 'Subtipo',
+    ];
+
+    if (!allowedFields.includes(searchField)) {
+      return res.status(400).json({
+        success: false,
+        message: `El campo "${searchField}" no es válido.`,
+      });
+    }
+
     // Filtrar datos que coincidan exactamente con el texto de búsqueda
     const filteredRows = rows.filter(row => {
       const fieldValue = row[searchField];
@@ -174,7 +188,6 @@ app.get('/webhook/search', async (req, res) => {
     });
   }
 });
-
 // UPDATE - Actualizar un registro específico
 app.put('/webhook/update/:rowIndex', async (req, res) => {
   try {
