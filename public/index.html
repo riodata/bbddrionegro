@@ -546,6 +546,10 @@
             <!-- SEARCH TAB -->
             <div id="search" class="tab-content">
                 <h2>Buscar Registros Existentes</h2>
+                <div id="search-records-container" class="records-container">
+                    <div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>
+                </div>
+            </div>
 
                 <!-- Búsqueda Avanzada -->
                 <div class="search-container">
@@ -699,15 +703,12 @@ async function loadAllRecords() {
         if (result.success) {
             currentRecords = result.data;
             displaySearchResults(result.data);
-            updateSearchResultsInfo(`Mostrando todos los registros (${result.total} total)`);
         } else {
             throw new Error(result.message);
         }
     } catch (error) {
         console.error('Error loading records:', error);
-        document.getElementById('search-records-container').innerHTML = 
-            `<div class="error">Error al cargar registros: ${error.message}</div>`;
-        showStatus(`❌ Error: ${error.message}`, 'error');
+        document.getElementById('search-records-container').innerHTML = `<div class="error">Error al cargar registros: ${error.message}</div>`;
     }
 }
 
@@ -747,21 +748,22 @@ function displaySearchResults(records) {
     records.forEach(record => {
         const div = document.createElement('div');
         div.className = 'record';
-        div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_Legajo')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+
+        // Mostrar siempre el Legajo en los resultados
+        div.innerHTML = `<strong>Legajo:</strong> ${record.Legajo || 'Sin datos'}<br>`;
+        div.innerHTML += Object.entries(record)
+            .map(([k, v]) => k !== 'Legajo' ? `<strong>${k}:</strong> ${v || ''}` : '')
             .join('<br>');
 
-        // Generar botones utilizando el índice manual
-        if (typeof record._Legajo !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._Legajo})">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._Legajo})">🗑️ Borrar</button>
-            `;
-        }
+        // Botones para editar y eliminar utilizando el Legajo como identificador
+        div.innerHTML += `<br>
+            <button class="btn btn-success" onclick="editRecord('${record.Legajo}')">✏️ Editar</button>
+            <button class="btn btn-danger" onclick="deleteRecord('${record.Legajo}')">🗑️ Borrar</button>
+        `;
         container.appendChild(div);
     });
 }
+
 
 function updateSearchResultsInfo(message) {
     const infoDiv = document.getElementById('searchResultsInfo');
@@ -1005,6 +1007,7 @@ function clearAdvancedSearch() {
 
 // -------- EDIT/UPDATE FLOW --------
 async function editRecord(Legajo) {
+    alert(`Editar registro con Legajo: ${Legajo}`);
     try {
         const response = await fetch(`${API_BASE}/webhook/get/${Legajo}`); // Ruta para obtener datos del registro
         const result = await response.json();
@@ -1090,6 +1093,8 @@ function cancelUpdate() {
 
 // -------- DELETE FLOW --------
 function deleteRecord(Legajo) {
+    alert(`Eliminar registro con Legajo: ${Legajo}`);
+    
     const rec = (currentRecords || []).find(r => r._Legajo == Legajo);
     if (!rec) return alert('No se encontró el registro');
     currentDeletingRow = rec;
