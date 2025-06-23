@@ -694,7 +694,7 @@ const allowedFields = [
   'Tipo', 'Subtipo',
 ];
 
-// Cargar campos permitidos en el frontend
+// Función para cargar campos en el dropdown de búsqueda global
 function loadFieldsForSearch() {
   const dropdown = document.getElementById('globalSearchField');
   dropdown.innerHTML = '<option value="">Selecciona un campo...</option>';
@@ -702,6 +702,8 @@ function loadFieldsForSearch() {
     dropdown.innerHTML += `<option value="${field}">${field}</option>`;
   });
 }
+
+
 
 function performAdvancedSearch() {
   const filters = collectAdvancedFilters();
@@ -747,28 +749,21 @@ function loadAllRecords() {
 }
 
 function displaySearchResults(records) {
-    const container = document.getElementById('search-records-container');
-    if (!records.length) {
-        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
-        return;
-    }
-    container.innerHTML = '';
-    records.forEach(record => {
-        const div = document.createElement('div');
-        div.className = 'record';
-        div.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
-        // Add Edit/Borrar buttons (use the _rowIndex for identification)
-        if (typeof record._rowIndex !== 'undefined') {
-            div.innerHTML += `<br>
-                <button class="btn btn-success" onclick="editRecord(${record._rowIndex})">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord(${record._rowIndex})">🗑️ Borrar</button>
-            `;
-        }
-        container.appendChild(div);
-    });
+  const container = document.getElementById('search-records-container');
+  if (!records.length) {
+    container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
+    return;
+  }
+  container.innerHTML = '';
+  records.forEach(record => {
+    const div = document.createElement('div');
+    div.className = 'record';
+    div.innerHTML = Object.entries(record)
+      .filter(([key]) => allowedFields.includes(key)) // Filtrar solo los campos permitidos
+      .map(([key, value]) => `<strong>${key}:</strong> ${value || ''}`)
+      .join('<br>');
+    container.appendChild(div);
+  });
 }
 
 function updateSearchResultsInfo(message) {
@@ -780,66 +775,38 @@ function updateSearchResultsInfo(message) {
 }
 
 // -------- GLOBAL SEARCH (barra superior) --------
+// Función para cargar campos en el dropdown de búsqueda avanzada
 function loadFieldsForGlobalSearch() {
-    fetch('/webhook/fields')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const select = document.getElementById('globalSearchField');
-                select.innerHTML = '<option value="">Selecciona un campo...</option>';
-                data.fields.forEach(field => {
-                    select.innerHTML += `<option value="${field}">${field}</option>`;
-                });
-                availableFields = data.fields;
-            }
-        })
-        .catch(error => {
-            console.error('Error loading fields:', error);
-        });
+  const dropdown = document.getElementById('globalSearchField');
+  dropdown.innerHTML = '<option value="">Selecciona un campo...</option>';
+  allowedFields.forEach(field => {
+    dropdown.innerHTML += `<option value="${field}">${field}</option>`;
+  });
 }
 
 function performGlobalSearch() {
-    const searchText = document.getElementById('globalSearchText').value.trim();
-    const searchField = document.getElementById('globalSearchField').value;
-    if (!searchText || !searchField) {
-        showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
-        return;
-    }
-    
-    // Show loading status in the active tab
-    const activeTabId = document.querySelector('.tab-content.active').id;
-    if (activeTabId === 'update') {
-        document.getElementById('update-records-container').innerHTML = '<div class="loading">Buscando...</div>';
-    } else if (activeTabId === 'delete') {
-        document.getElementById('delete-records').innerHTML = '<div class="loading">Buscando...</div>';
-    }
-    
-    const url = `/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
-    fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                currentRecords = data.data;
-                
-                // Display results based on active tab
-                if (activeTabId === 'search') {
-                    displaySearchResults(data.data);
-                    updateSearchResultsInfo(`Se encontraron ${data.total} registro(s)`);
-                } else if (activeTabId === 'update') {
-                    displayUpdateResults(data.data);
-                } else if (activeTabId === 'delete') {
-                    displayDeleteResults(data.data);
-                }
-                
-                showStatus(`Se encontraron ${data.total} registro(s)`, 'success');
-            } else {
-                showStatus('Error en la búsqueda: ' + data.message, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showStatus('Error al realizar la búsqueda', 'error');
-        });
+  const searchText = document.getElementById('globalSearchText').value.trim();
+  const searchField = document.getElementById('globalSearchField').value;
+
+  if (!searchText || !searchField || !allowedFields.includes(searchField)) {
+    showStatus('Por favor, ingresa texto y selecciona un campo válido para buscar', 'error');
+    return;
+  }
+
+  fetch(`${API_BASE}/webhook/read?searchText=${searchText}&searchField=${searchField}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        displaySearchResults(data.data);
+        updateSearchResultsInfo(`Se encontraron ${data.total} registros`);
+      } else {
+        showStatus('Error en la búsqueda global: ' + data.message, 'error');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      showStatus('Error al realizar la búsqueda global', 'error');
+    });
 }
 
 function displayUpdateResults(records) {
@@ -989,19 +956,23 @@ function removeFilter(filterId) {
     const el = document.getElementById(filterId);
     if (el) el.remove();
 }
+    
 function collectAdvancedFilters() {
-    const filters = [];
-    const filterRows = document.querySelectorAll('#filtersContainer .filter-row');
-    filterRows.forEach(row => {
-        const field = row.querySelector('.filter-field-select').value;
-        const operator = row.querySelector('.filter-operator-select').value;
-        const value = row.querySelector('.filter-value-input').value.trim();
-        if (field && value) {
-            filters.push({ field, operator, value });
-        }
-    });
-    return filters;
+  const filters = [];
+  const filterRows = document.querySelectorAll('#filtersContainer .filter-row');
+  filterRows.forEach(row => {
+    const field = row.querySelector('.filter-field-select').value;
+    const operator = row.querySelector('.filter-operator-select').value;
+    const value = row.querySelector('.filter-value-input').value.trim();
+
+    // Validar si el campo está permitido
+    if (allowedFields.includes(field) && value) {
+      filters.push({ field, operator, value });
+    }
+  });
+  return filters;
 }
+
 function clearAdvancedSearch() {
     document.getElementById('filtersContainer').innerHTML = '';
     filterCount = 0;
