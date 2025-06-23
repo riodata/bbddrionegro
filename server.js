@@ -299,27 +299,38 @@ app.post('/webhook/search/advanced', async (req, res) => {
 
 
 // UPDATE - Actualizar un registro específico
-app.put('/webhook/update/:Legajo', async (req, res) => {
+app.put('/webhook/update', async (req, res) => {
   try {
-    const { Legajo } = req.params;
-    const updateData = req.body;
+    const { searchCriteria, updateData } = req.body;
+    
+    if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere criterio de búsqueda válido'
+      });
+    }
 
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Encontrar la fila por Legajo
-    const rowToUpdate = rows.find(row => row.Legajo === Legajo);
+    // Buscar la fila usando el criterio de búsqueda
+    const rowToUpdate = rows.find(row => {
+      const rowData = row.toObject();
+      return rowData[searchCriteria.field] == searchCriteria.value;
+    });
 
     if (!rowToUpdate) {
       return res.status(404).json({
         success: false,
-        message: `No se encontró un registro con el Legajo: ${Legajo}`,
+        message: `Registro no encontrado con ${searchCriteria.field}=${searchCriteria.value}`
       });
     }
 
     // Actualizar los campos
     Object.keys(updateData).forEach(key => {
-      rowToUpdate[key] = updateData[key];
+      if (key !== '_rowIndex' && key !== '_Legajo') { // No actualizar los índices internos
+        rowToUpdate[key] = updateData[key];
+      }
     });
 
     await rowToUpdate.save();
@@ -327,14 +338,18 @@ app.put('/webhook/update/:Legajo', async (req, res) => {
     res.json({
       success: true,
       message: 'Registro actualizado correctamente',
-      data: rowToUpdate.toObject(),
+      data: {
+        ...rowToUpdate.toObject(),
+        _Legajo: rowToUpdate.get('Legajo'),
+        _rowIndex: rowToUpdate.rowIndex
+      }
     });
   } catch (error) {
     console.error('Error updating record:', error);
     res.status(500).json({
       success: false,
       message: 'Error al actualizar el registro',
-      error: error.message,
+      error: error.message
     });
   }
 });
