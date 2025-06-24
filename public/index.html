@@ -165,6 +165,27 @@
             background: linear-gradient(135deg, #95a5a6, #7f8c8d);
         }
 
+        .delete-confirmation {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .delete-confirmation h3 {
+            color: #e74c3c;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #f8d7da;
+            padding-bottom: 10px;
+        }
+        
+        .confirmation-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
         .search-container {
             background: #f8f9fa;
             padding: 20px;
@@ -658,14 +679,27 @@ const dropdownLists = {
 
 // -------- TAB MANAGEMENT --------
 function showTab(tabName) {
+    console.log('Cambiando a pestaña:', tabName);
+    
     // Ocultar todas las pestañas y remover .active
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    
     // Mostrar la seleccionada
     const selectedTab = document.getElementById(tabName);
     const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
-    if (selectedTab) selectedTab.classList.add('active');
-    if (selectedButton) selectedButton.classList.add('active');
+    
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    } else {
+        console.error('No se encontró la pestaña:', tabName);
+    }
+    
+    if (selectedButton) {
+        selectedButton.classList.add('active');
+    } else {
+        console.error('No se encontró el botón para la pestaña:', tabName);
+    }
 
     // Mostrar barra búsqueda global si corresponde
     document.getElementById('global-search').style.display =
@@ -674,11 +708,14 @@ function showTab(tabName) {
     // Cargar campos si es necesario
     if (tabName === 'search') loadFieldsForSearch();
     if (['update', 'delete'].includes(tabName)) loadFieldsForGlobalSearch();
-    if (tabName === 'delete') loadFieldsForDelete();
-
+    
     // Si hay registro seleccionado para editar/eliminar, mostrarlo
-    if (tabName === 'update' && currentEditingRow) showUpdateForm(currentEditingRow);
-    if (tabName === 'delete' && currentDeletingRow) showDeleteConfirmation(currentDeletingRow);
+    if (tabName === 'update' && currentEditingRow) {
+        showUpdateForm(currentEditingRow);
+    }
+    if (tabName === 'delete' && currentDeletingRow) {
+        showDeleteConfirmation(currentDeletingRow);
+    }
 }
 
 document.getElementById('createForm').onsubmit = async function (e) {
@@ -1092,6 +1129,8 @@ function clearAdvancedSearch() {
 // -------- EDIT/UPDATE FLOW --------
 async function editRecord(legajo) {
     try {
+        console.log('Editando registro con Legajo:', legajo);
+        
         // Buscar el registro con el Legajo proporcionado
         const record = currentRecords.find(r => r._Legajo == legajo);
         
@@ -1100,8 +1139,13 @@ async function editRecord(legajo) {
             return;
         }
         
+        // Guardar el registro actual para edición
         currentEditingRow = record;
+        
+        // Cambiar a la pestaña de actualización
         showTab('update');
+        
+        // Mostrar el formulario de edición
         showUpdateForm(record);
     } catch (error) {
         console.error('Error al editar:', error);
@@ -1110,22 +1154,24 @@ async function editRecord(legajo) {
 }
     
 function showUpdateForm(record) {
-    document.getElementById('update-form-container').style.display = 'block';
-    
-    // Obtener el valor del Legajo
-    const legajo = record._Legajo;
-    if (!legajo) {
-        showStatus('No se pudo identificar el Legajo del registro', 'error');
-        return;
+    // Asegurarse de que estamos en la pestaña de actualización
+    if (document.querySelector('.tab-content.active').id !== 'update') {
+        showTab('update');
     }
     
+    // Mostrar el contenedor del formulario
+    document.getElementById('update-form-container').style.display = 'block';
+    
+    // Ocultar la lista de resultados (opcional, depende de tu diseño)
+    document.getElementById('update-records-container').style.display = 'none';
+    
     // Establecer el Legajo en el campo oculto
-    document.getElementById('update-Legajo').value = legajo;
+    document.getElementById('update-Legajo').value = record._Legajo;
     
     // Mostrar el Legajo en el título
     const formTitle = document.querySelector('#update-form-container h3');
     if (formTitle) {
-        formTitle.textContent = `✏️ Editando Registro #${legajo}`;
+        formTitle.textContent = `✏️ Editando Registro #${record._Legajo}`;
     }
     
     // Generar los campos del formulario dinámicamente
@@ -1136,20 +1182,37 @@ function showUpdateForm(record) {
         // No mostrar campos internos en el formulario
         if (key === '_Legajo' || key === '_rowIndex') return;
         
+        // Crear un ID seguro para el campo
+        const fieldId = `update-${key.replace(/\s+/g, '_')}`;
+        
+        // Determinar el tipo de autocomplete apropiado
+        let autocompleteValue = 'off';
+        if (key.toLowerCase().includes('mail') || key.toLowerCase().includes('email')) autocompleteValue = 'email';
+        if (key.toLowerCase().includes('tel') || key.toLowerCase().includes('phone')) autocompleteValue = 'tel';
+        if (key.toLowerCase().includes('dirección') || key.toLowerCase().includes('direccion')) autocompleteValue = 'street-address';
+        if (key.toLowerCase().includes('localidad') || key.toLowerCase().includes('ciudad')) autocompleteValue = 'address-level2';
+        if (key.toLowerCase().includes('codpost') || key.toLowerCase().includes('postal')) autocompleteValue = 'postal-code';
+        
         const fieldHtml = `
         <div class="form-group">
-            <label for="update-${key}">${key}:</label>
-            <input type="text" id="update-${key}" name="${key}" value="${value || ''}">
+            <label for="${fieldId}">${key}:</label>
+            <input type="text" id="${fieldId}" name="${key}" value="${value || ''}" autocomplete="${autocompleteValue}">
         </div>`;
         fieldsContainer.innerHTML += fieldHtml;
     });
+    
+    // Hacer scroll al inicio del formulario (opcional)
+    document.getElementById('update-form-container').scrollIntoView({behavior: 'smooth'});
 }
 
 // Función para manejar el submit del formulario de actualización
+// Función para manejar el submit del formulario de actualización
 async function handleUpdateFormSubmit(event) {
-    event.preventDefault(); // Prevenir el envío estándar del formulario
+    if (event) {
+        event.preventDefault(); // Prevenir el envío estándar del formulario
+    }
     
-    // Mostrar algún feedback visual
+    // Mostrar feedback visual
     showStatus('Guardando cambios...', 'info');
     
     // Recopilar datos del formulario
@@ -1157,7 +1220,7 @@ async function handleUpdateFormSubmit(event) {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
     
-    // Obtener el Legajo del campo oculto
+    // Obtener el Legajo
     const legajo = data.Legajo;
     
     // Verificar que tenemos un Legajo
@@ -1188,13 +1251,22 @@ async function handleUpdateFormSubmit(event) {
         
         if (result.success) {
             showStatus('Registro actualizado correctamente', 'success');
-            document.getElementById('update-form-container').style.display = 'none';
             
-            // Actualizar la lista de registros si estamos en la pestaña correcta
-            const activeTab = document.querySelector('.tab-content.active').id;
-            if (activeTab === 'update') {
-                // Recargar los registros para mostrar los cambios
-                performGlobalSearch(); // Repetir la búsqueda actual si hay criterios
+            // Ocultar el formulario
+            document.getElementById('update-form-container').style.display = 'none';
+            document.getElementById('update-records-container').style.display = 'block';
+            
+            // Limpiar el registro actual
+            currentEditingRow = null;
+            
+            // Volver a la pestaña de búsqueda
+            showTab('search');
+            
+            // Actualizar la lista de registros
+            if (document.getElementById('globalSearchText').value) {
+                performGlobalSearch();
+            } else {
+                loadAllRecords();
             }
         } else {
             throw new Error(result.message || 'Error desconocido');
@@ -1206,6 +1278,14 @@ async function handleUpdateFormSubmit(event) {
     
     return false; // Prevenir el envío del formulario
 }
+
+// Asignar el manejador al evento submit del formulario
+document.addEventListener('DOMContentLoaded', function() {
+    const updateForm = document.getElementById('updateForm');
+    if (updateForm) {
+        updateForm.addEventListener('submit', handleUpdateFormSubmit);
+    }
+});
     
 // Manejador de evento submit para el formulario de actualización
 document.getElementById('updateForm').onsubmit = async function(e) {
@@ -1277,13 +1357,26 @@ document.getElementById('updateForm').onsubmit = async function(e) {
 };
     
 function cancelUpdate() {
+    // Limpiar el registro actual de edición
     currentEditingRow = null;
+    
+    // Ocultar el formulario
     document.getElementById('update-form-container').style.display = 'none';
+    
+    // Mostrar la lista de registros de nuevo
+    document.getElementById('update-records-container').style.display = 'block';
+    
+    // Opcionalmente, volver a la pestaña de búsqueda
+    showTab('search');
+    
+    showStatus('Edición cancelada', 'info');
 }
 
 // -------- DELETE FLOW --------
 function deleteRecord(legajo) {
     try {
+        console.log('Eliminando registro con Legajo:', legajo);
+        
         // Buscar el registro con el Legajo proporcionado
         const record = currentRecords.find(r => r._Legajo == legajo);
         
@@ -1292,8 +1385,13 @@ function deleteRecord(legajo) {
             return;
         }
         
+        // Guardar el registro actual para eliminación
         currentDeletingRow = record;
+        
+        // Cambiar a la pestaña de eliminación
         showTab('delete');
+        
+        // Mostrar la confirmación de eliminación
         showDeleteConfirmation(record);
     } catch (error) {
         console.error('Error al eliminar:', error);
@@ -1302,30 +1400,59 @@ function deleteRecord(legajo) {
 }
     
 function showDeleteConfirmation(record) {
+    // Asegurarse de que estamos en la pestaña de eliminación
+    if (document.querySelector('.tab-content.active').id !== 'delete') {
+        showTab('delete');
+    }
+    
+    // Obtener el contenedor para la confirmación de eliminación
     const div = document.getElementById('delete-records');
+    
+    // Generar el contenido HTML para la confirmación
     div.innerHTML = `
-        <div class="record">
-        ${Object.entries(record).filter(([k]) => k !== '_Legajo').map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`).join('<br>')}
+        <div class="delete-confirmation">
+            <h3>🗑️ Eliminar Registro #${record._Legajo}</h3>
+            
+            <div class="record">
+                ${Object.entries(record)
+                    .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
+                    .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+                    .join('<br>')}
+            </div>
+            
+            <div class="status-message error">
+                <p>¿Estás seguro que deseas eliminar este registro? Esta acción no se puede deshacer.</p>
+            </div>
+            
+            <div class="confirmation-buttons">
+                <button class="btn btn-danger" onclick="confirmDelete('${record._Legajo}')">Sí, eliminar</button>
+                <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
+            </div>
         </div>
-        <div class="status-message error">
-            ¿Seguro que deseas eliminar este registro? Esta acción no se puede deshacer.
-        </div>
-        <button class="btn btn-danger" onclick="confirmDelete(${record._Legajo})">Sí, eliminar</button>
-        <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
     `;
+    
+    // Hacer scroll al inicio de la confirmación (opcional)
+    div.scrollIntoView({behavior: 'smooth'});
 }
+    
 async function confirmDelete(legajo) {
     try {
+        // Obtener el registro a eliminar
         const record = currentDeletingRow;
-        if (!record) return;
+        if (!record) {
+            showStatus('Error: No se encontró el registro para eliminar', 'error');
+            return;
+        }
         
-        // Ahora podemos usar _Legajo para la búsqueda
+        showStatus('Eliminando registro...', 'info');
+        
+        // Realizar la petición para eliminar el registro
         const res = await fetch('/webhook/delete', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 searchCriteria: { 
-                    field: 'Legajo',  // Nota: el campo en Google Sheets es "Legajo" (sin guion bajo)
+                    field: 'Legajo',  
                     value: record._Legajo 
                 } 
             })
@@ -1335,20 +1462,40 @@ async function confirmDelete(legajo) {
         
         if (result.success) {
             showStatus('Registro eliminado correctamente', 'success');
+            
+            // Limpiar la confirmación
             document.getElementById('delete-records').innerHTML = '';
             currentDeletingRow = null;
+            
+            // Volver a la pestaña de búsqueda y actualizar resultados
+            showTab('search');
+            
+            // Actualizar la lista de registros
+            if (document.getElementById('globalSearchText').value) {
+                performGlobalSearch();
+            } else {
+                loadAllRecords();
+            }
         } else {
             showStatus('Error al eliminar: ' + result.message, 'error');
         }
     } catch (err) {
         console.error('Error en la eliminación:', err);
-        showStatus('Error en la eliminación', 'error');
+        showStatus('Error en la eliminación: ' + err.message, 'error');
     }
 }
     
 function cancelDelete() {
-    document.getElementById('delete-records').innerHTML = '';
+    // Limpiar el registro actual de eliminación
     currentDeletingRow = null;
+    
+    // Limpiar el contenedor de confirmación
+    document.getElementById('delete-records').innerHTML = '';
+    
+    // Opcionalmente, volver a la pestaña de búsqueda
+    showTab('search');
+    
+    showStatus('Eliminación cancelada', 'info');
 }
 
 // -------- UTIL --------
