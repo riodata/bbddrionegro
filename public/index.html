@@ -1138,26 +1138,18 @@ function clearAdvancedSearch() {
 }
 
 // -------- EDIT/UPDATE FLOW --------
-async function editRecord(legajo) {
+function editRecord(legajo) {
     stopAllMedia();
     try {
         console.log('Editando registro con Legajo:', legajo);
-        
         // Buscar el registro con el Legajo proporcionado
         const record = currentRecords.find(r => r._Legajo == legajo);
-        
         if (!record) {
             showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
             return;
         }
-        
-        // Guardar el registro actual para edición
         currentEditingRow = record;
-        
-        // Cambiar a la pestaña de actualización
         showTab('update');
-        
-        // Mostrar el formulario de edición
         showUpdateForm(record);
     } catch (error) {
         console.error('Error al editar:', error);
@@ -1167,45 +1159,27 @@ async function editRecord(legajo) {
     
 function showUpdateForm(record) {
     stopAllMedia();
-    // Asegurarse de que estamos en la pestaña de actualización
     if (document.querySelector('.tab-content.active').id !== 'update') {
         showTab('update');
     }
-    
-    // Mostrar el contenedor del formulario
     document.getElementById('update-form-container').style.display = 'block';
-    
-    // Ocultar la lista de resultados (opcional, depende de tu diseño)
     document.getElementById('update-records-container').style.display = 'none';
-    
-    // Establecer el Legajo en el campo oculto
     document.getElementById('update-Legajo').value = record._Legajo;
-    
-    // Mostrar el Legajo en el título
     const formTitle = document.querySelector('#update-form-container h3');
     if (formTitle) {
         formTitle.textContent = `✏️ Editando Registro #${record._Legajo}`;
     }
-    
-    // Generar los campos del formulario dinámicamente
     const fieldsContainer = document.getElementById('update-fields');
     fieldsContainer.innerHTML = '';
-    
     Object.entries(record).forEach(([key, value]) => {
-        // No mostrar campos internos en el formulario
         if (key === '_Legajo' || key === '_rowIndex') return;
-        
-        // Crear un ID seguro para el campo
         const fieldId = `update-${key.replace(/\s+/g, '_')}`;
-        
-        // Determinar el tipo de autocomplete apropiado
         let autocompleteValue = 'off';
         if (key.toLowerCase().includes('mail') || key.toLowerCase().includes('email')) autocompleteValue = 'email';
         if (key.toLowerCase().includes('tel') || key.toLowerCase().includes('phone')) autocompleteValue = 'tel';
         if (key.toLowerCase().includes('dirección') || key.toLowerCase().includes('direccion')) autocompleteValue = 'street-address';
         if (key.toLowerCase().includes('localidad') || key.toLowerCase().includes('ciudad')) autocompleteValue = 'address-level2';
         if (key.toLowerCase().includes('codpost') || key.toLowerCase().includes('postal')) autocompleteValue = 'postal-code';
-        
         const fieldHtml = `
         <div class="form-group">
             <label for="${fieldId}">${key}:</label>
@@ -1213,104 +1187,19 @@ function showUpdateForm(record) {
         </div>`;
         fieldsContainer.innerHTML += fieldHtml;
     });
-    
-    // Hacer scroll al inicio del formulario (opcional)
     document.getElementById('update-form-container').scrollIntoView({behavior: 'smooth'});
 }
 
-// Función para manejar el submit del formulario de actualización
-// Función para manejar el submit del formulario de actualización
-async function handleUpdateFormSubmit(event) {
-    stopAllMedia();
-    if (event) {
-        event.preventDefault(); // Prevenir el envío estándar del formulario
-    }
-    
-    // Mostrar feedback visual
-    showStatus('Guardando cambios...', 'info');
-    
-    // Recopilar datos del formulario
-    const form = document.getElementById('updateForm');
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    // Obtener el Legajo
-    const legajo = data.Legajo;
-    
-    // Verificar que tenemos un Legajo
-    if (!legajo) {
-        showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
-        console.error('Legajo no encontrado en el formulario:', data);
-        return false;
-    }
-    
-    console.log('Actualizando registro con Legajo:', legajo);
-    console.log('Datos a enviar:', data);
-    
-    try {
-        // Realizar la petición al backend
-        const response = await fetch('/webhook/update', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                searchCriteria: { field: 'Legajo', value: legajo },
-                updateData: data
-            })
-        });
-        
-        // Verificar la respuesta del servidor
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus('Registro actualizado correctamente', 'success');
-            
-            // Ocultar el formulario
-            document.getElementById('update-form-container').style.display = 'none';
-            document.getElementById('update-records-container').style.display = 'block';
-            
-            // Limpiar el registro actual
-            currentEditingRow = null;
-            
-            // Volver a la pestaña de búsqueda
-            showTab('search');
-            
-            // Actualizar la lista de registros
-            if (document.getElementById('globalSearchText').value) {
-                performGlobalSearch();
-            } else {
-                loadAllRecords();
-            }
-        } else {
-            throw new Error(result.message || 'Error desconocido');
-        }
-    } catch (error) {
-        console.error('Error al actualizar:', error);
-        showStatus(`Error al actualizar: ${error.message}`, 'error');
-    }
-    
-    return false; // Prevenir el envío del formulario
-}
-
-// Asignar el manejador al evento submit del formulario
+// SOLO este manejador (el del event listener)
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('updateForm').onsubmit = function(event) {
         event.preventDefault();
-
-        // Prueba de log para depuración:
-        console.log('SUBMIT DEL UPDATE FORM DISPARADO');
-
+        stopAllMedia();
+        // Leer SIEMPRE los valores actuales del formulario
         const formData = new FormData(this);
         const data = Object.fromEntries(formData.entries());
         const legajo = data.Legajo;
-        if (!legajo) {
-            showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
-            return false;
-        }
-
         showStatus('Guardando cambios...', 'info');
-
         fetch('/webhook/update', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1341,7 +1230,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error al actualizar:', error);
             showStatus(`Error al actualizar: ${error.message}`, 'error');
         });
-
         return false;
     };
 });
