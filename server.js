@@ -312,10 +312,19 @@ app.put('/webhook/update', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Buscar la fila usando el criterio de búsqueda
+    console.log('Headers de hoja:', sheet.headerValues);
+    console.log('Campos a actualizar:', Object.keys(updateData));
+
+    // Debugging:
+    console.log('Intentando buscar fila para actualizar:', searchCriteria);
+    rows.forEach(row => {
+      const rowData = row.toObject();
+      console.log('Comparando', rowData[searchCriteria.field], 'con', searchCriteria.value);
+    });
+
     const rowToUpdate = rows.find(row => {
       const rowData = row.toObject();
-      return rowData[searchCriteria.field] == searchCriteria.value;
+      return String(rowData[searchCriteria.field]) === String(searchCriteria.value);
     });
 
     if (!rowToUpdate) {
@@ -325,9 +334,9 @@ app.put('/webhook/update', async (req, res) => {
       });
     }
 
-    // Actualizar los campos
+    console.log('Actualizando campos:', Object.keys(updateData));
     Object.keys(updateData).forEach(key => {
-      if (key !== '_rowIndex' && key !== '_Legajo') { // No actualizar los índices internos
+      if (key !== '_rowIndex' && key !== '_Legajo') {
         rowToUpdate[key] = updateData[key];
       }
     });
