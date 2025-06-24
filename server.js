@@ -128,8 +128,17 @@ app.get('/webhook/get/:Legajo', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
+    // Debug: imprime todos los valores de Legajo en la hoja
+    rows.forEach(row => {
+      console.log('Comparando:', (row.Legajo ?? '').toString().trim(), 'vs', (Legajo ?? '').toString().trim());
+    });
+
     // Búsqueda robusta: compara como string y limpia espacios
-    const record = rows.find(row => String(row.Legajo || '').trim() === String(Legajo).trim());
+    const record = rows.find(row => {
+      const sheetLegajo = (row.Legajo ?? '').toString().trim();
+      const paramLegajo = (Legajo ?? '').toString().trim();
+      return sheetLegajo === paramLegajo;
+    });
 
     if (!record) {
       return res.status(404).json({
@@ -142,7 +151,7 @@ app.get('/webhook/get/:Legajo', async (req, res) => {
       success: true,
       data: {
         ...record.toObject(),
-        _rowIndex: record.rowIndex // Esto es útil para editar después si lo necesitas
+        _rowIndex: record.rowIndex
       },
     });
   } catch (error) {
