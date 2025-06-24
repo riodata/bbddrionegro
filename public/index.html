@@ -677,8 +677,18 @@ const dropdownLists = {
     ]
 };
 
+function stopAllMedia() {
+    // Detener cualquier audio o video que pueda estar reproduciéndose
+    document.querySelectorAll('audio, video').forEach(media => {
+        if (!media.paused) {
+            media.pause();
+        }
+    });
+}
+    
 // -------- TAB MANAGEMENT --------
 function showTab(tabName) {
+    stopAllMedia();
     console.log('Cambiando a pestaña:', tabName);
     
     // Ocultar todas las pestañas y remover .active
@@ -1280,38 +1290,29 @@ async function handleUpdateFormSubmit(event) {
 }
 
 // Asignar el manejador al evento submit del formulario
-document.addEventListener('DOMContentLoaded', function() {
-    const updateForm = document.getElementById('updateForm');
-    if (updateForm) {
-        updateForm.addEventListener('submit', handleUpdateFormSubmit);
-    }
-});
-    
-// Manejador de evento submit para el formulario de actualización
 document.getElementById('updateForm').onsubmit = async function(e) {
-    e.preventDefault(); // Prevenir el envío estándar del formulario
+    e.preventDefault();
     
-    // Mostrar algún feedback visual
+    // Mostrar feedback visual
     showStatus('Guardando cambios...', 'info');
     
     // Recopilar datos del formulario
     const formData = new FormData(this);
     const data = Object.fromEntries(formData.entries());
     
-    // Obtener el Legajo del campo oculto
     const legajo = data.Legajo;
     
-    // Verificar que tenemos un Legajo
     if (!legajo) {
         showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
-        return;
+        console.error('Legajo no encontrado en el formulario:', data);
+        return false;
     }
     
     console.log('Actualizando registro con Legajo:', legajo);
     console.log('Datos a enviar:', data);
     
     try {
-        // Realizar la petición al backend
+        // Realizar la petición al backend con la URL correcta
         const response = await fetch('/webhook/update', {
             method: 'PUT',
             headers: {
@@ -1323,7 +1324,6 @@ document.getElementById('updateForm').onsubmit = async function(e) {
             })
         });
         
-        // Verificar si la respuesta fue exitosa
         if (!response.ok) {
             throw new Error(`Error HTTP: ${response.status}`);
         }
@@ -1332,20 +1332,22 @@ document.getElementById('updateForm').onsubmit = async function(e) {
         
         if (result.success) {
             showStatus('Registro actualizado correctamente', 'success');
-            document.getElementById('update-form-container').style.display = 'none';
             
-            // Actualizar la lista de registros si estamos en la pestaña correcta
-            const activeTab = document.querySelector('.tab-content.active').id;
-            if (activeTab === 'update') {
-                // Recargar los registros para mostrar los cambios
-                const searchText = document.getElementById('globalSearchText').value;
-                const searchField = document.getElementById('globalSearchField').value;
-                
-                if (searchText && searchField) {
-                    performGlobalSearch(); // Repetir la búsqueda actual
-                } else {
-                    loadAllRecords(); // Cargar todos los registros
-                }
+            // Ocultar el formulario
+            document.getElementById('update-form-container').style.display = 'none';
+            document.getElementById('update-records-container').style.display = 'block';
+            
+            // Limpiar el registro actual
+            currentEditingRow = null;
+            
+            // Volver a la pestaña de búsqueda
+            showTab('search');
+            
+            // Actualizar la lista de registros
+            if (document.getElementById('globalSearchText').value) {
+                performGlobalSearch();
+            } else {
+                loadAllRecords();
             }
         } else {
             throw new Error(result.message || 'Error desconocido');
@@ -1354,6 +1356,8 @@ document.getElementById('updateForm').onsubmit = async function(e) {
         console.error('Error al actualizar:', error);
         showStatus(`Error al actualizar: ${error.message}`, 'error');
     }
+    
+    return false;
 };
     
 function cancelUpdate() {
