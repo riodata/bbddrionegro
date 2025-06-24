@@ -1138,6 +1138,7 @@ function clearAdvancedSearch() {
 
 // -------- EDIT/UPDATE FLOW --------
 async function editRecord(legajo) {
+    stopAllMedia();
     try {
         console.log('Editando registro con Legajo:', legajo);
         
@@ -1164,6 +1165,7 @@ async function editRecord(legajo) {
 }
     
 function showUpdateForm(record) {
+    stopAllMedia();
     // Asegurarse de que estamos en la pestaña de actualización
     if (document.querySelector('.tab-content.active').id !== 'update') {
         showTab('update');
@@ -1218,6 +1220,7 @@ function showUpdateForm(record) {
 // Función para manejar el submit del formulario de actualización
 // Función para manejar el submit del formulario de actualización
 async function handleUpdateFormSubmit(event) {
+    stopAllMedia();
     if (event) {
         event.preventDefault(); // Prevenir el envío estándar del formulario
     }
@@ -1294,6 +1297,7 @@ document.getElementById('updateForm').onsubmit = async function(e) {
     e.preventDefault();
     
     // Mostrar feedback visual
+    stopAllMedia();
     showStatus('Guardando cambios...', 'info');
     
     // Recopilar datos del formulario
@@ -1361,6 +1365,7 @@ document.getElementById('updateForm').onsubmit = async function(e) {
 };
     
 function cancelUpdate() {
+    stopAllMedia();
     // Limpiar el registro actual de edición
     currentEditingRow = null;
     
@@ -1378,6 +1383,7 @@ function cancelUpdate() {
 
 // -------- DELETE FLOW --------
 function deleteRecord(legajo) {
+    stopAllMedia();
     try {
         console.log('Eliminando registro con Legajo:', legajo);
         
@@ -1440,6 +1446,7 @@ function showDeleteConfirmation(record) {
 }
     
 async function confirmDelete(legajo) {
+    stopAllMedia();
     try {
         // Obtener el registro a eliminar
         const record = currentDeletingRow;
@@ -1490,6 +1497,7 @@ async function confirmDelete(legajo) {
 }
     
 function cancelDelete() {
+    stopAllMedia();
     // Limpiar el registro actual de eliminación
     currentDeletingRow = null;
     
