@@ -299,7 +299,6 @@ app.post('/webhook/search/advanced', async (req, res) => {
 
 
 // UPDATE - Actualizar un registro específico
-// UPDATE - Actualizar un registro por criterio de búsqueda
 app.put('/webhook/update', async (req, res) => {
   try {
     const { searchCriteria, updateData } = req.body;
