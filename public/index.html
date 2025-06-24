@@ -598,7 +598,7 @@
                 <!-- Búsqueda para actualizar -->
                 <div id="update-form-container" style="display: none;">
                     <h3>✏️ Editando Registro</h3>
-                    <form id="updateForm">
+                    <form id="updateForm" onsubmit="return handleUpdateFormSubmit(event)">
                         <input type="hidden" id="update-Legajo" name="Legajo">
                         <!-- Los campos se generarán dinámicamente -->
                         <div id="update-fields"></div>
@@ -1144,43 +1144,135 @@ function showUpdateForm(record) {
         fieldsContainer.innerHTML += fieldHtml;
     });
 }
+
+// Función para manejar el submit del formulario de actualización
+async function handleUpdateFormSubmit(event) {
+    event.preventDefault(); // Prevenir el envío estándar del formulario
     
-// On submit updateForm, send to backend
-document.getElementById('updateForm').onsubmit = async function(e) {
-    e.preventDefault();
+    // Mostrar algún feedback visual
+    showStatus('Guardando cambios...', 'info');
     
-    // Obtener los datos del formulario
-    const formData = new FormData(this);
+    // Recopilar datos del formulario
+    const form = document.getElementById('updateForm');
+    const formData = new FormData(form);
     const data = Object.fromEntries(formData.entries());
     
-    const legajo = data.Legajo; // Obtener el valor del Legajo del formulario
+    // Obtener el Legajo del campo oculto
+    const legajo = data.Legajo;
+    
+    // Verificar que tenemos un Legajo
+    if (!legajo) {
+        showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
+        console.error('Legajo no encontrado en el formulario:', data);
+        return false;
+    }
+    
+    console.log('Actualizando registro con Legajo:', legajo);
+    console.log('Datos a enviar:', data);
     
     try {
-        // En lugar de usar la URL con el Legajo, usamos la URL con searchCriteria
-        const res = await fetch('/webhook/update', {
+        // Realizar la petición al backend
+        const response = await fetch('/webhook/update', {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 searchCriteria: { field: 'Legajo', value: legajo },
                 updateData: data
             })
         });
         
-        const result = await res.json();
+        // Verificar la respuesta del servidor
+        const result = await response.json();
+        
         if (result.success) {
             showStatus('Registro actualizado correctamente', 'success');
             document.getElementById('update-form-container').style.display = 'none';
-            // Opcional: Recargar los datos
-            if (document.querySelector('.tab-content.active').id === 'update') {
-                // Si estamos en la pestaña de actualización, actualizar los resultados
-                loadAllRecords();
+            
+            // Actualizar la lista de registros si estamos en la pestaña correcta
+            const activeTab = document.querySelector('.tab-content.active').id;
+            if (activeTab === 'update') {
+                // Recargar los registros para mostrar los cambios
+                performGlobalSearch(); // Repetir la búsqueda actual si hay criterios
             }
         } else {
-            showStatus('Error al actualizar: ' + result.message, 'error');
+            throw new Error(result.message || 'Error desconocido');
         }
-    } catch (err) {
-        console.error('Error en la actualización:', err);
-        showStatus('Error en la actualización', 'error');
+    } catch (error) {
+        console.error('Error al actualizar:', error);
+        showStatus(`Error al actualizar: ${error.message}`, 'error');
+    }
+    
+    return false; // Prevenir el envío del formulario
+}
+    
+// Manejador de evento submit para el formulario de actualización
+document.getElementById('updateForm').onsubmit = async function(e) {
+    e.preventDefault(); // Prevenir el envío estándar del formulario
+    
+    // Mostrar algún feedback visual
+    showStatus('Guardando cambios...', 'info');
+    
+    // Recopilar datos del formulario
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+    
+    // Obtener el Legajo del campo oculto
+    const legajo = data.Legajo;
+    
+    // Verificar que tenemos un Legajo
+    if (!legajo) {
+        showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
+        return;
+    }
+    
+    console.log('Actualizando registro con Legajo:', legajo);
+    console.log('Datos a enviar:', data);
+    
+    try {
+        // Realizar la petición al backend
+        const response = await fetch('/webhook/update', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                searchCriteria: { field: 'Legajo', value: legajo },
+                updateData: data
+            })
+        });
+        
+        // Verificar si la respuesta fue exitosa
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showStatus('Registro actualizado correctamente', 'success');
+            document.getElementById('update-form-container').style.display = 'none';
+            
+            // Actualizar la lista de registros si estamos en la pestaña correcta
+            const activeTab = document.querySelector('.tab-content.active').id;
+            if (activeTab === 'update') {
+                // Recargar los registros para mostrar los cambios
+                const searchText = document.getElementById('globalSearchText').value;
+                const searchField = document.getElementById('globalSearchField').value;
+                
+                if (searchText && searchField) {
+                    performGlobalSearch(); // Repetir la búsqueda actual
+                } else {
+                    loadAllRecords(); // Cargar todos los registros
+                }
+            }
+        } else {
+            throw new Error(result.message || 'Error desconocido');
+        }
+    } catch (error) {
+        console.error('Error al actualizar:', error);
+        showStatus(`Error al actualizar: ${error.message}`, 'error');
     }
 };
     
