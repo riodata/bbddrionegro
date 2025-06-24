@@ -386,9 +386,8 @@
         </div>
 
         <div class="tabs">
-            <button class="tab active" onclick="showTab('create')">➕ Crear</button>
+            <button class="tab active" onclick="showTab('registro')">➕ Crear / Editar</button>
             <button class="tab" onclick="showTab('search')">📋 Buscar</button>
-            <button class="tab" onclick="showTab('update')">✏️ Actualizar</button>
             <button class="tab" onclick="showTab('delete')">🗑️ Eliminar</button>
         </div>
 
@@ -417,10 +416,12 @@
                 </div>
             </div>
 
-            <!-- CREATE TAB -->
-            <div id="create" class="tab-content active">
-                <h2>Crear Nuevo Registro</h2>
-                <form id="createForm">
+              <!-- REGISTRO TAB: ÚNICO FORMULARIO PARA CREAR Y EDITAR -->
+            <div id="registro" class="tab-content active">
+                <h2 id="registroFormTitle">Crear Nuevo Registro</h2>
+                <form id="registroForm">
+                  <input type="hidden" id="editMode" value="false">
+                  <input type="hidden" id="rowIndex" name="rowIndex">
                   <div class="form-group">
                     <label for="Legajo">Legajo:</label>
                     <input type="text" id="Legajo" name="Legajo" required>
@@ -456,19 +457,19 @@
                   <div class="form-group">
                     <label for="Presid">Presidente:</label>
                     <input type="text" id="Presid" name="Presid" required>
-                  </div> 
+                  </div>
                   <div class="form-group">
                     <label for="Mail">Correo electrónico:</label>
                     <input type="email" id="Mail" name="Mail" required>
-                  </div> 
+                  </div>
                   <div class="form-group">
                     <label for="EstadoEntid">Fecha Estado Entidad:</label>
                     <input type="date" id="EstadoEntid" name="EstadoEntid" required>
-                  </div>                 
+                  </div>
                   <div class="form-group">
                     <label for="FechaAsamb">Fecha Asamblea:</label>
                     <input type="date" id="FechaAsamb" name="FechaAsamb" required>
-                  </div> 
+                  </div>
                   <div class="form-group">
                     <label for="TipoAsamb">Tipo de asamblea:</label>
                     <select id="TipoAsamb" name="TipoAsamb" required>
@@ -486,7 +487,7 @@
                   <div class="form-group">
                     <label for="Sindicatura">Sindicatura:</label>
                     <input type="text" id="Sindicatura" name="Sindicatura">
-                  </div>                    
+                  </div>
                   <div class="form-group">
                     <label for="Localidad">Localidad:</label>
                     <input type="text" id="Localidad" name="Localidad">
@@ -536,7 +537,7 @@
                       <option value="Trabajo">Trabajo</option>
                       <option value="Vivienda">Vivienda</option>
                     </select>
-                  </div>                
+                  </div>
                   <div class="form-group">
                     <label for="Subtipo">Subtipo:</label>
                     <select id="Subtipo" name="Subtipo">
@@ -562,7 +563,7 @@
                       <option value="Radiodifusión">Radiodifusión</option>
                       <option value="Rurales">Rurales</option>
                     </select>
-                  </div>                    
+                  </div>
                   <div class="form-group">
                     <label for="Observaciones">Observaciones:</label>
                     <textarea id="Observaciones" name="Observaciones" rows="3"></textarea>
@@ -575,7 +576,8 @@
                     <label for="Longitud">Longitud:</label>
                     <input type="text" id="Longitud" name="Longitud">
                   </div>
-                  <button type="submit" class="btn">Crear Registro</button>
+                  <button type="submit" class="btn" id="registroFormBtn">Crear Registro</button>
+                  <button type="button" class="btn btn-clear" id="cancelEditBtn" style="display:none" onclick="cancelEdit()">Cancelar</button>
                 </form>
             </div>
 
@@ -647,114 +649,124 @@
             </div>
 
 <script>
-const API_BASE = window.location.origin;
+let isEditing = false;
+let currentEditRowIndex = null;
 
-// Variables globales
-let currentRecords = [];
-let availableFields = [];
-let currentEditingRow = null; // for update
-let currentDeletingRow = null; // for delete
-let searchFields = [];
-let filterCount = 0;
+// Cuando el usuario hace clic en "Editar" desde resultados
+function editRecord(rowIndex) {
+    isEditing = true;
+    currentEditRowIndex = rowIndex;
+    fetch(`/webhook/read/row/${rowIndex}`)
+        .then(res => res.json())
+        .then(result => {
+            if (result.success && result.data) {
+                fillRegistroForm(result.data);
+                showTab('registro');
+            } else {
+                alert('No se pudo cargar el registro para editar');
+            }
+        })
+        .catch(() => alert('Error al cargar el registro para edición'));
+}
 
-// Opciones de dropdown
-const dropdownLists = {
-    tipo: [
-        "Agrícola", "Agrícola-ganadera", "Consumo", "Federación", "Frutícola", "Frutihortícola",
-        "Ganadera", "Producción", "Provisión", "Servicios", "Servicios públicos", "Trabajo", "Vivienda"
-    ],
-    subtipo: [
-        "Atención de personas", "Audiovisual", "Bienes y servicios", "Comercialización e industrialización",
-        "Comercialización y consumo", "Comercialización y explotación", "Comercialización y producción",
-        "Comercialización y provisión", "Comercialización y transporte", "Construcción",
-        "Construcción de estaciones transformadores de transmisión", "Cultura", "Diseño y producción",
-        "Educativa", "Empaque y embalaje de frutas", "Estacionamiento medido y pago", "No aplica",
-        "Producción y consumo", "Radiodifusión", "Rurales", "Servicio de crédito", "Servicios contables",
-        "Servicios de agua potable", "Servicios de asesoria", "Servicios de carga y descarga",
-        "Servicios de electricidad", "Servicios de empaque", "Servicios de lavadero",
-        "Servicios de mantenimiento", "Servicios de recolección", "Servicios en bienes móviles",
-        "Servicios generales", "Servicios médicos", "Servicios metalúrgicos", "Servicios telefónicos",
-        "Servivcios hoteleros", "Textil", "Transporte", "Turismo"
-    ]
-};
+function fillRegistroForm(data) {
+    document.getElementById('registroFormTitle').textContent = "Editar Registro";
+    document.getElementById('registroFormBtn').textContent = "Guardar Cambios";
+    document.getElementById('cancelEditBtn').style.display = '';
+    document.getElementById('editMode').value = "true";
+    document.getElementById('rowIndex').value = data._rowIndex ?? "";
 
-function stopAllMedia() {
-    // Detener cualquier audio o video que pueda estar reproduciéndose
-    document.querySelectorAll('audio, video').forEach(media => {
-        if (!media.paused) {
-            media.pause();
+    // Llenar cada campo, si existe en el form
+    Object.keys(data).forEach(key => {
+        let field = document.getElementById(key);
+        if (field) {
+            if (field.tagName === "SELECT" || field.tagName === "INPUT" || field.tagName === "TEXTAREA") {
+                field.value = data[key] || "";
+            }
         }
     });
 }
-    
-// -------- TAB MANAGEMENT --------
-function showTab(tabName) {
-    stopAllMedia();
-    console.log('Cambiando a pestaña:', tabName);
-    
-    // Ocultar todas las pestañas y remover .active
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-    
-    // Mostrar la seleccionada
-    const selectedTab = document.getElementById(tabName);
-    const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
-    
-    if (selectedTab) {
-        selectedTab.classList.add('active');
-    } else {
-        console.error('No se encontró la pestaña:', tabName);
-    }
-    
-    if (selectedButton) {
-        selectedButton.classList.add('active');
-    } else {
-        console.error('No se encontró el botón para la pestaña:', tabName);
-    }
 
-    // Mostrar barra búsqueda global si corresponde
-    document.getElementById('global-search').style.display =
-        ['search', 'update', 'delete'].includes(tabName) ? 'block' : 'none';
+function clearRegistroForm() {
+    document.getElementById('registroFormTitle').textContent = "Crear Nuevo Registro";
+    document.getElementById('registroFormBtn').textContent = "Crear Registro";
+    document.getElementById('cancelEditBtn').style.display = 'none';
+    document.getElementById('editMode').value = "false";
+    document.getElementById('rowIndex').value = "";
 
-    // Cargar campos si es necesario
-    if (tabName === 'search') loadFieldsForSearch();
-    if (['update', 'delete'].includes(tabName)) loadFieldsForGlobalSearch();
-    
-    // Si hay registro seleccionado para editar/eliminar, mostrarlo
-    if (tabName === 'update' && currentEditingRow) {
-        showUpdateForm(currentEditingRow);
-    }
-    if (tabName === 'delete' && currentDeletingRow) {
-        showDeleteConfirmation(currentDeletingRow);
-    }
+    // Limpiar todos los campos del form
+    const form = document.getElementById('registroForm');
+    form.reset();
 }
 
-document.getElementById('createForm').onsubmit = async function (e) {
-  e.preventDefault();
+// Lógica para cancelar edición
+function cancelEdit() {
+    isEditing = false;
+    currentEditRowIndex = null;
+    clearRegistroForm();
+    showTab('search');
+}
 
-  const formData = new FormData(this);
-  const data = Object.fromEntries(formData.entries());
+// Handler general para submit (creación y edición)
+document.getElementById('registroForm').onsubmit = async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
 
-  try {
-    const response = await fetch('/webhook/create', {
-      method: 'POST', // Cambiado de GET a POST
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+    if (document.getElementById('editMode').value === "true") {
+        // EDICIÓN
+        const rowIndex = data.rowIndex;
+        // Remover rowIndex y editMode antes de enviar
+        delete data.rowIndex;
+        delete data.editMode;
 
-    const result = await response.json();
-    if (result.success) {
-      alert('Registro creado exitosamente');
+        try {
+            const response = await fetch(`/webhook/update/${rowIndex}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+            if (result.success) {
+                alert('Registro editado exitosamente');
+                clearRegistroForm();
+                showTab('search');
+                loadAllRecords();
+                isEditing = false;
+            } else {
+                alert('Error al editar el registro: ' + result.message);
+            }
+        } catch (err) {
+            console.error('Error:', err);
+            alert('Error al enviar el formulario');
+        }
     } else {
-      alert('Error al crear el registro: ' + result.message);
+        // CREACIÓN
+        try {
+            const response = await fetch('/webhook/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert('Registro creado exitosamente');
+                clearRegistroForm();
+            } else {
+                alert('Error al crear el registro: ' + result.message);
+            }
+        } catch (err) {
+            console.error('Error:', err);
+            alert('Error al enviar el formulario');
+        }
     }
-  } catch (err) {
-    console.error('Error:', err);
-    alert('Error al enviar el formulario');
-  }
 };
+
+// Cuando el usuario hace clic en la pestaña "Crear / Editar" limpia el form
+document.querySelector('.tab[onclick="showTab(\'registro\')"]').addEventListener('click', () => {
+    clearRegistroForm();
+});
 
 // -------- SEARCH TAB --------
 async function loadAllRecords() {
@@ -918,55 +930,6 @@ function performGlobalSearch() {
             console.error('Error:', error);
             showStatus('Error al realizar la búsqueda', 'error');
         });
-}
-
-function displayUpdateResults(records) {
-    const container = document.getElementById('search-records-container');
-    if (!records.length) {
-        container.innerHTML = '<div class="no-records">No se encontraron registros.</div>';
-        return;
-    }
-    container.innerHTML = '';
-    records.forEach(record => {
-        const div = document.createElement('div');
-        div.className = 'record';
-        
-        // Crear estructura con cabecera para los botones
-        let headerHtml = '<div class="record-header">';
-        
-        // Añadir título - usar el Legajo como identificador visual
-        const legajo = record._Legajo;
-        headerHtml += `<div class="record-title">Registro #${legajo || 'S/N'}</div>`;
-        
-        // Añadir botones en la cabecera
-        headerHtml += '<div class="record-buttons">';
-        if (typeof legajo !== 'undefined') {
-            headerHtml += `
-                <button class="btn btn-success" onclick="editRecord('${legajo}')">✏️ Editar</button>
-                <button class="btn btn-danger" onclick="deleteRecord('${legajo}')">🗑️ Borrar</button>
-            `;
-        }
-        headerHtml += '</div></div>';
-        
-        // Agregar la cabecera al div
-        div.innerHTML = headerHtml;
-        
-        // Crear contenedor para el contenido
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'record-content';
-        
-        // Añadir el contenido del registro exceptuando los campos internos
-        contentDiv.innerHTML = Object.entries(record)
-            .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
-            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
-            .join('<br>');
-        
-        // Añadir el contenido al div principal
-        div.appendChild(contentDiv);
-        
-        // Añadir el registro al contenedor
-        container.appendChild(div);
-    });
 }
 
 function displayDeleteResults(records) {
