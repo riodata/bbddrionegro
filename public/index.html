@@ -627,6 +627,12 @@
     </div>
 
 <script>
+const API_BASE = window.location.origin;
+
+let currentRecords = [];
+let availableFields = [];
+let searchFields = [];
+let filterCount = 0;
 let isEditing = false;
 let currentEditRowIndex = null;
 
