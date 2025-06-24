@@ -125,11 +125,11 @@ app.get('/webhook/read', async (req, res) => {
 app.get('/webhook/get/:Legajo', async (req, res) => {
   try {
     const { Legajo } = req.params;
-
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    const record = rows.find(row => row.Legajo === Legajo);
+    // Búsqueda robusta: compara como string y limpia espacios
+    const record = rows.find(row => String(row.Legajo || '').trim() === String(Legajo).trim());
 
     if (!record) {
       return res.status(404).json({
@@ -140,7 +140,10 @@ app.get('/webhook/get/:Legajo', async (req, res) => {
 
     res.json({
       success: true,
-      data: record.toObject(),
+      data: {
+        ...record.toObject(),
+        _rowIndex: record.rowIndex // Esto es útil para editar después si lo necesitas
+      },
     });
   } catch (error) {
     console.error('Error obteniendo el registro:', error);
