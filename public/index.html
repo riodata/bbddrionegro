@@ -619,7 +619,7 @@
                 <!-- Búsqueda para actualizar -->
                 <div id="update-form-container" style="display: none;">
                     <h3>✏️ Editando Registro</h3>
-                    <form id="updateForm" onsubmit="return handleUpdateFormSubmit(event)">
+                    <form id="updateForm">
                         <input type="hidden" id="update-Legajo" name="Legajo">
                         <!-- Los campos se generarán dinámicamente -->
                         <div id="update-fields"></div>
@@ -628,6 +628,7 @@
                             <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
                         </div>
                     </form>
+                </div>
 
                 <!-- Contenedor de registros para actualizar -->
                 <div id="update-records-container" class="records-container">
@@ -1293,71 +1294,57 @@ async function handleUpdateFormSubmit(event) {
 }
 
 // Asignar el manejador al evento submit del formulario
-document.getElementById('updateForm').onsubmit = function(e) {
-    e.preventDefault();
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('updateForm').onsubmit = function(event) {
+        event.preventDefault();
 
-    const formData = new FormData(this);
-    const data = Object.fromEntries(formData.entries());
+        // Prueba de log para depuración:
+        console.log('SUBMIT DEL UPDATE FORM DISPARADO');
 
-    const legajo = data.Legajo;
-    if (!legajo) {
-        showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
-        return false;
-    }
-
-    showStatus('Guardando cambios...', 'info');
-
-    fetch('/webhook/update', {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            searchCriteria: { field: 'Legajo', value: legajo },
-            updateData: data
-        })
-    })
-    .then(response => response.json())
-    .then(result => {
-        if (result.success) {
-            showStatus('Registro actualizado correctamente', 'success');
-            document.getElementById('update-form-container').style.display = 'none';
-            document.getElementById('update-records-container').style.display = 'block';
-            currentEditingRow = null;
-            showTab('search');
-            if (document.getElementById('globalSearchText').value) {
-                performGlobalSearch();
-            } else {
-                loadAllRecords();
-            }
-        } else {
-            showStatus('Error al actualizar: ' + result.message, 'error');
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData.entries());
+        const legajo = data.Legajo;
+        if (!legajo) {
+            showStatus('Error: No se encontró el identificador del registro (Legajo)', 'error');
+            return false;
         }
-    })
-    .catch(error => {
-        console.error('Error al actualizar:', error);
-        showStatus(`Error al actualizar: ${error.message}`, 'error');
-    });
 
-    return false;
-};
-    
-function cancelUpdate() {
-    stopAllMedia();
-    // Limpiar el registro actual de edición
-    currentEditingRow = null;
-    
-    // Ocultar el formulario
-    document.getElementById('update-form-container').style.display = 'none';
-    
-    // Mostrar la lista de registros de nuevo
-    document.getElementById('update-records-container').style.display = 'block';
-    
-    // Opcionalmente, volver a la pestaña de búsqueda
-    showTab('search');
-    
-    showStatus('Edición cancelada', 'info');
-}
+        showStatus('Guardando cambios...', 'info');
+
+        fetch('/webhook/update', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                searchCriteria: { field: 'Legajo', value: legajo },
+                updateData: data
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            console.log('RESPUESTA DEL BACKEND:', result);
+            if (result.success) {
+                showStatus('Registro actualizado correctamente', 'success');
+                document.getElementById('update-form-container').style.display = 'none';
+                document.getElementById('update-records-container').style.display = 'block';
+                currentEditingRow = null;
+                showTab('search');
+                if (document.getElementById('globalSearchText').value) {
+                    performGlobalSearch();
+                } else {
+                    loadAllRecords();
+                }
+            } else {
+                showStatus('Error al actualizar: ' + result.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error al actualizar:', error);
+            showStatus(`Error al actualizar: ${error.message}`, 'error');
+        });
+
+        return false;
+    };
+});
 
 // -------- DELETE FLOW --------
 function deleteRecord(legajo) {
