@@ -297,12 +297,11 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
-
-// UPDATE - Actualizar un registro específico
+// UPDATE - Actualizar un registro por criterio de búsqueda
 app.put('/webhook/update', async (req, res) => {
   try {
     const { searchCriteria, updateData } = req.body;
-    
+
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
         success: false,
@@ -409,28 +408,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Endpoint de estadísticas
-app.get('/stats', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-
-    res.json({
-      timestamp: new Date().toISOString(),
-      totalRecords: rows.length,
-      serverUptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      nodeVersion: process.version,
-      environment: process.env.NODE_ENV || 'development'
-    });
-  } catch (error) {
-    res.status(503).json({
-      error: 'Database connection failed',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
 // Endpoint de prueba de conectividad
 app.get('/test-connection', async (req, res) => {
   try {
@@ -490,4 +467,9 @@ app.listen(PORT, () => {
   console.log(`Frontend available at /`);
   console.log(`Health check available at /health`);
   console.log(`Keep-alive available at /ping`);
+});
+
+// NUEVO: Manejar rutas SPA - debe ir al final
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
