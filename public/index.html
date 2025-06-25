@@ -1190,22 +1190,45 @@ function showUpdateForm(record) {
     document.getElementById('update-form-container').scrollIntoView({behavior: 'smooth'});
 }
 
-// SOLO este manejador (el del event listener)
+function cancelUpdate() {
+    document.getElementById('update-form-container').style.display = 'none';
+    document.getElementById('update-records-container').style.display = 'block';
+    currentEditingRow = null;
+    showTab('search');
+}
+
+// Función para obtener todos los valores actuales del formulario de actualización
+function obtenerValoresActualesFormularioUpdate() {
+    const formulario = document.getElementById('updateForm');
+    const formData = new FormData(formulario);
+    
+    // Crear un objeto con los valores actualizados
+    const datosActualizados = {};
+    formData.forEach((value, key) => {
+        datosActualizados[key] = value;
+    });
+    
+    return datosActualizados;
+}
+
+// REEMPLAZAR el manejador existente para el formulario de actualización
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('updateForm').onsubmit = function(event) {
         event.preventDefault();
         stopAllMedia();
-        // Leer SIEMPRE los valores actuales del formulario
-        const formData = new FormData(this);
-        const data = Object.fromEntries(formData.entries());
-        const legajo = data.Legajo;
+        
+        // Obtener los valores ACTUALES del formulario en el momento del envío
+        const datosActualizados = obtenerValoresActualesFormularioUpdate();
+        const legajo = datosActualizados.Legajo;
+        
         showStatus('Guardando cambios...', 'info');
+        
         fetch('/webhook/update', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 searchCriteria: { field: 'Legajo', value: legajo },
-                updateData: data
+                updateData: datosActualizados // Usar los valores actualizados
             })
         })
         .then(response => response.json())
@@ -1385,4 +1408,5 @@ function initializeGlobalSearch() {
 }
 document.addEventListener('DOMContentLoaded', initializeGlobalSearch);
 </script>
-</body></html>
+</body>
+</html>
