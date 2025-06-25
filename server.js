@@ -299,9 +299,12 @@ app.post('/webhook/search/advanced', async (req, res) => {
 
 
 // UPDATE - Actualizar un registro específico
+// UPDATE - Actualizar un registro específico
 app.put('/webhook/update', async (req, res) => {
   try {
     const { searchCriteria, updateData } = req.body;
+    
+    console.log('Datos recibidos para actualizar:', updateData);
     
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
@@ -312,46 +315,110 @@ app.put('/webhook/update', async (req, res) => {
 
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
+    
+    console.log(`Buscando registro con ${searchCriteria.field}=${searchCriteria.value}`);
 
     // Buscar la fila usando el criterio de búsqueda
-    const rowToUpdate = rows.find(row => {
+    const rowIndex = rows.findIndex(row => {
       const rowData = row.toObject();
       return rowData[searchCriteria.field] == searchCriteria.value;
     });
 
-    if (!rowToUpdate) {
+    if (rowIndex === -1) {
       return res.status(404).json({
         success: false,
         message: `Registro no encontrado con ${searchCriteria.field}=${searchCriteria.value}`
       });
     }
+    
+    const rowToUpdate = rows[rowIndex];
+    console.log('Registro encontrado en la fila:', rowToUpdate.rowIndex);
+    
+    // Guardar una copia de los valores originales para comparar
+    const originalValues = rowToUpdate.toObject();
+    console.log('Valores originales:', originalValues);
 
     // Actualizar los campos
     Object.keys(updateData).forEach(key => {
-      if (key !== '_rowIndex' && key !== '_Legajo') { // No actualizar los índices internos
+      if (key !== '_rowIndex' && key !== '_Legajo') {
+        console.log(`Actualizando campo ${key}: "${originalValues[key]}" -> "${updateData[key]}"`);
         rowToUpdate[key] = updateData[key];
       }
     });
 
-    await rowToUpdate.save();
-
-    // MODIFICACIÓN: Usar directamente updateData en la respuesta
-    // en lugar de rowToUpdate.toObject()
-    res.json({
-      success: true,
-      message: 'Registro actualizado correctamente',
-      data: {
-        ...updateData, // Usar los datos actualizados enviados por el cliente
-        _Legajo: rowToUpdate.get('Legajo'),
-        _rowIndex: rowToUpdate.rowIndex
+    try {
+      console.log('Guardando cambios...');
+      await rowToUpdate.save();
+      console.log('Cambios guardados correctamente');
+      
+      // Intentar validar que los cambios se guardaron correctamente
+      // Recargar la fila para verificar
+      const updatedRows = await sheet.getRows();
+      const refreshedRow = updatedRows[rowIndex];
+      const refreshedData = refreshedRow.toObject();
+      
+      console.log('Datos después de guardar:', refreshedData);
+      
+      // Verificar si los cambios se aplicaron correctamente
+      let allChangesApplied = true;
+      Object.keys(updateData).forEach(key => {
+        if (key !== '_rowIndex' && key !== '_Legajo') {
+          if (refreshedData[key] !== updateData[key]) {
+            console.log(`¡Advertencia! El campo ${key} no se actualizó correctamente.`);
+            console.log(`  Esperado: "${updateData[key]}"`);
+            console.log(`  Actual: "${refreshedData[key]}"`);
+            allChangesApplied = false;
+          }
+        }
+      });
+      
+      // Como alternativa, intentar una actualización más "directa"
+      if (!allChangesApplied) {
+        console.log('Intentando actualización alternativa...');
+        
+        // Actualizar usando la API directamente
+        await sheet.loadCells();
+        
+        // Obtener encabezados para mapear columnas
+        const headers = sheet.headerValues;
+        
+        Object.keys(updateData).forEach(key => {
+          if (key !== '_rowIndex' && key !== '_Legajo') {
+            const colIndex = headers.findIndex(h => h === key);
+            if (colIndex !== -1) {
+              const cell = sheet.getCell(rowToUpdate.rowIndex - 1, colIndex);
+              cell.value = updateData[key];
+              console.log(`Actualización directa: celda[${rowToUpdate.rowIndex - 1},${colIndex}] = "${updateData[key]}"`);
+            }
+          }
+        });
+        
+        await sheet.saveUpdatedCells();
+        console.log('Actualización directa completada');
       }
-    });
+      
+      res.json({
+        success: true,
+        message: allChangesApplied ? 
+          'Registro actualizado correctamente' : 
+          'Registro actualizado, pero algunos cambios podrían no haberse aplicado inmediatamente',
+        data: {
+          ...updateData,
+          _Legajo: rowToUpdate.get('Legajo'),
+          _rowIndex: rowToUpdate.rowIndex
+        }
+      });
+    } catch (saveError) {
+      console.error('Error al guardar:', saveError);
+      throw saveError;
+    }
   } catch (error) {
     console.error('Error updating record:', error);
     res.status(500).json({
       success: false,
       message: 'Error al actualizar el registro',
-      error: error.message
+      error: error.message,
+      stack: error.stack
     });
   }
 });
