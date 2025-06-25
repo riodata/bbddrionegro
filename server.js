@@ -335,11 +335,13 @@ app.put('/webhook/update', async (req, res) => {
 
     await rowToUpdate.save();
 
+    // MODIFICACIÓN: Usar directamente updateData en la respuesta
+    // en lugar de rowToUpdate.toObject()
     res.json({
       success: true,
       message: 'Registro actualizado correctamente',
       data: {
-        ...rowToUpdate.toObject(),
+        ...updateData, // Usar los datos actualizados enviados por el cliente
         _Legajo: rowToUpdate.get('Legajo'),
         _rowIndex: rowToUpdate.rowIndex
       }
