@@ -125,20 +125,11 @@ app.get('/webhook/read', async (req, res) => {
 app.get('/webhook/get/:Legajo', async (req, res) => {
   try {
     const { Legajo } = req.params;
+
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    // Debug: imprime todos los valores de Legajo en la hoja
-    rows.forEach(row => {
-      console.log('Comparando:', (row.Legajo ?? '').toString().trim(), 'vs', (Legajo ?? '').toString().trim());
-    });
-
-    // Búsqueda robusta: compara como string y limpia espacios
-    const record = rows.find(row => {
-      const sheetLegajo = (row.Legajo ?? '').toString().trim();
-      const paramLegajo = (Legajo ?? '').toString().trim();
-      return sheetLegajo === paramLegajo;
-    });
+    const record = rows.find(row => row.Legajo === Legajo);
 
     if (!record) {
       return res.status(404).json({
@@ -149,10 +140,7 @@ app.get('/webhook/get/:Legajo', async (req, res) => {
 
     res.json({
       success: true,
-      data: {
-        ...record.toObject(),
-        _rowIndex: record.rowIndex
-      },
+      data: record.toObject(),
     });
   } catch (error) {
     console.error('Error obteniendo el registro:', error);
@@ -309,11 +297,12 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
-// UPDATE - Actualizar un registro por criterio de búsqueda
+
+// UPDATE - Actualizar un registro específico
 app.put('/webhook/update', async (req, res) => {
   try {
     const { searchCriteria, updateData } = req.body;
-
+    
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
         success: false,
@@ -324,19 +313,10 @@ app.put('/webhook/update', async (req, res) => {
     const sheet = await initializeSheet();
     const rows = await sheet.getRows();
 
-    console.log('Headers de hoja:', sheet.headerValues);
-    console.log('Campos a actualizar:', Object.keys(updateData));
-
-    // Debugging:
-    console.log('Intentando buscar fila para actualizar:', searchCriteria);
-    rows.forEach(row => {
-      const rowData = row.toObject();
-      console.log('Comparando', rowData[searchCriteria.field], 'con', searchCriteria.value);
-    });
-
+    // Buscar la fila usando el criterio de búsqueda
     const rowToUpdate = rows.find(row => {
       const rowData = row.toObject();
-      return String(rowData[searchCriteria.field]) === String(searchCriteria.value);
+      return rowData[searchCriteria.field] == searchCriteria.value;
     });
 
     if (!rowToUpdate) {
@@ -346,9 +326,9 @@ app.put('/webhook/update', async (req, res) => {
       });
     }
 
-    console.log('Actualizando campos:', Object.keys(updateData));
+    // Actualizar los campos
     Object.keys(updateData).forEach(key => {
-      if (key !== '_rowIndex' && key !== '_Legajo') {
+      if (key !== '_rowIndex' && key !== '_Legajo') { // No actualizar los índices internos
         rowToUpdate[key] = updateData[key];
       }
     });
@@ -429,6 +409,28 @@ app.use((req, res, next) => {
   next();
 });
 
+// Endpoint de estadísticas
+app.get('/stats', async (req, res) => {
+  try {
+    const sheet = await initializeSheet();
+    const rows = await sheet.getRows();
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      totalRecords: rows.length,
+      serverUptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      nodeVersion: process.version,
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(503).json({
+      error: 'Database connection failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Endpoint de prueba de conectividad
 app.get('/test-connection', async (req, res) => {
   try {
@@ -488,9 +490,4 @@ app.listen(PORT, () => {
   console.log(`Frontend available at /`);
   console.log(`Health check available at /health`);
   console.log(`Keep-alive available at /ping`);
-});
-
-// NUEVO: Manejar rutas SPA - debe ir al final
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
