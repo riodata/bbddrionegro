@@ -30,7 +30,6 @@ app.get('/', (req, res) => {
 // CREATE - Crear nuevo registro
 app.post('/webhook/create', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
     const data = req.body;
 
     // Validar que el campo Legajo existe
@@ -42,27 +41,36 @@ app.post('/webhook/create', async (req, res) => {
     }
 
     // Comprobar si ya existe un registro con el mismo Legajo
-    const rows = await sheet.getRows();
-    const existingRow = rows.find(row => row.Legajo === data.Legajo);
-    if (existingRow) {
+    const { data: existingRecord } = await supabase
+      .from('cooperativas')
+      .select('Legajo')
+      .eq('Legajo', data.Legajo)
+      .single();
+
+    if (existingRecord) {
       return res.status(400).json({
         success: false,
         message: 'Ya existe un registro con el Legajo proporcionado.',
       });
     }
     
-    // Agregar fila
-    console.log('Datos recibidos:', data); // Log para depuración
+    console.log('Datos recibidos:', data);
 
-    const row = await sheet.addRow(data);
+    const { data: newRecord, error } = await supabase
+      .from('cooperativas')
+      .insert([data])
+      .select()
+      .single();
+
+    if (error) throw error;
     
     res.json({
       success: true,
       message: 'Registro creado exitosamente',
-      Legajo: row.Legajo,
+      Legajo: newRecord.Legajo,
     });
   } catch (error) {
-    console.error('Error creando el registro:', error); // Log detallado
+    console.error('Error creando el registro:', error);
     res.status(500).json({
       success: false,
       message: 'Error al crear el registro',
@@ -74,30 +82,23 @@ app.post('/webhook/create', async (req, res) => {
 // READ - Leer todos los registros (sin filtros)
 app.get('/webhook/read', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-    
-    // Obtener el índice (posición) de la columna Legajo
-    const headerRow = await sheet.headerValues;
-    const legajoIndex = headerRow.findIndex(header => header === 'Legajo');
+    const { data, error } = await supabase
+      .from('cooperativas')
+      .select('*');
 
-    // Generar datos con Legajo explícito
-    let data = rows.map((row, index) => {
-      const rowObject = row.toObject();
-      
-      // Asegurarse de que el campo Legajo esté incluido explícitamente
-      // (en caso de que no esté en el objeto por alguna razón)
-      return {
-        _Legajo: row.get('Legajo'), // Usar el valor real de la columna Legajo
-        ...rowObject,  // Resto de los datos del registro
-        _rowIndex: row.rowIndex // Mantener el índice por compatibilidad
-      };
-    });
+    if (error) throw error;
+
+    // Mapear datos para mantener compatibilidad con el frontend
+    const mappedData = data.map((record, index) => ({
+      _Legajo: record.Legajo,
+      ...record,
+      _rowIndex: index + 1 // Simular rowIndex para compatibilidad
+    }));
 
     res.json({
       success: true,
-      data: data,
-      total: data.length
+      data: mappedData,
+      total: mappedData.length
     });
   } catch (error) {
     console.error('Error reading records:', error);
@@ -114,21 +115,24 @@ app.get('/webhook/get/:Legajo', async (req, res) => {
   try {
     const { Legajo } = req.params;
 
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
+    const { data: record, error } = await supabase
+      .from('cooperativas')
+      .select('*')
+      .eq('Legajo', Legajo)
+      .single();
 
-    const record = rows.find(row => row.Legajo === Legajo);
-
-    if (!record) {
+    if (error && error.code === 'PGRST116') {
       return res.status(404).json({
         success: false,
         message: `No se encontró un registro con el Legajo: ${Legajo}`,
       });
     }
 
+    if (error) throw error;
+
     res.json({
       success: true,
-      data: record.toObject(),
+      data: record,
     });
   } catch (error) {
     console.error('Error obteniendo el registro:', error);
@@ -143,39 +147,29 @@ app.get('/webhook/get/:Legajo', async (req, res) => {
 // SIMPLE SEARCH - Búsqueda simple con un campo y texto
 app.get('/webhook/search', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-
-    // Obtener el índice de la columna Legajo
-    const headerRow = await sheet.headerValues;
-    const legajoIndex = headerRow.findIndex(header => header === 'Legajo');
-
-    let data = rows.map(row => {
-      const rowObject = row.toObject();
-      return {
-        _Legajo: row.get('Legajo'), // Agregar explícitamente el campo Legajo
-        ...rowObject,
-        _rowIndex: row.rowIndex
-      };
-    });
-
-    // Aplicar filtros si existen en los query parameters
     const { searchText, searchField } = req.query;
 
-    if (searchText && searchField) {
-      data = data.filter(record => {
-        const fieldValue = record[searchField];
-        if (fieldValue === undefined || fieldValue === null) return false;
+    let query = supabase.from('cooperativas').select('*');
 
-        // Búsqueda case-insensitive y parcial
-        return fieldValue.toString().toLowerCase().includes(searchText.toLowerCase());
-      });
+    // Aplicar filtros si existen
+    if (searchText && searchField) {
+      query = query.ilike(searchField, `%${searchText}%`);
     }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Mapear datos para mantener compatibilidad
+    const mappedData = data.map((record, index) => ({
+      _Legajo: record.Legajo,
+      ...record,
+      _rowIndex: index + 1
+    }));
 
     res.json({
       success: true,
-      data: data,
-      total: data.length,
+      data: mappedData,
+      total: mappedData.length,
       filtered: !!(searchText && searchField),
       searchText: searchText || null,
       searchField: searchField || null
@@ -193,10 +187,14 @@ app.get('/webhook/search', async (req, res) => {
 // FIELDS - Obtener campos disponibles para filtrado
 app.get('/webhook/fields', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
+    const { data, error } = await supabase
+      .from('cooperativas')
+      .select('*')
+      .limit(1);
 
-    if (rows.length === 0) {
+    if (error) throw error;
+
+    if (data.length === 0) {
       return res.json({
         success: true,
         fields: [],
@@ -204,8 +202,10 @@ app.get('/webhook/fields', async (req, res) => {
       });
     }
 
-    // Obtener los nombres de las columnas del primer registro (excluir _Legajo)
-    const fields = Object.keys(rows[0].toObject()).filter(field => field !== '_Legajo');
+    // Obtener los nombres de las columnas
+    const fields = Object.keys(data[0]).filter(field => 
+      field !== '_Legajo' && field !== 'id' // Excluir campos internos
+    );
 
     res.json({
       success: true,
@@ -224,54 +224,50 @@ app.get('/webhook/fields', async (req, res) => {
 // ADVANCED SEARCH - Búsqueda avanzada con múltiples filtros
 app.post('/webhook/search/advanced', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-
-    // Obtener explícitamente el Legajo para cada registro
-    let data = rows.map(row => {
-      const rowObject = row.toObject();
-      return {
-        _Legajo: row.get('Legajo'), // Agregar explícitamente el campo Legajo
-        ...rowObject,
-        _rowIndex: row.rowIndex
-      };
-    });
-
     const { filters } = req.body;
 
+    let query = supabase.from('cooperativas').select('*');
+
     if (filters && Array.isArray(filters) && filters.length > 0) {
-      data = data.filter(record => {
-        return filters.every(filter => {
-          const { field, value, operator = 'contains' } = filter;
-          const fieldValue = record[field];
-
-          if (fieldValue === undefined || fieldValue === null) return false;
-
-          const recordValue = fieldValue.toString().toLowerCase();
-          const searchValue = value.toString().toLowerCase();
-
-          switch (operator) {
-            case 'equals':
-              return recordValue === searchValue;
-            case 'contains':
-              return recordValue.includes(searchValue);
-            case 'startsWith':
-              return recordValue.startsWith(searchValue);
-            case 'endsWith':
-              return recordValue.endsWith(searchValue);
-            case 'notEquals':
-              return recordValue !== searchValue;
-            default:
-              return recordValue.includes(searchValue);
-          }
-        });
+      filters.forEach(filter => {
+        const { field, value, operator = 'contains' } = filter;
+        
+        switch (operator) {
+          case 'equals':
+            query = query.eq(field, value);
+            break;
+          case 'contains':
+            query = query.ilike(field, `%${value}%`);
+            break;
+          case 'startsWith':
+            query = query.ilike(field, `${value}%`);
+            break;
+          case 'endsWith':
+            query = query.ilike(field, `%${value}`);
+            break;
+          case 'notEquals':
+            query = query.neq(field, value);
+            break;
+          default:
+            query = query.ilike(field, `%${value}%`);
+        }
       });
     }
 
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // Mapear datos para mantener compatibilidad
+    const mappedData = data.map((record, index) => ({
+      _Legajo: record.Legajo,
+      ...record,
+      _rowIndex: index + 1
+    }));
+
     res.json({
       success: true,
-      data: data,
-      total: data.length,
+      data: mappedData,
+      total: mappedData.length,
       filtersApplied: filters?.length || 0,
       filters: filters || []
     });
@@ -285,8 +281,6 @@ app.post('/webhook/search/advanced', async (req, res) => {
   }
 });
 
-
-// UPDATE - Actualizar un registro específico
 // UPDATE - Actualizar un registro específico
 app.put('/webhook/update', async (req, res) => {
   try {
@@ -301,112 +295,42 @@ app.put('/webhook/update', async (req, res) => {
       });
     }
 
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-    
-    console.log(`Buscando registro con ${searchCriteria.field}=${searchCriteria.value}`);
+    // Limpiar updateData de campos internos
+    const cleanUpdateData = { ...updateData };
+    delete cleanUpdateData._rowIndex;
+    delete cleanUpdateData._Legajo;
 
-    // Buscar la fila usando el criterio de búsqueda
-    const rowIndex = rows.findIndex(row => {
-      const rowData = row.toObject();
-      return rowData[searchCriteria.field] == searchCriteria.value;
-    });
+    const { data, error } = await supabase
+      .from('cooperativas')
+      .update(cleanUpdateData)
+      .eq(searchCriteria.field, searchCriteria.value)
+      .select()
+      .single();
 
-    if (rowIndex === -1) {
+    if (error && error.code === 'PGRST116') {
       return res.status(404).json({
         success: false,
         message: `Registro no encontrado con ${searchCriteria.field}=${searchCriteria.value}`
       });
     }
-    
-    const rowToUpdate = rows[rowIndex];
-    console.log('Registro encontrado en la fila:', rowToUpdate.rowIndex);
-    
-    // Guardar una copia de los valores originales para comparar
-    const originalValues = rowToUpdate.toObject();
-    console.log('Valores originales:', originalValues);
 
-    // Actualizar los campos
-    Object.keys(updateData).forEach(key => {
-      if (key !== '_rowIndex' && key !== '_Legajo') {
-        console.log(`Actualizando campo ${key}: "${originalValues[key]}" -> "${updateData[key]}"`);
-        rowToUpdate[key] = updateData[key];
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Registro actualizado correctamente',
+      data: {
+        ...data,
+        _Legajo: data.Legajo,
+        _rowIndex: 1 // Placeholder para compatibilidad
       }
     });
-
-    try {
-      console.log('Guardando cambios...');
-      await rowToUpdate.save();
-      console.log('Cambios guardados correctamente');
-      
-      // Intentar validar que los cambios se guardaron correctamente
-      // Recargar la fila para verificar
-      const updatedRows = await sheet.getRows();
-      const refreshedRow = updatedRows[rowIndex];
-      const refreshedData = refreshedRow.toObject();
-      
-      console.log('Datos después de guardar:', refreshedData);
-      
-      // Verificar si los cambios se aplicaron correctamente
-      let allChangesApplied = true;
-      Object.keys(updateData).forEach(key => {
-        if (key !== '_rowIndex' && key !== '_Legajo') {
-          if (refreshedData[key] !== updateData[key]) {
-            console.log(`¡Advertencia! El campo ${key} no se actualizó correctamente.`);
-            console.log(`  Esperado: "${updateData[key]}"`);
-            console.log(`  Actual: "${refreshedData[key]}"`);
-            allChangesApplied = false;
-          }
-        }
-      });
-      
-      // Como alternativa, intentar una actualización más "directa"
-      if (!allChangesApplied) {
-        console.log('Intentando actualización alternativa...');
-        
-        // Actualizar usando la API directamente
-        await sheet.loadCells();
-        
-        // Obtener encabezados para mapear columnas
-        const headers = sheet.headerValues;
-        
-        Object.keys(updateData).forEach(key => {
-          if (key !== '_rowIndex' && key !== '_Legajo') {
-            const colIndex = headers.findIndex(h => h === key);
-            if (colIndex !== -1) {
-              const cell = sheet.getCell(rowToUpdate.rowIndex - 1, colIndex);
-              cell.value = updateData[key];
-              console.log(`Actualización directa: celda[${rowToUpdate.rowIndex - 1},${colIndex}] = "${updateData[key]}"`);
-            }
-          }
-        });
-        
-        await sheet.saveUpdatedCells();
-        console.log('Actualización directa completada');
-      }
-      
-      res.json({
-        success: true,
-        message: allChangesApplied ? 
-          'Registro actualizado correctamente' : 
-          'Registro actualizado, pero algunos cambios podrían no haberse aplicado inmediatamente',
-        data: {
-          ...updateData,
-          _Legajo: rowToUpdate.get('Legajo'),
-          _rowIndex: rowToUpdate.rowIndex
-        }
-      });
-    } catch (saveError) {
-      console.error('Error al guardar:', saveError);
-      throw saveError;
-    }
   } catch (error) {
     console.error('Error updating record:', error);
     res.status(500).json({
       success: false,
       message: 'Error al actualizar el registro',
-      error: error.message,
-      stack: error.stack
+      error: error.message
     });
   }
 });
@@ -416,21 +340,21 @@ app.delete('/webhook/delete/:Legajo', async (req, res) => {
   try {
     const { Legajo } = req.params;
 
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
+    const { data: deletedRecord, error } = await supabase
+      .from('cooperativas')
+      .delete()
+      .eq('Legajo', Legajo)
+      .select()
+      .single();
 
-    // Encontrar la fila por Legajo
-    const rowToDelete = rows.find(row => row.Legajo === Legajo);
-
-    if (!rowToDelete) {
+    if (error && error.code === 'PGRST116') {
       return res.status(404).json({
         success: false,
         message: `No se encontró un registro con el Legajo: ${Legajo}`,
       });
     }
 
-    const deletedRecord = rowToDelete.toObject();
-    await rowToDelete.delete();
+    if (error) throw error;
 
     res.json({
       success: true,
@@ -448,56 +372,18 @@ app.delete('/webhook/delete/:Legajo', async (req, res) => {
 });
 
 // Manejo de errores global
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({ 
-    success: false, 
-    message: 'Error interno del servidor' 
-  });
-});
-
-// Sistema de logging y monitoreo
-const fs = require('fs').promises;
-
-// Log requests
-app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.path} - IP: ${req.ip}`);
-  next();
-});
-
-// Endpoint de estadísticas
-app.get('/stats', async (req, res) => {
-  try {
-    const sheet = await initializeSheet();
-    const rows = await sheet.getRows();
-
-    res.json({
-      timestamp: new Date().toISOString(),
-      totalRecords: rows.length,
-      serverUptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      nodeVersion: process.version,
-      environment: process.env.NODE_ENV || 'development'
-    });
-  } catch (error) {
-    res.status(503).json({
-      error: 'Database connection failed',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Endpoint de prueba de conectividad
+// Test connection
 app.get('/test-connection', async (req, res) => {
   try {
-    const sheet = await initializeSheet();
-    const info = await sheet.doc.loadInfo();
+    const { data, error } = await supabase
+      .from('cooperativas')
+      .select('count', { count: 'exact', head: true });
+
+    if (error) throw error;
 
     res.json({
       status: 'success',
-      sheetTitle: info.title,
-      sheetCount: info.sheetCount,
+      message: 'Conexión a Supabase exitosa',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -509,19 +395,15 @@ app.get('/test-connection', async (req, res) => {
   }
 });
 
-app.get('/ping', (req, res) => {
-  res.json({ 
-    status: 'alive', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// Health check endpoint
+// Health check
 app.get('/health', async (req, res) => {
   try {
-    // Test Google Sheets connection
-    const sheet = await initializeSheet();
+    const { error } = await supabase
+      .from('cooperativas')
+      .select('count', { count: 'exact', head: true });
+
+    if (error) throw error;
+
     res.json({ 
       status: 'healthy', 
       database: 'connected',
@@ -537,9 +419,29 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// NUEVO: Manejar rutas SPA - debe ir al final
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Stats
+app.get('/stats', async (req, res) => {
+  try {
+    const { count, error } = await supabase
+      .from('cooperativas')
+      .select('*', { count: 'exact', head: true });
+
+    if (error) throw error;
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      totalRecords: count,
+      serverUptime: process.uptime(),
+      memoryUsage: process.memoryUsage(),
+      nodeVersion: process.version,
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(503).json({
+      error: 'Database connection failed',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 app.listen(PORT, () => {
