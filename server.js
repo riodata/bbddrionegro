@@ -100,13 +100,123 @@ const PORT = process.env.PORT || 8000;
 // NOMBRE CORRECTO DE LA TABLA
 const TABLE_NAME = 'Cooperativas'; // ← CAMBIO AQUÍ: mayúscula
 
-// Campos válidos para búsqueda - mantener sincronizado con la base de datos
-const VALID_SEARCH_FIELDS = [
-  'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-  'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
-  'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
-  'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
-];
+// Agregar esta constante al inicio del archivo
+const TABLE_NAME = 'Cooperativas';
+
+// Agregar esta nueva ruta después de las rutas existentes
+// GET COLUMNS - Obtener columnas de la tabla dinámicamente
+app.get('/webhook/table-columns', async (req, res) => {
+  try {
+    // Consultar información del esquema para obtener las columnas
+    const { data, error } = await supabase
+      .rpc('get_table_columns', { table_name: TABLE_NAME.toLowerCase() });
+
+    if (error) {
+      // Si la función RPC no existe, usar consulta directa
+      const { data: columnsData, error: queryError } = await supabase
+        .from('information_schema.columns')
+        .select('column_name, data_type, is_nullable')
+        .eq('table_name', TABLE_NAME.toLowerCase())
+        .eq('table_schema', 'public')
+        .order('ordinal_position');
+
+      if (queryError) {
+        // Fallback: obtener una fila y extraer las columnas
+        const { data: sampleData, error: sampleError } = await supabase
+          .from(TABLE_NAME.toLowerCase())
+          .select('*')
+          .limit(1)
+          .single();
+
+        if (sampleError && sampleError.code !== 'PGRST116') {
+          throw sampleError;
+        }
+
+        const columns = sampleData ? Object.keys(sampleData) : [];
+        
+        return res.json({
+          success: true,
+          columns: columns,
+          source: 'sample_data',
+          total: columns.length
+        });
+      }
+
+      const columns = columnsData.map(col => col.column_name);
+      
+      return res.json({
+        success: true,
+        columns: columns,
+        source: 'information_schema',
+        total: columns.length
+      });
+    }
+
+    const columns = data.map(col => col.column_name);
+    
+    res.json({
+      success: true,
+      columns: columns,
+      source: 'rpc_function',
+      total: columns.length
+    });
+
+  } catch (error) {
+    console.error('Error getting table columns:', error);
+    
+    // Fallback final: usar los campos hardcodeados
+    const fallbackFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+      'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+      'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+      'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+    ];
+
+    res.json({
+      success: true,
+      columns: fallbackFields,
+      source: 'fallback',
+      total: fallbackFields.length,
+      warning: 'Using fallback fields due to error: ' + error.message
+    });
+  }
+});
+
+// Actualizar la ruta existente /webhook/fields para usar columnas dinámicas
+app.get('/webhook/fields', async (req, res) => {
+  try {
+    // Hacer una consulta interna al endpoint de columnas
+    const response = await fetch(`${req.protocol}://${req.get('host')}/webhook/table-columns`);
+    const columnData = await response.json();
+
+    if (columnData.success) {
+      res.json({
+        success: true,
+        fields: columnData.columns,
+        source: columnData.source
+      });
+    } else {
+      throw new Error('Failed to get columns');
+    }
+  } catch (error) {
+    console.error('Error getting fields:', error);
+    
+    // Fallback
+    const fallbackFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+      'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+      'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+      'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+    ];
+
+    res.json({
+      success: true,
+      fields: fallbackFields,
+      source: 'fallback',
+      error: error.message
+    });
+  }
+});
 
 // Middleware
 app.use(cors());
