@@ -98,7 +98,7 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 // NOMBRE CORRECTO DE LA TABLA
-const TABLE_NAME = 'Cooperativas';
+const TABLE_NAME = 'cooperativas';
 
 // Variable para cachear los campos válidos
 let validSearchFields = [];
@@ -107,6 +107,8 @@ let validSearchFields = [];
 async function getValidSearchFields() {
   if (validSearchFields.length === 0) {
     try {
+      logger.info('Attempting to get valid search fields', { tableName: TABLE_NAME });
+      
       // Intentar obtener una fila de muestra para extraer las columnas
       const { data: sampleData, error: sampleError } = await supabase
         .from(TABLE_NAME)
@@ -114,10 +116,37 @@ async function getValidSearchFields() {
         .limit(1)
         .single();
 
+      logger.info('Sample data query result', { 
+        hasData: !!sampleData, 
+        error: sampleError?.message,
+        errorCode: sampleError?.code 
+      });
+
       if (!sampleError && sampleData) {
         validSearchFields = Object.keys(sampleData);
-        logger.info('Valid search fields cached from sample data', { fields: validSearchFields });
+        logger.info('Valid search fields cached from sample data', { 
+          fields: validSearchFields,
+          count: validSearchFields.length 
+        });
       } else {
+        logger.warn('Could not get sample data, trying count query', { 
+          error: sampleError?.message,
+          code: sampleError?.code 
+        });
+        
+        // Intentar una consulta de conteo para verificar si la tabla existe
+        const { count, error: countError } = await supabase
+          .from(TABLE_NAME)
+          .select('*', { count: 'exact', head: true });
+          
+        logger.info('Count query result', { count, error: countError?.message });
+        
+        if (!countError) {
+          logger.info('Table exists but is empty, using fallback fields');
+        } else {
+          logger.error('Table access error', { error: countError.message, code: countError.code });
+        }
+        
         // Fallback a campos hardcodeados
         validSearchFields = [
           'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
@@ -125,9 +154,15 @@ async function getValidSearchFields() {
           'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
           'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
         ];
-        logger.warn('Using fallback search fields');
+        logger.warn('Using fallback search fields', { count: validSearchFields.length });
       }
     } catch (error) {
+      logger.error('Error getting valid search fields', { 
+        error: error.message, 
+        stack: error.stack,
+        tableName: TABLE_NAME 
+      });
+      
       // Fallback a campos hardcodeados
       validSearchFields = [
         'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
@@ -135,51 +170,60 @@ async function getValidSearchFields() {
         'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
         'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
       ];
-      logger.error('Error getting valid search fields, using fallback', error);
+      logger.error('Using fallback search fields due to error', { error: error.message });
     }
   }
   return validSearchFields;
 }
 
-// GET COLUMNS - Obtener columnas de la tabla dinámicamente
+// Y también actualizar el endpoint table-columns:
 app.get('/webhook/table-columns', async (req, res) => {
   try {
-    // Consultar información del esquema para obtener las columnas
-    const { data, error } = await supabase
-      .rpc('get_table_columns', { table_name: TABLE_NAME.toLowerCase() });
+    logger.info('Getting table columns', { tableName: TABLE_NAME });
+    
+    // Primer intento: obtener una fila de muestra
+    const { data: sampleData, error: sampleError } = await supabase
+      .from(TABLE_NAME)
+      .select('*')
+      .limit(1)
+      .single();
 
-    if (error) {
-      // Si la función RPC no existe, usar consulta directa
-      const { data: columnsData, error: queryError } = await supabase
-        .from('information_schema.columns')
-        .select('column_name, data_type, is_nullable')
-        .eq('table_name', TABLE_NAME.toLowerCase())
-        .eq('table_schema', 'public')
-        .order('ordinal_position');
+    logger.info('Sample query result', { 
+      hasData: !!sampleData, 
+      error: sampleError?.message,
+      errorCode: sampleError?.code 
+    });
 
-      if (queryError) {
-        // Fallback: obtener una fila y extraer las columnas
-        const { data: sampleData, error: sampleError } = await supabase
-          .from(TABLE_NAME)
-          .select('*')
-          .limit(1)
-          .single();
+    if (!sampleError && sampleData) {
+      const columns = Object.keys(sampleData);
+      logger.info('Columns extracted from sample data', { columns, count: columns.length });
+      
+      return res.json({
+        success: true,
+        columns: columns,
+        source: 'sample_data',
+        total: columns.length
+      });
+    }
 
-        if (sampleError && sampleError.code !== 'PGRST116') {
-          throw sampleError;
-        }
+    // Segundo intento: consulta de información del esquema
+    logger.info('Trying information_schema query');
+    const { data: columnsData, error: queryError } = await supabase
+      .from('information_schema.columns')
+      .select('column_name, data_type, is_nullable')
+      .eq('table_name', TABLE_NAME)
+      .eq('table_schema', 'public')
+      .order('ordinal_position');
 
-        const columns = sampleData ? Object.keys(sampleData) : [];
-        
-        return res.json({
-          success: true,
-          columns: columns,
-          source: 'sample_data',
-          total: columns.length
-        });
-      }
+    logger.info('Information schema query result', { 
+      hasData: !!columnsData, 
+      count: columnsData?.length,
+      error: queryError?.message 
+    });
 
+    if (!queryError && columnsData && columnsData.length > 0) {
       const columns = columnsData.map(col => col.column_name);
+      logger.info('Columns from information_schema', { columns, count: columns.length });
       
       return res.json({
         success: true,
@@ -189,19 +233,31 @@ app.get('/webhook/table-columns', async (req, res) => {
       });
     }
 
-    const columns = data.map(col => col.column_name);
-    
-    res.json({
-      success: true,
-      columns: columns,
-      source: 'rpc_function',
-      total: columns.length
-    });
+    // Tercer intento: verificar si la tabla existe
+    logger.info('Trying table existence check');
+    const { count, error: countError } = await supabase
+      .from(TABLE_NAME)
+      .select('*', { count: 'exact', head: true });
 
-  } catch (error) {
-    console.error('Error getting table columns:', error);
-    
-    // Fallback final: usar los campos hardcodeados
+    logger.info('Table count result', { count, error: countError?.message });
+
+    if (countError) {
+      logger.error('Table does not exist or access denied', { 
+        tableName: TABLE_NAME,
+        error: countError.message,
+        code: countError.code 
+      });
+      
+      return res.json({
+        success: false,
+        message: `Table '${TABLE_NAME}' does not exist or access is denied`,
+        error: countError.message,
+        tableName: TABLE_NAME
+      });
+    }
+
+    // Si llegamos aquí, la tabla existe pero está vacía
+    logger.warn('Table exists but is empty, returning fallback columns');
     const fallbackFields = [
       'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
       'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
@@ -212,7 +268,29 @@ app.get('/webhook/table-columns', async (req, res) => {
     res.json({
       success: true,
       columns: fallbackFields,
-      source: 'fallback',
+      source: 'fallback_empty_table',
+      total: fallbackFields.length,
+      message: 'Table exists but is empty, using fallback columns'
+    });
+
+  } catch (error) {
+    logger.error('Error in table-columns endpoint', { 
+      error: error.message, 
+      stack: error.stack,
+      tableName: TABLE_NAME 
+    });
+    
+    const fallbackFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+      'DirecciónVerificadas', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+      'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+      'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+    ];
+
+    res.json({
+      success: true,
+      columns: fallbackFields,
+      source: 'fallback_error',
       total: fallbackFields.length,
       warning: 'Using fallback fields due to error: ' + error.message
     });
@@ -324,6 +402,47 @@ app.get('/logs/list', (req, res) => {
       success: false,
       message: 'Error listing log files',
       error: error.message
+    });
+  }
+});
+
+// Endpoint de diagnóstico para verificar qué tablas existen
+app.get('/webhook/debug-tables', async (req, res) => {
+  try {
+    logger.info('Debug: Checking available tables');
+    
+    // Intentar listar todas las tablas
+    const { data: tables, error } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .eq('table_type', 'BASE TABLE');
+
+    if (error) {
+      logger.error('Could not list tables', error);
+      return res.json({
+        success: false,
+        error: error.message,
+        message: 'Could not access information_schema.tables'
+      });
+    }
+
+    const tableNames = tables.map(t => t.table_name);
+    logger.info('Available tables', { tables: tableNames });
+
+    res.json({
+      success: true,
+      tables: tableNames,
+      currentTableName: TABLE_NAME,
+      tableExists: tableNames.includes(TABLE_NAME)
+    });
+
+  } catch (error) {
+    logger.error('Debug tables error', error);
+    res.json({
+      success: false,
+      error: error.message,
+      currentTableName: TABLE_NAME
     });
   }
 });
