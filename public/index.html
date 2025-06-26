@@ -705,22 +705,41 @@
             });
         }
 
-        // -------- GLOBAL SEARCH --------
-        function loadFieldsForGlobalSearch() {
-            // Campos disponibles basados en el formulario
-            const fields = [
-                'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-                'DirecciónVerificada', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
-                'Tipo', 'Subtipo'
-            ];
+        // -------- GLOBAL SEARCH (MEJORADA) --------
+        async function loadFieldsForGlobalSearch() {
+            try {
+                // Cargar campos desde el backend
+                const response = await fetch(`${API_BASE}/webhook/fields`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    availableFields = result.fields;
+                } else {
+                    // Fallback a campos hardcodeados si falla
+                    availableFields = [
+                        'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+                        'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+                        'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+                        'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+                    ];
+                }
+            } catch (error) {
+                console.error('Error cargando campos:', error);
+                // Fallback a campos hardcodeados
+                availableFields = [
+                    'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+                    'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+                    'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+                    'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+                ];
+            }
             
             const select = document.getElementById('globalSearchField');
             if (select) {
                 select.innerHTML = '<option value="">Selecciona un campo...</option>';
-                fields.forEach(field => {
+                availableFields.forEach(field => {
                     select.innerHTML += `<option value="${field}">${field}</option>`;
                 });
-                availableFields = fields;
             }
         }
 
@@ -753,8 +772,12 @@
                 }
 
                 const url = `${API_BASE}/webhook/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                console.log('Enviando búsqueda a:', url);
+                
                 const response = await fetch(url);
                 const result = await response.json();
+
+                console.log('Respuesta de búsqueda:', result);
 
                 if (result.success) {
                     currentRecords = result.data;
@@ -770,8 +793,24 @@
                     throw new Error(result.message);
                 }
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error en búsqueda:', error);
                 showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
+                
+                // Mostrar el contenedor vacío si hay error
+                const activeTab = document.querySelector('.tab-content.active').id;
+                let container;
+                
+                if (activeTab === 'search') {
+                    container = document.getElementById('search-records-container');
+                } else if (activeTab === 'update') {
+                    container = document.getElementById('update-records-container');
+                } else if (activeTab === 'delete') {
+                    container = document.getElementById('delete-records');
+                }
+                
+                if (container) {
+                    container.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                }
             }
         }
 
