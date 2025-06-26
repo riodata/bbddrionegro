@@ -100,9 +100,6 @@ const PORT = process.env.PORT || 8000;
 // NOMBRE CORRECTO DE LA TABLA
 const TABLE_NAME = 'Cooperativas'; // ← CAMBIO AQUÍ: mayúscula
 
-// Agregar esta constante al inicio del archivo
-const TABLE_NAME = 'Cooperativas';
-
 // Agregar esta nueva ruta después de las rutas existentes
 // GET COLUMNS - Obtener columnas de la tabla dinámicamente
 app.get('/webhook/table-columns', async (req, res) => {
