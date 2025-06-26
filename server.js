@@ -19,10 +19,10 @@ const PORT = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
-// NUEVO: Servir archivos estáticos del frontend
+// Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
-// NUEVO: Ruta principal para servir el frontend
+// Ruta principal para servir el frontend
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -79,7 +79,7 @@ app.post('/webhook/create', async (req, res) => {
   }
 });
 
-// READ - Leer todos los registros (sin filtros)
+// READ - Leer todos los registros
 app.get('/webhook/read', async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -92,7 +92,7 @@ app.get('/webhook/read', async (req, res) => {
     const mappedData = data.map((record, index) => ({
       _Legajo: record.Legajo,
       ...record,
-      _rowIndex: index + 1 // Simular rowIndex para compatibilidad
+      _rowIndex: index + 1
     }));
 
     res.json({
@@ -110,48 +110,16 @@ app.get('/webhook/read', async (req, res) => {
   }
 });
 
-// Ruta para buscar el registro por Legajo al presionar un botón
-app.get('/webhook/get/:Legajo', async (req, res) => {
-  try {
-    const { Legajo } = req.params;
-
-    const { data: record, error } = await supabase
-      .from('cooperativas')
-      .select('*')
-      .eq('Legajo', Legajo)
-      .single();
-
-    if (error && error.code === 'PGRST116') {
-      return res.status(404).json({
-        success: false,
-        message: `No se encontró un registro con el Legajo: ${Legajo}`,
-      });
-    }
-
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      data: record,
-    });
-  } catch (error) {
-    console.error('Error obteniendo el registro:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener el registro',
-      error: error.message,
-    });
-  }
-});
-
-// SIMPLE SEARCH - Búsqueda simple con un campo y texto
+// SEARCH - Búsqueda simple
 app.get('/webhook/search', async (req, res) => {
   try {
     const { searchText, searchField } = req.query;
 
+    console.log('Búsqueda:', { searchText, searchField });
+
     let query = supabase.from('cooperativas').select('*');
 
-    // Aplicar filtros si existen
+    // Aplicar filtro si existe
     if (searchText && searchField) {
       query = query.ilike(searchField, `%${searchText}%`);
     }
@@ -170,7 +138,6 @@ app.get('/webhook/search', async (req, res) => {
       success: true,
       data: mappedData,
       total: mappedData.length,
-      filtered: !!(searchText && searchField),
       searchText: searchText || null,
       searchField: searchField || null
     });
@@ -184,109 +151,12 @@ app.get('/webhook/search', async (req, res) => {
   }
 });
 
-// FIELDS - Obtener campos disponibles para filtrado
-app.get('/webhook/fields', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('cooperativas')
-      .select('*')
-      .limit(1);
-
-    if (error) throw error;
-
-    if (data.length === 0) {
-      return res.json({
-        success: true,
-        fields: [],
-        message: 'No hay registros para obtener campos'
-      });
-    }
-
-    // Obtener los nombres de las columnas
-    const fields = Object.keys(data[0]).filter(field => 
-      field !== '_Legajo' && field !== 'id' // Excluir campos internos
-    );
-
-    res.json({
-      success: true,
-      fields: fields
-    });
-  } catch (error) {
-    console.error('Error getting fields:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al obtener los campos',
-      error: error.message 
-    });
-  }
-});
-
-// ADVANCED SEARCH - Búsqueda avanzada con múltiples filtros
-app.post('/webhook/search/advanced', async (req, res) => {
-  try {
-    const { filters } = req.body;
-
-    let query = supabase.from('cooperativas').select('*');
-
-    if (filters && Array.isArray(filters) && filters.length > 0) {
-      filters.forEach(filter => {
-        const { field, value, operator = 'contains' } = filter;
-        
-        switch (operator) {
-          case 'equals':
-            query = query.eq(field, value);
-            break;
-          case 'contains':
-            query = query.ilike(field, `%${value}%`);
-            break;
-          case 'startsWith':
-            query = query.ilike(field, `${value}%`);
-            break;
-          case 'endsWith':
-            query = query.ilike(field, `%${value}`);
-            break;
-          case 'notEquals':
-            query = query.neq(field, value);
-            break;
-          default:
-            query = query.ilike(field, `%${value}%`);
-        }
-      });
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    // Mapear datos para mantener compatibilidad
-    const mappedData = data.map((record, index) => ({
-      _Legajo: record.Legajo,
-      ...record,
-      _rowIndex: index + 1
-    }));
-
-    res.json({
-      success: true,
-      data: mappedData,
-      total: mappedData.length,
-      filtersApplied: filters?.length || 0,
-      filters: filters || []
-    });
-  } catch (error) {
-    console.error('Error in advanced search:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error al realizar búsqueda avanzada',
-      error: error.message 
-    });
-  }
-});
-
-// UPDATE - Actualizar un registro específico
+// UPDATE - Actualizar registro
 app.put('/webhook/update', async (req, res) => {
   try {
     const { searchCriteria, updateData } = req.body;
     
-    console.log('Datos recibidos para actualizar:', updateData);
+    console.log('Actualizando:', { searchCriteria, updateData });
     
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
@@ -322,7 +192,7 @@ app.put('/webhook/update', async (req, res) => {
       data: {
         ...data,
         _Legajo: data.Legajo,
-        _rowIndex: 1 // Placeholder para compatibilidad
+        _rowIndex: 1
       }
     });
   } catch (error) {
@@ -335,22 +205,31 @@ app.put('/webhook/update', async (req, res) => {
   }
 });
 
-// DELETE - Eliminar registro con búsqueda previa
-app.delete('/webhook/delete/:Legajo', async (req, res) => {
+// DELETE - Eliminar registro (con body JSON)
+app.delete('/webhook/delete', async (req, res) => {
   try {
-    const { Legajo } = req.params;
+    const { searchCriteria } = req.body;
+    
+    console.log('Eliminando:', searchCriteria);
+
+    if (!searchCriteria || !searchCriteria.field || !searchCriteria.value) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere criterio de búsqueda válido para eliminar'
+      });
+    }
 
     const { data: deletedRecord, error } = await supabase
       .from('cooperativas')
       .delete()
-      .eq('Legajo', Legajo)
+      .eq(searchCriteria.field, searchCriteria.value)
       .select()
       .single();
 
     if (error && error.code === 'PGRST116') {
       return res.status(404).json({
         success: false,
-        message: `No se encontró un registro con el Legajo: ${Legajo}`,
+        message: `No se encontró un registro con ${searchCriteria.field}: ${searchCriteria.value}`,
       });
     }
 
@@ -371,26 +250,27 @@ app.delete('/webhook/delete/:Legajo', async (req, res) => {
   }
 });
 
-// Manejo de errores global
-// Test connection
-app.get('/test-connection', async (req, res) => {
+// FIELDS - Obtener campos disponibles (NUEVA RUTA)
+app.get('/webhook/fields', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('cooperativas')
-      .select('count', { count: 'exact', head: true });
-
-    if (error) throw error;
+    // Campos disponibles basados en el esquema
+    const fields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+      'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+      'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+      'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+    ];
 
     res.json({
-      status: 'success',
-      message: 'Conexión a Supabase exitosa',
-      timestamp: new Date().toISOString()
+      success: true,
+      fields: fields
     });
   } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      message: error.message,
-      timestamp: new Date().toISOString()
+    console.error('Error getting fields:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error al obtener los campos',
+      error: error.message 
     });
   }
 });
@@ -419,26 +299,24 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Stats
-app.get('/stats', async (req, res) => {
+// Test connection
+app.get('/test-connection', async (req, res) => {
   try {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from('cooperativas')
-      .select('*', { count: 'exact', head: true });
+      .select('count', { count: 'exact', head: true });
 
     if (error) throw error;
 
     res.json({
-      timestamp: new Date().toISOString(),
-      totalRecords: count,
-      serverUptime: process.uptime(),
-      memoryUsage: process.memoryUsage(),
-      nodeVersion: process.version,
-      environment: process.env.NODE_ENV || 'development'
+      status: 'success',
+      message: 'Conexión a Supabase exitosa',
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(503).json({
-      error: 'Database connection failed',
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
       timestamp: new Date().toISOString()
     });
   }
@@ -448,5 +326,4 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Frontend available at /`);
   console.log(`Health check available at /health`);
-  console.log(`Keep-alive available at /ping`);
 });
