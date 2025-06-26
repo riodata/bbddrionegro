@@ -100,38 +100,116 @@ const PORT = process.env.PORT || 8000;
 // NOMBRE CORRECTO DE LA TABLA
 const TABLE_NAME = 'cooperativas';
 
-// Variable para cachear los campos válidos
-let validSearchFields = [];
+// Actualizar el endpoint de debug para ser más específico
+app.get('/webhook/debug-specific', async (req, res) => {
+  try {
+    logger.info('Testing specific table access');
+    
+    const results = [];
+    
+    // Probar acceso directo con select específico
+    try {
+      const { data: directData, error: directError } = await supabase
+        .from('Cooperativas')
+        .select('Legajo, Cooperativa, Matrícula')
+        .limit(5);
+      
+      results.push({
+        method: 'direct_select',
+        tableName: 'Cooperativas',
+        success: !directError,
+        error: directError?.message,
+        recordCount: directData?.length || 0,
+        sampleData: directData || null
+      });
+      
+      if (directData && directData.length > 0) {
+        // Si obtenemos datos, extraer todas las columnas del primer registro
+        const firstRecord = directData[0];
+        results.push({
+          method: 'column_extraction',
+          columns: Object.keys(firstRecord),
+          columnCount: Object.keys(firstRecord).length
+        });
+      }
+      
+    } catch (directError) {
+      results.push({
+        method: 'direct_select',
+        tableName: 'Cooperativas',
+        success: false,
+        error: directError.message
+      });
+    }
+    
+    // Probar también con minúsculas
+    try {
+      const { data: lowerData, error: lowerError } = await supabase
+        .from('cooperativas')
+        .select('*')
+        .limit(3);
+      
+      results.push({
+        method: 'lowercase_test',
+        tableName: 'cooperativas',
+        success: !lowerError,
+        error: lowerError?.message,
+        recordCount: lowerData?.length || 0
+      });
+      
+    } catch (lowerError) {
+      results.push({
+        method: 'lowercase_test',
+        tableName: 'cooperativas',
+        success: false,
+        error: lowerError.message
+      });
+    }
+    
+    res.json({
+      success: true,
+      results: results,
+      currentTableName: TABLE_NAME
+    });
+    
+  } catch (error) {
+    logger.error('Debug specific error', error);
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
-// Función para obtener campos válidos dinámicamente
+// Actualizar la función getValidSearchFields para usar datos reales
 async function getValidSearchFields() {
   if (validSearchFields.length === 0) {
     try {
-      logger.info('Attempting to get valid search fields', { tableName: TABLE_NAME });
+      logger.info('Attempting to get valid search fields from real data', { tableName: TABLE_NAME });
       
-      // Intentar obtener una fila de muestra para extraer las columnas
-      const { data: sampleData, error: sampleError } = await supabase
+      // Intentar obtener registros reales (no usar .single() que causa problemas)
+      const { data: realData, error: realError } = await supabase
         .from(TABLE_NAME)
         .select('*')
-        .limit(1)
-        .single();
+        .limit(1);
 
-      logger.info('Sample data query result', { 
-        hasData: !!sampleData, 
-        error: sampleError?.message,
-        errorCode: sampleError?.code 
+      logger.info('Real data query result', { 
+        hasData: !!realData && realData.length > 0, 
+        error: realError?.message,
+        errorCode: realError?.code,
+        recordCount: realData?.length || 0
       });
 
-      if (!sampleError && sampleData) {
-        validSearchFields = Object.keys(sampleData);
-        logger.info('Valid search fields cached from sample data', { 
+      if (!realError && realData && realData.length > 0) {
+        validSearchFields = Object.keys(realData[0]);
+        logger.info('Valid search fields cached from REAL data', { 
           fields: validSearchFields,
           count: validSearchFields.length 
         });
       } else {
-        logger.warn('Could not get sample data, trying count query', { 
-          error: sampleError?.message,
-          code: sampleError?.code 
+        logger.warn('Could not get real data, trying count query', { 
+          error: realError?.message,
+          code: realError?.code 
         });
         
         // Intentar una consulta de conteo para verificar si la tabla existe
@@ -141,20 +219,18 @@ async function getValidSearchFields() {
           
         logger.info('Count query result', { count, error: countError?.message });
         
-        if (!countError) {
-          logger.info('Table exists but is empty, using fallback fields');
-        } else {
-          logger.error('Table access error', { error: countError.message, code: countError.code });
+        if (!countError && count > 0) {
+          logger.warn(`Table has ${count} records but couldn't fetch sample. This might be a permissions issue.`);
         }
         
-        // Fallback a campos hardcodeados
+        // Usar campos basados en lo que veo en tu imagen
         validSearchFields = [
           'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
           'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
           'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
           'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
         ];
-        logger.warn('Using fallback search fields', { count: validSearchFields.length });
+        logger.warn('Using fallback search fields based on expected schema', { count: validSearchFields.length });
       }
     } catch (error) {
       logger.error('Error getting valid search fields', { 
@@ -163,7 +239,7 @@ async function getValidSearchFields() {
         tableName: TABLE_NAME 
       });
       
-      // Fallback a campos hardcodeados
+      // Fallback basado en tu imagen
       validSearchFields = [
         'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
         'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
@@ -210,98 +286,55 @@ app.get('/webhook/test-basic', async (req, res) => {
 // Y también actualizar el endpoint table-columns:
 app.get('/webhook/table-columns', async (req, res) => {
   try {
-    logger.info('Getting table columns', { tableName: TABLE_NAME });
+    logger.info('Getting table columns from real data', { tableName: TABLE_NAME });
     
-    // Primer intento: obtener una fila de muestra
-    const { data: sampleData, error: sampleError } = await supabase
+    // Intentar obtener datos reales directamente
+    const { data: realData, error: realError } = await supabase
       .from(TABLE_NAME)
       .select('*')
-      .limit(1)
-      .single();
+      .limit(1);
 
-    logger.info('Sample query result', { 
-      hasData: !!sampleData, 
-      error: sampleError?.message,
-      errorCode: sampleError?.code 
+    logger.info('Real data query for columns', { 
+      hasData: !!realData && realData.length > 0, 
+      error: realError?.message,
+      errorCode: realError?.code,
+      recordCount: realData?.length || 0
     });
 
-    if (!sampleError && sampleData) {
-      const columns = Object.keys(sampleData);
-      logger.info('Columns extracted from sample data', { columns, count: columns.length });
+    if (!realError && realData && realData.length > 0) {
+      const columns = Object.keys(realData[0]);
+      logger.info('Columns extracted from REAL data', { columns, count: columns.length });
       
       return res.json({
         success: true,
         columns: columns,
-        source: 'sample_data',
-        total: columns.length
-      });
-    }
-
-    // Segundo intento: consulta de información del esquema
-    logger.info('Trying information_schema query');
-    const { data: columnsData, error: queryError } = await supabase
-      .from('information_schema.columns')
-      .select('column_name, data_type, is_nullable')
-      .eq('table_name', TABLE_NAME)
-      .eq('table_schema', 'public')
-      .order('ordinal_position');
-
-    logger.info('Information schema query result', { 
-      hasData: !!columnsData, 
-      count: columnsData?.length,
-      error: queryError?.message 
-    });
-
-    if (!queryError && columnsData && columnsData.length > 0) {
-      const columns = columnsData.map(col => col.column_name);
-      logger.info('Columns from information_schema', { columns, count: columns.length });
-      
-      return res.json({
-        success: true,
-        columns: columns,
-        source: 'information_schema',
-        total: columns.length
-      });
-    }
-
-    // Tercer intento: verificar si la tabla existe
-    logger.info('Trying table existence check');
-    const { count, error: countError } = await supabase
-      .from(TABLE_NAME)
-      .select('*', { count: 'exact', head: true });
-
-    logger.info('Table count result', { count, error: countError?.message });
-
-    if (countError) {
-      logger.error('Table does not exist or access denied', { 
+        source: 'real_data',
+        total: columns.length,
         tableName: TABLE_NAME,
-        error: countError.message,
-        code: countError.code 
-      });
-      
-      return res.json({
-        success: false,
-        message: `Table '${TABLE_NAME}' does not exist or access is denied`,
-        error: countError.message,
-        tableName: TABLE_NAME
+        sampleRecord: realData[0] // Incluir una muestra para debug
       });
     }
 
-    // Si llegamos aquí, la tabla existe pero está vacía
-    logger.warn('Table exists but is empty, returning fallback columns');
+    // Si no podemos obtener datos reales, usar fallback pero con mejor diagnóstico
+    logger.error('Could not access real table data', { 
+      error: realError?.message,
+      tableName: TABLE_NAME 
+    });
+    
     const fallbackFields = [
       'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
       'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
       'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
       'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
     ];
-
-    res.json({
+    
+    return res.json({
       success: true,
       columns: fallbackFields,
-      source: 'fallback_empty_table',
+      source: 'fallback_real_table_exists',
       total: fallbackFields.length,
-      message: 'Table exists but is empty, using fallback columns'
+      tableName: TABLE_NAME,
+      warning: 'Could not read table data, possibly permissions issue: ' + (realError?.message || 'Unknown error')
     });
 
   } catch (error) {
@@ -313,7 +346,7 @@ app.get('/webhook/table-columns', async (req, res) => {
     
     const fallbackFields = [
       'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-      'DirecciónVerificadas', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+      'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
       'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
       'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
     ];
