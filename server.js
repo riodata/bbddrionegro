@@ -1,4 +1,4 @@
-// server.js - Versión corregida con nombre de tabla correcto
+// server.js - Versión corregida sin VALID_SEARCH_FIELDS
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -98,9 +98,49 @@ const app = express();
 const PORT = process.env.PORT || 8000;
 
 // NOMBRE CORRECTO DE LA TABLA
-const TABLE_NAME = 'Cooperativas'; // ← CAMBIO AQUÍ: mayúscula
+const TABLE_NAME = 'Cooperativas';
 
-// Agregar esta nueva ruta después de las rutas existentes
+// Variable para cachear los campos válidos
+let validSearchFields = [];
+
+// Función para obtener campos válidos dinámicamente
+async function getValidSearchFields() {
+  if (validSearchFields.length === 0) {
+    try {
+      // Intentar obtener una fila de muestra para extraer las columnas
+      const { data: sampleData, error: sampleError } = await supabase
+        .from(TABLE_NAME)
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (!sampleError && sampleData) {
+        validSearchFields = Object.keys(sampleData);
+        logger.info('Valid search fields cached from sample data', { fields: validSearchFields });
+      } else {
+        // Fallback a campos hardcodeados
+        validSearchFields = [
+          'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+          'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+          'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+          'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+        ];
+        logger.warn('Using fallback search fields');
+      }
+    } catch (error) {
+      // Fallback a campos hardcodeados
+      validSearchFields = [
+        'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+        'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+        'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+        'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+      ];
+      logger.error('Error getting valid search fields, using fallback', error);
+    }
+  }
+  return validSearchFields;
+}
+
 // GET COLUMNS - Obtener columnas de la tabla dinámicamente
 app.get('/webhook/table-columns', async (req, res) => {
   try {
@@ -120,7 +160,7 @@ app.get('/webhook/table-columns', async (req, res) => {
       if (queryError) {
         // Fallback: obtener una fila y extraer las columnas
         const { data: sampleData, error: sampleError } = await supabase
-          .from(TABLE_NAME.toLowerCase())
+          .from(TABLE_NAME)
           .select('*')
           .limit(1)
           .single();
@@ -175,42 +215,6 @@ app.get('/webhook/table-columns', async (req, res) => {
       source: 'fallback',
       total: fallbackFields.length,
       warning: 'Using fallback fields due to error: ' + error.message
-    });
-  }
-});
-
-// Actualizar la ruta existente /webhook/fields para usar columnas dinámicas
-app.get('/webhook/fields', async (req, res) => {
-  try {
-    // Hacer una consulta interna al endpoint de columnas
-    const response = await fetch(`${req.protocol}://${req.get('host')}/webhook/table-columns`);
-    const columnData = await response.json();
-
-    if (columnData.success) {
-      res.json({
-        success: true,
-        fields: columnData.columns,
-        source: columnData.source
-      });
-    } else {
-      throw new Error('Failed to get columns');
-    }
-  } catch (error) {
-    console.error('Error getting fields:', error);
-    
-    // Fallback
-    const fallbackFields = [
-      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-      'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
-      'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
-      'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
-    ];
-
-    res.json({
-      success: true,
-      fields: fallbackFields,
-      source: 'fallback',
-      error: error.message
     });
   }
 });
@@ -341,7 +345,7 @@ app.post('/webhook/create', async (req, res) => {
 
     // Comprobar si ya existe un registro con el mismo Legajo
     const { data: existingRecord } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .select('Legajo')
       .eq('Legajo', data.Legajo)
       .single();
@@ -355,7 +359,7 @@ app.post('/webhook/create', async (req, res) => {
     }
 
     const { data: newRecord, error } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .insert([data])
       .select()
       .single();
@@ -392,7 +396,7 @@ app.get('/webhook/read', async (req, res) => {
     logger.info('Reading all records');
     
     const { data, error } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .select('*');
 
     if (error) {
@@ -428,7 +432,7 @@ app.get('/webhook/read', async (req, res) => {
   }
 });
 
-// SEARCH - Búsqueda simple (MEJORADA CON LOGGING)
+// SEARCH - Búsqueda simple (CORREGIDA SIN VALID_SEARCH_FIELDS)
 app.get('/webhook/search', async (req, res) => {
   try {
     const { searchText, searchField } = req.query;
@@ -444,19 +448,22 @@ app.get('/webhook/search', async (req, res) => {
       });
     }
 
+    // Obtener campos válidos dinámicamente
+    const validFields = await getValidSearchFields();
+    
     // Validar que el campo de búsqueda es válido
-    if (!VALID_SEARCH_FIELDS.includes(searchField)) {
-      logger.error('Invalid search field', { searchField, validFields: VALID_SEARCH_FIELDS });
+    if (!validFields.includes(searchField)) {
+      logger.error('Invalid search field', { searchField, validFields });
       return res.status(400).json({
         success: false,
-        message: `Campo de búsqueda inválido: ${searchField}. Campos válidos: ${VALID_SEARCH_FIELDS.join(', ')}`
+        message: `Campo de búsqueda inválido: ${searchField}. Campos válidos: ${validFields.join(', ')}`
       });
     }
 
     logger.info('Executing search query', { searchField, searchText, tableName: TABLE_NAME });
 
     // Construir la consulta
-    let query = supabase.from(TABLE_NAME).select('*'); // ← CAMBIO AQUÍ
+    let query = supabase.from(TABLE_NAME).select('*');
 
     // Aplicar filtro con manejo de errores mejorado
     try {
@@ -544,7 +551,7 @@ app.put('/webhook/update', async (req, res) => {
     logger.info('Executing update query', { searchCriteria, cleanUpdateData });
 
     const { data, error } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .update(cleanUpdateData)
       .eq(searchCriteria.field, searchCriteria.value)
       .select()
@@ -606,7 +613,7 @@ app.delete('/webhook/delete', async (req, res) => {
     logger.info('Executing delete query', { searchCriteria });
 
     const { data: deletedRecord, error } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .delete()
       .eq(searchCriteria.field, searchCriteria.value)
       .select()
@@ -646,14 +653,16 @@ app.delete('/webhook/delete', async (req, res) => {
   }
 });
 
-// FIELDS - Obtener campos disponibles (ACTUALIZADA)
+// FIELDS - Obtener campos disponibles (CORREGIDA)
 app.get('/webhook/fields', async (req, res) => {
   try {
     logger.info('Fields request received');
     
+    const validFields = await getValidSearchFields();
+    
     const response = {
       success: true,
-      fields: VALID_SEARCH_FIELDS
+      fields: validFields
     };
     
     logger.response('Fields response', response);
@@ -675,7 +684,7 @@ app.get('/health', async (req, res) => {
     logger.info('Health check request');
     
     const { error } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .select('count', { count: 'exact', head: true });
 
     if (error) {
@@ -710,7 +719,7 @@ app.get('/test-connection', async (req, res) => {
     logger.info('Test connection request');
     
     const { data, error } = await supabase
-      .from(TABLE_NAME) // ← CAMBIO AQUÍ
+      .from(TABLE_NAME)
       .select('count', { count: 'exact', head: true });
 
     if (error) {
@@ -748,11 +757,14 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection', { reason, promise });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  // Inicializar campos válidos al arrancar
+  await getValidSearchFields();
+  
   logger.info('Server started', { 
     port: PORT, 
     environment: process.env.NODE_ENV || 'development',
-    validSearchFields: VALID_SEARCH_FIELDS.length,
+    validSearchFields: validSearchFields.length,
     tableName: TABLE_NAME
   });
   console.log(`Server running on port ${PORT}`);
@@ -761,4 +773,5 @@ app.listen(PORT, () => {
   console.log(`Logs available at /logs`);
   console.log(`Log files list at /logs/list`);
   console.log(`Using table name: ${TABLE_NAME}`);
+  console.log(`Valid search fields: ${validSearchFields.length}`);
 });
