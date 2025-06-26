@@ -343,6 +343,7 @@
             <!-- Barra de búsqueda global -->
             <div id="global-search" class="search-container" style="display: none;">
                 <h3>🔍 Buscar Registros</h3>
+                <!-- Agregar este botón en la sección de búsqueda global -->
                 <div class="search-row">
                     <div class="search-field">
                         <label for="globalSearchText">Texto a buscar:</label>
@@ -358,6 +359,7 @@
                         <button onclick="performGlobalSearch()" class="btn">🔍 Buscar</button>
                         <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
                         <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
+                        <button onclick="refreshFields()" class="btn" title="Actualizar campos">🔄 Campos</button>
                     </div>
                 </div>
             </div>
@@ -706,43 +708,74 @@
         }
 
         // -------- GLOBAL SEARCH (MEJORADA) --------
+        // Actualizar la función loadFieldsForGlobalSearch
         async function loadFieldsForGlobalSearch() {
             try {
-                // Cargar campos desde el backend
-                const response = await fetch(`${API_BASE}/webhook/fields`);
+                console.log('Cargando campos dinámicamente...');
+                
+                const response = await fetch(`${API_BASE}/webhook/table-columns`);
                 const result = await response.json();
                 
-                if (result.success) {
-                    availableFields = result.fields;
+                if (result.success && result.columns) {
+                    const fields = result.columns;
+                    
+                    // Filtrar campos que no queremos mostrar en la búsqueda (opcional)
+                    const filteredFields = fields.filter(field => 
+                        !field.startsWith('_') && // Excluir campos internos
+                        field !== 'id' && // Excluir ID si existe
+                        field !== 'created_at' && // Excluir timestamps
+                        field !== 'updated_at'
+                    );
+                    
+                    const select = document.getElementById('globalSearchField');
+                    if (select) {
+                        select.innerHTML = '<option value="">Selecciona un campo...</option>';
+                        filteredFields.forEach(field => {
+                            select.innerHTML += `<option value="${field}">${field}</option>`;
+                        });
+                        availableFields = filteredFields;
+                        
+                        console.log(`Campos cargados dinámicamente (${result.source}):`, filteredFields);
+                        
+                        // Mostrar mensaje si se usó fallback
+                        if (result.source === 'fallback' && result.warning) {
+                            console.warn('Advertencia:', result.warning);
+                        }
+                    }
                 } else {
-                    // Fallback a campos hardcodeados si falla
-                    availableFields = [
-                        'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-                        'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
-                        'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
-                        'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
-                    ];
+                    throw new Error('No se pudieron obtener los campos');
                 }
             } catch (error) {
-                console.error('Error cargando campos:', error);
+                console.error('Error cargando campos dinámicamente:', error);
+                
                 // Fallback a campos hardcodeados
-                availableFields = [
+                const fallbackFields = [
                     'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-                    'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
-                    'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
-                    'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+                    'DirecciónVerificada', 'TipoAsamb', 'Sindicatura', 'Localidad', 'Departamento',
+                    'Tipo', 'Subtipo'
                 ];
-            }
-            
-            const select = document.getElementById('globalSearchField');
-            if (select) {
-                select.innerHTML = '<option value="">Selecciona un campo...</option>';
-                availableFields.forEach(field => {
-                    select.innerHTML += `<option value="${field}">${field}</option>`;
-                });
+                
+                const select = document.getElementById('globalSearchField');
+                if (select) {
+                    select.innerHTML = '<option value="">Selecciona un campo...</option>';
+                    fallbackFields.forEach(field => {
+                        select.innerHTML += `<option value="${field}">${field}</option>`;
+                    });
+                    availableFields = fallbackFields;
+                    
+                    console.log('Usando campos fallback:', fallbackFields);
+                }
+                
+                showStatus('Advertencia: Usando campos predeterminados. Error: ' + error.message, 'info');
             }
         }
-
+        
+        // Agregar función para refrescar campos dinámicamente (opcional)
+        async function refreshFields() {
+            await loadFieldsForGlobalSearch();
+            showStatus('Campos actualizados', 'success');
+        }
+        
         async function performGlobalSearch() {
             const searchText = document.getElementById('globalSearchText').value.trim();
             const searchField = document.getElementById('globalSearchField').value;
