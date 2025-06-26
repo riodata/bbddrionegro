@@ -2,9 +2,15 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
 require('dotenv').config();
+
+const { createClient } = require('@supabase/supabase-js');
+
+// Configuración de Supabase
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -15,24 +21,6 @@ app.use(express.json());
 
 // NUEVO: Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Configuración de Google Sheets
-const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
-const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
-// Inicializar Google Sheets
-async function initializeSheet() {
-  const serviceAccountAuth = new JWT({
-    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: GOOGLE_PRIVATE_KEY,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-
-  const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
-  await doc.loadInfo();
-  return doc.sheetsByIndex[0]; // Primera hoja
-}
 
 // NUEVO: Ruta principal para servir el frontend
 app.get('/', (req, res) => {
