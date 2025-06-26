@@ -409,32 +409,72 @@ app.get('/logs/list', (req, res) => {
 // Endpoint de diagnóstico para verificar qué tablas existen
 app.get('/webhook/debug-tables', async (req, res) => {
   try {
-    logger.info('Debug: Checking available tables');
+    logger.info('Debug: Testing table access with different name variations');
     
-    // Intentar listar todas las tablas
-    const { data: tables, error } = await supabase
-      .from('information_schema.tables')
-      .select('table_name')
-      .eq('table_schema', 'public')
-      .eq('table_type', 'BASE TABLE');
-
-    if (error) {
-      logger.error('Could not list tables', error);
-      return res.json({
-        success: false,
-        error: error.message,
-        message: 'Could not access information_schema.tables'
-      });
+    const tableVariations = [
+      'Cooperativas',
+      'cooperativas', 
+      'COOPERATIVAS',
+      'Cooperativas_',
+      'cooperativas_'
+    ];
+    
+    const results = [];
+    
+    for (const tableName of tableVariations) {
+      try {
+        logger.info(`Testing table: ${tableName}`);
+        
+        // Intentar hacer una consulta simple de conteo
+        const { count, error } = await supabase
+          .from(tableName)
+          .select('*', { count: 'exact', head: true });
+        
+        if (error) {
+          results.push({
+            tableName,
+            exists: false,
+            error: error.message,
+            errorCode: error.code
+          });
+        } else {
+          results.push({
+            tableName,
+            exists: true,
+            recordCount: count,
+            error: null
+          });
+          
+          // Si encontramos una que funciona, obtener una muestra
+          if (count > 0) {
+            const { data: sample } = await supabase
+              .from(tableName)
+              .select('*')
+              .limit(1)
+              .single();
+            
+            if (sample) {
+              results[results.length - 1].sampleColumns = Object.keys(sample);
+            }
+          }
+        }
+      } catch (testError) {
+        results.push({
+          tableName,
+          exists: false,
+          error: testError.message,
+          errorCode: 'EXCEPTION'
+        });
+      }
     }
-
-    const tableNames = tables.map(t => t.table_name);
-    logger.info('Available tables', { tables: tableNames });
-
+    
+    logger.info('Table testing completed', { results });
+    
     res.json({
       success: true,
-      tables: tableNames,
       currentTableName: TABLE_NAME,
-      tableExists: tableNames.includes(TABLE_NAME)
+      testResults: results,
+      workingTables: results.filter(r => r.exists)
     });
 
   } catch (error) {
@@ -447,6 +487,135 @@ app.get('/webhook/debug-tables', async (req, res) => {
   }
 });
 
+// También vamos a mejorar el endpoint table-columns para ser más robusto
+app.get('/webhook/table-columns', async (req, res) => {
+  try {
+    logger.info('Getting table columns', { tableName: TABLE_NAME });
+    
+    // Lista de posibles nombres de tabla para probar
+    const possibleTableNames = [
+      TABLE_NAME,
+      TABLE_NAME.toLowerCase(),
+      TABLE_NAME.toUpperCase(),
+      'cooperativas',
+      'Cooperativas'
+    ];
+    
+    let workingTableName = null;
+    let columns = [];
+    let recordCount = 0;
+    
+    // Probar cada posible nombre de tabla
+    for (const testTableName of possibleTableNames) {
+      try {
+        logger.info(`Testing table name: ${testTableName}`);
+        
+        // Intentar obtener el conteo primero
+        const { count, error: countError } = await supabase
+          .from(testTableName)
+          .select('*', { count: 'exact', head: true });
+        
+        if (!countError) {
+          workingTableName = testTableName;
+          recordCount = count;
+          logger.info(`Found working table: ${testTableName} with ${count} records`);
+          
+          if (count > 0) {
+            // Si hay registros, obtener una muestra para extraer columnas
+            const { data: sampleData, error: sampleError } = await supabase
+              .from(testTableName)
+              .select('*')
+              .limit(1)
+              .single();
+            
+            if (!sampleError && sampleData) {
+              columns = Object.keys(sampleData);
+              logger.info(`Extracted columns from ${testTableName}:`, { columns, count: columns.length });
+              break;
+            }
+          } else {
+            logger.info(`Table ${testTableName} exists but is empty`);
+            break;
+          }
+        }
+      } catch (testError) {
+        logger.debug(`Table ${testTableName} test failed:`, testError.message);
+        continue;
+      }
+    }
+    
+    if (workingTableName) {
+      if (columns.length > 0) {
+        return res.json({
+          success: true,
+          columns: columns,
+          source: 'sample_data',
+          total: columns.length,
+          tableName: workingTableName,
+          recordCount: recordCount
+        });
+      } else {
+        // Tabla existe pero está vacía
+        const fallbackFields = [
+          'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+          'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+          'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+          'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+        ];
+        
+        return res.json({
+          success: true,
+          columns: fallbackFields,
+          source: 'fallback_empty_table',
+          total: fallbackFields.length,
+          tableName: workingTableName,
+          recordCount: recordCount,
+          message: 'Table exists but is empty, using fallback columns'
+        });
+      }
+    } else {
+      // Ninguna tabla funciona
+      logger.error('No working table found');
+      const fallbackFields = [
+        'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+        'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+        'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+        'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+      ];
+      
+      return res.json({
+        success: false,
+        columns: fallbackFields,
+        source: 'fallback_no_table',
+        total: fallbackFields.length,
+        message: 'No accessible table found, using fallback columns',
+        testedTables: possibleTableNames
+      });
+    }
+
+  } catch (error) {
+    logger.error('Error in table-columns endpoint', { 
+      error: error.message, 
+      stack: error.stack,
+      tableName: TABLE_NAME 
+    });
+    
+    const fallbackFields = [
+      'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
+      'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
+      'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
+      'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
+    ];
+
+    res.json({
+      success: true,
+      columns: fallbackFields,
+      source: 'fallback_error',
+      total: fallbackFields.length,
+      warning: 'Using fallback fields due to error: ' + error.message
+    });
+  }
+});
 // CREATE - Crear nuevo registro
 app.post('/webhook/create', async (req, res) => {
   try {
