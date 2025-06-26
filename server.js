@@ -176,6 +176,37 @@ async function getValidSearchFields() {
   return validSearchFields;
 }
 
+// Endpoint simple para probar conectividad básica
+app.get('/webhook/test-basic', async (req, res) => {
+  try {
+    logger.info('Testing basic Supabase connectivity');
+    
+    // Crear una consulta muy simple que debería funcionar siempre
+    const { data, error } = await supabase
+      .from('nonexistent_table_test')
+      .select('*')
+      .limit(1);
+    
+    // Esperamos un error específico que nos diga que la tabla no existe
+    res.json({
+      success: true,
+      message: 'Supabase connection working',
+      expectedError: error?.message || 'No error (unexpected)',
+      supabaseUrl: process.env.SUPABASE_URL ? 'Set' : 'Not set',
+      supabaseKey: process.env.SUPABASE_ANON_KEY ? 'Set' : 'Not set'
+    });
+    
+  } catch (error) {
+    logger.error('Basic connectivity test failed', error);
+    res.json({
+      success: false,
+      error: error.message,
+      supabaseUrl: process.env.SUPABASE_URL ? 'Set' : 'Not set',
+      supabaseKey: process.env.SUPABASE_ANON_KEY ? 'Set' : 'Not set'
+    });
+  }
+});
+
 // Y también actualizar el endpoint table-columns:
 app.get('/webhook/table-columns', async (req, res) => {
   try {
