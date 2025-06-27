@@ -234,6 +234,32 @@
             color: #6c757d;
         }
 
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #e9ecef;
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .empty-state p {
+            font-size: 0.95rem;
+            opacity: 0.8;
+        }
+
         .status-message {
             padding: 15px;
             border-radius: 8px;
@@ -592,7 +618,11 @@
 
                 <!-- Contenedor de registros -->
                 <div id="search-records-container" class="records-container">
-                    <div class="loading">Haz clic en "Cargar Todos los Registros" o realiza una búsqueda</div>
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <h3>Buscar Registros</h3>
+                        <p>Utiliza la barra de búsqueda de arriba o haz clic en "Cargar Todos los Registros" para comenzar</p>
+                    </div>
                 </div>
             </div>
 
@@ -615,7 +645,11 @@
 
                 <!-- Contenedor de registros para actualizar -->
                 <div id="update-records-container" class="records-container">
-                    <div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>
+                    <div class="empty-state">
+                        <span class="icon">✏️</span>
+                        <h3>Seleccionar Registro para Editar</h3>
+                        <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas actualizar</p>
+                    </div>
                 </div>
             </div>
 
@@ -623,7 +657,11 @@
             <div id="delete" class="tab-content">
                 <h2>Eliminar Registro</h2>
                 <div id="delete-records" class="records-container">
-                    <div class="loading">Usa la barra de búsqueda de arriba para encontrar registros</div>
+                    <div class="empty-state">
+                        <span class="icon">🗑️</span>
+                        <h3>Seleccionar Registro para Eliminar</h3>
+                        <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -782,7 +820,13 @@
             if (!container) return;
             
             if (!records.length) {
-                container.innerHTML = '<div class="loading">No se encontraron registros.</div>';
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">❌</span>
+                        <h3>No se encontraron registros</h3>
+                        <p>No hay registros que coincidan con los criterios de búsqueda</p>
+                    </div>
+                `;
                 return;
             }
 
@@ -830,7 +874,7 @@
             });
         }
 
-        // -------- GLOBAL SEARCH (CORREGIDA) --------
+        // -------- GLOBAL SEARCH (MEJORADA CON CLEAR COMPLETO) --------
         async function loadFieldsForGlobalSearch() {
             try {
                 console.log('Cargando campos dinámicamente...');
@@ -951,10 +995,55 @@
             }
         }
 
+        // -------- CLEAR GLOBAL SEARCH (MEJORADA) --------
         function clearGlobalSearch() {
+            // Limpiar campos de búsqueda
             document.getElementById('globalSearchText').value = '';
             document.getElementById('globalSearchField').value = '';
-            showStatus('Búsqueda limpiada', 'info');
+            
+            // Limpiar registros actuales
+            currentRecords = [];
+            
+            // Determinar pestaña activa y restaurar mensaje por defecto
+            const activeTab = document.querySelector('.tab-content.active').id;
+            let container;
+            let emptyMessage;
+            
+            if (activeTab === 'search') {
+                container = document.getElementById('search-records-container');
+                emptyMessage = `
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <h3>Buscar Registros</h3>
+                        <p>Utiliza la barra de búsqueda de arriba o haz clic en "Cargar Todos los Registros" para comenzar</p>
+                    </div>
+                `;
+            } else if (activeTab === 'update') {
+                container = document.getElementById('update-records-container');
+                emptyMessage = `
+                    <div class="empty-state">
+                        <span class="icon">✏️</span>
+                        <h3>Seleccionar Registro para Editar</h3>
+                        <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas actualizar</p>
+                    </div>
+                `;
+            } else if (activeTab === 'delete') {
+                container = document.getElementById('delete-records');
+                emptyMessage = `
+                    <div class="empty-state">
+                        <span class="icon">🗑️</span>
+                        <h3>Seleccionar Registro para Eliminar</h3>
+                        <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                    </div>
+                `;
+            }
+            
+            // Restaurar mensaje por defecto
+            if (container && emptyMessage) {
+                container.innerHTML = emptyMessage;
+            }
+            
+            showStatus('Búsqueda limpiada - Realiza una nueva búsqueda para ver registros', 'info');
         }
 
         function loadAllGlobalRecords() {
@@ -1097,7 +1186,13 @@
                 
                 if (result.success) {
                     showStatus('Registro eliminado correctamente', 'success');
-                    document.getElementById('delete-records').innerHTML = '';
+                    document.getElementById('delete-records').innerHTML = `
+                        <div class="empty-state">
+                            <span class="icon">🗑️</span>
+                            <h3>Seleccionar Registro para Eliminar</h3>
+                            <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                        </div>
+                    `;
                     currentDeletingRow = null;
                     showTab('search');
                     loadAllRecords();
@@ -1112,7 +1207,13 @@
 
         function cancelDelete() {
             currentDeletingRow = null;
-            document.getElementById('delete-records').innerHTML = '';
+            document.getElementById('delete-records').innerHTML = `
+                <div class="empty-state">
+                    <span class="icon">🗑️</span>
+                    <h3>Seleccionar Registro para Eliminar</h3>
+                    <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                </div>
+            `;
             showTab('search');
             showStatus('Eliminación cancelada', 'info');
         }
