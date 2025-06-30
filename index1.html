@@ -903,7 +903,7 @@
                 try {
                     showStatus('Creando registro...', 'info');
                     
-                    const response = await fetch(getApiUrl('create'), {
+                    const response = await fetch(getDynamicApiUrl('create'), {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -945,7 +945,7 @@
             const globalSearch = document.getElementById('global-search');
             if (['search', 'update', 'delete'].includes(tabName)) {
                 globalSearch.style.display = 'block';
-                loadFieldsForGlobalSearch();
+                loadDynamicFieldsForGlobalSearch();
             } else {
                 globalSearch.style.display = 'none';
             }
@@ -1092,12 +1092,16 @@
         }
 
         // -------- UPDATE FUNCTIONS --------
-        function editRecord(legajo) {
-            console.log('Editando registro con Legajo:', legajo);
+        function editRecord(primaryKeyValue) {
+            console.log('Editando registro con clave primaria:', primaryKeyValue);
             
-            const record = currentRecords.find(r => (r.Legajo || r._Legajo) == legajo);
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const record = currentRecords.find(r => 
+                (r[primaryKey] || r[`_${primaryKey}`] || r._primaryKey) == primaryKeyValue
+            );
+            
             if (!record) {
-                showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
+                showStatus(`No se encontró el registro con ${primaryKey}: ${primaryKeyValue}`, 'error');
                 return;
             }
             
@@ -1110,25 +1114,82 @@
             document.getElementById('update-form-container').style.display = 'block';
             document.getElementById('update-records-container').style.display = 'none';
             
-            const legajo = record.Legajo || record._Legajo;
-            document.getElementById('update-Legajo').value = legajo;
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const primaryKeyValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey;
+            
+            // Crear campo oculto para la clave primaria
+            const updatePrimaryKeyField = document.getElementById(`update-${primaryKey}`);
+            if (updatePrimaryKeyField) {
+                updatePrimaryKeyField.value = primaryKeyValue;
+            }
             
             const fieldsContainer = document.getElementById('update-fields');
             fieldsContainer.innerHTML = '';
             
-            // Crear campos para edición
-            Object.entries(record).forEach(([key, value]) => {
-                if (key === '_Legajo' || key === '_rowIndex') return;
-                
-                const fieldId = `update-${key.replace(/\s+/g, '_')}`;
-                const fieldHtml = `
-                    <div class="form-group">
-                        <label for="${fieldId}">${key}:</label>
-                        <input type="text" id="${fieldId}" name="${key}" value="${value || ''}">
-                    </div>
-                `;
-                fieldsContainer.innerHTML += fieldHtml;
-            });
+            // Usar esquema dinámico para crear campos
+            if (currentTableSchema && currentTableSchema.columns) {
+                currentTableSchema.columns.forEach(column => {
+                    const fieldName = column.column_name;
+                    const value = record[fieldName] || '';
+                    const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
+                    
+                    const fieldId = `update-${fieldName.replace(/\s+/g, '_')}`;
+                    const isRequired = column.is_nullable === 'NO' ? 'required' : '';
+                    const isPrimaryKey = fieldName === primaryKey;
+                    
+                    let labelText = fieldName;
+                    if (isPrimaryKey) labelText += ' (Clave Primaria)';
+                    if (isRequired) labelText += ' *';
+                    
+                    const fieldHtml = `
+                        <div class="form-group">
+                            <label for="${fieldId}">
+                                ${labelText}
+                                <small style="color: #666; font-weight: normal;">(${column.data_type})</small>
+                            </label>
+                            ${createUpdateInputElement(column, inputType, isRequired, value, isPrimaryKey)}
+                        </div>
+                    `;
+                    fieldsContainer.innerHTML += fieldHtml;
+                });
+            } else {
+                // Fallback si no hay esquema
+                Object.entries(record).forEach(([key, value]) => {
+                    if (key.startsWith('_') && key !== '_primaryKey') return;
+                    
+                    const fieldId = `update-${key.replace(/\s+/g, '_')}`;
+                    const fieldHtml = `
+                        <div class="form-group">
+                            <label for="${fieldId}">${key}:</label>
+                            <input type="text" id="${fieldId}" name="${key}" value="${value || ''}">
+                        </div>
+                    `;
+                    fieldsContainer.innerHTML += fieldHtml;
+                });
+            }
+        }
+
+        function createUpdateInputElement(column, inputType, required, value, isPrimaryKey) {
+            const commonAttributes = `
+                id="update-${column.column_name.replace(/\s+/g, '_')}" 
+                name="${column.column_name}" 
+                ${required}
+                ${isPrimaryKey ? 'readonly' : ''}
+                ${column.character_maximum_length ? `maxlength="${column.character_maximum_length}"` : ''}
+            `;
+            
+            if (inputType === 'textarea') {
+                return `<textarea ${commonAttributes} rows="3">${value}</textarea>`;
+            } else if (inputType === 'checkbox') {
+                return `<input type="checkbox" ${commonAttributes} ${value ? 'checked' : ''}>`;
+            } else if (inputType === 'select') {
+                return `<select ${commonAttributes}>
+                    <option value=""${!value ? ' selected' : ''}>Seleccionar...</option>
+                    <option value="${value}"${value ? ' selected' : ''}>${value}</option>
+                </select>`;
+            } else {
+                return `<input type="${inputType}" ${commonAttributes} value="${value || ''}">`;
+            }
         }
 
         function cancelUpdate() {
@@ -1139,12 +1200,16 @@
         }
 
         // -------- DELETE FUNCTIONS --------
-        function deleteRecord(legajo) {
-            console.log('Eliminando registro con Legajo:', legajo);
+        function deleteRecord(primaryKeyValue) {
+            console.log('Eliminando registro con clave primaria:', primaryKeyValue);
             
-            const record = currentRecords.find(r => (r.Legajo || r._Legajo) == legajo);
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const record = currentRecords.find(r => 
+                (r[primaryKey] || r[`_${primaryKey}`] || r._primaryKey) == primaryKeyValue
+            );
+            
             if (!record) {
-                showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
+                showStatus(`No se encontró el registro con ${primaryKey}: ${primaryKeyValue}`, 'error');
                 return;
             }
             
@@ -1155,16 +1220,19 @@
 
         function showDeleteConfirmation(record) {
             const container = document.getElementById('delete-records');
-            const legajo = record.Legajo || record._Legajo;
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const primaryKeyValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey;
+            const tableName = currentTableSchema ? currentTableSchema.displayName : currentTable;
             
             container.innerHTML = `
                 <div class="delete-confirmation">
-                    <h3>🗑️ Eliminar Registro #${legajo}</h3>
+                    <h3>🗑️ Eliminar Registro - ${tableName}</h3>
+                    <p><strong>${primaryKey}:</strong> ${primaryKeyValue}</p>
                     
                     <div class="record">
                         ${Object.entries(record)
-                            .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
-                            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+                            .filter(([k]) => !k.startsWith('_'))
+                            .map(([k, v]) => `<strong>${k}:</strong> ${v || 'N/A'}`)
                             .join('<br>')}
                     </div>
                     
@@ -1173,24 +1241,26 @@
                     </div>
                     
                     <div class="confirmation-buttons">
-                        <button class="btn btn-danger" onclick="confirmDelete('${legajo}')">Sí, eliminar</button>
+                        <button class="btn btn-danger" onclick="confirmDelete('${primaryKeyValue}')">Sí, eliminar</button>
                         <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
                     </div>
                 </div>
             `;
         }
 
-        async function confirmDelete(legajo) {
+        async function confirmDelete(primaryKeyValue) {
             try {
                 showStatus('Eliminando registro...', 'info');
                 
-                const response = await fetch(`${API_BASE}/webhook/delete`, {
+                const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+                
+                const response = await fetch(getDynamicApiUrl('delete'), {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         searchCriteria: { 
-                            field: 'Legajo',  
-                            value: legajo 
+                            field: primaryKey,  
+                            value: primaryKeyValue 
                         } 
                     })
                 });
@@ -1231,60 +1301,163 @@
             showStatus('Eliminación cancelada', 'info');
         }
 
-        // Inicializar aplicación cuando se carga la página
+        // -------- UTILITY FUNCTIONS --------
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status-message');
+            if (statusDiv) {
+                statusDiv.className = `status-message ${type}`;
+                statusDiv.textContent = message;
+                statusDiv.style.display = 'block';
+                
+                // Auto-hide después de 5 segundos
+                setTimeout(() => {
+                    clearStatus();
+                }, 5000);
+            } else {
+                console.log(`Status: ${type.toUpperCase()} - ${message}`);
+            }
+        }
+
+        function clearStatus() {
+            const statusDiv = document.getElementById('status-message');
+            if (statusDiv) {
+                statusDiv.style.display = 'none';
+                statusDiv.textContent = '';
+            }
+        }
+
+        function showCreateSuccess() {
+            const createContainer = document.getElementById('create-form-container');
+            const successContainer = document.getElementById('create-success-container');
+            
+            if (createContainer) createContainer.style.display = 'none';
+            if (successContainer) {
+                successContainer.style.display = 'block';
+            } else {
+                // Si no existe el contenedor de éxito, usar status
+                showStatus('Registro creado exitosamente', 'success');
+                document.getElementById('createForm').reset();
+            }
+        }
+
+        function showCreateForm() {
+            const createContainer = document.getElementById('create-form-container');
+            const successContainer = document.getElementById('create-success-container');
+            
+            if (createContainer) createContainer.style.display = 'block';
+            if (successContainer) successContainer.style.display = 'none';
+        }
+
+        function createAnotherRecord() {
+            document.getElementById('createForm').reset();
+            showCreateForm();
+        }
+
+        function viewAllRecords() {
+            showTab('search');
+            loadAllRecords();
+        }
+
+        function refreshFields() {
+            if (currentTableSchema) {
+                loadDynamicFieldsForGlobalSearch();
+                showStatus('Campos actualizados', 'success');
+            } else {
+                showStatus('No hay tabla seleccionada', 'error');
+            }
+        }
+
+        function displaySearchResults(records) {
+            const containers = [
+                'search-records-container',
+                'update-records-container', 
+                'delete-records'
+            ];
+            
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            
+            containers.forEach(containerId => {
+                const container = document.getElementById(containerId);
+                if (container) {
+                    if (records.length === 0) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <span class="icon">📄</span>
+                                <h3>No se encontraron registros</h3>
+                                <p>No hay registros que coincidan con los criterios de búsqueda</p>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = records.map(record => {
+                            const pkValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey || 'N/A';
+                            return `
+                                <div class="record">
+                                    <div class="record-header">
+                                        <div class="record-title">
+                                            ${primaryKey}: ${pkValue}
+                                        </div>
+                                        <div class="record-buttons">
+                                            <button class="btn btn-warning" onclick="editRecord('${pkValue}')">✏️ Editar</button>
+                                            <button class="btn btn-danger" onclick="deleteRecord('${pkValue}')">🗑️ Eliminar</button>
+                                        </div>
+                                    </div>
+                                    <div class="record-details">
+                                        ${Object.entries(record)
+                                            .filter(([key]) => !key.startsWith('_'))
+                                            .map(([key, value]) => `<strong>${key}:</strong> ${value || 'N/A'}`)
+                                            .join(' | ')
+                                        }
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                }
+            });
+        }
+
+        // ========== INICIALIZACIÓN ÚNICA ==========
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Página cargada, inicializando sistema dinámico...');
+            
             // Cargar tablas dinámicamente
             loadDynamicTables();
             
             // Configurar formulario de creación
-            document.getElementById('createForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-        
-                const formData = new FormData(this);
-                const data = Object.fromEntries(formData.entries());
-        
-                try {
-                    showStatus('Creando registro...', 'info');
-                    
-                    const response = await fetch(getDynamicApiUrl('create'), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data),
-                    });
-        
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showCreateSuccess();
-                    } else {
-                        showStatus('Error al crear el registro: ' + result.message, 'error');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    showStatus('Error al enviar el formulario: ' + error.message, 'error');
-                }
-            });
-        });
-
-        // -------- UTILITY FUNCTIONS --------
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('status-message');
-            statusDiv.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+            const createForm = document.getElementById('createForm');
+            if (createForm) {
+                createForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
             
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
-        }
-
-        // Inicializar al cargar la página
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Página cargada, inicializando...');
-            showTab('create');
+                    const formData = new FormData(this);
+                    const data = Object.fromEntries(formData.entries());
+            
+                    try {
+                        showStatus('Creando registro...', 'info');
+                        
+                        const response = await fetch(getDynamicApiUrl('create'), {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(data),
+                        });
+            
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            showCreateSuccess();
+                            showStatus('Registro creado exitosamente', 'success');
+                        } else {
+                            showStatus('Error al crear el registro: ' + result.message, 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                    }
+                });
+            }
         });
     </script>
 </body>
-</html>
-                    
+</html>      
