@@ -13,7 +13,7 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
   process.exit(1);
 }
 
-// Configuración de Supabase con mejor manejo de errores
+// Configuración de Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY,
@@ -26,6 +26,84 @@ const supabase = createClient(
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+
+// ========== FUNCIONES PARA METADATOS DINÁMICOS ==========
+
+// Obtener todas las tablas disponibles en la base de datos
+async function getDynamicTables() {
+  try {
+    const { data, error } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .eq('table_type', 'BASE TABLE')
+      .order('table_name');
+    
+    if (error) throw error;
+    return data.map(row => row.table_name);
+  } catch (error) {
+    console.error('Error obteniendo tablas:', error);
+    throw error;
+  }
+}
+
+// Obtener metadatos de una tabla específica
+async function getTableSchema(tableName) {
+  try {
+    // Obtener información de columnas
+    const { data: columns, error: columnsError } = await supabase
+      .from('information_schema.columns')
+      .select(`
+        column_name,
+        data_type,
+        is_nullable,
+        column_default,
+        ordinal_position,
+        character_maximum_length
+      `)
+      .eq('table_name', tableName)
+      .eq('table_schema', 'public')
+      .order('ordinal_position');
+
+    if (columnsError) throw columnsError;
+
+    // Obtener llave primaria
+    const { data: pkData, error: pkError } = await supabase
+      .from('information_schema.key_column_usage')
+      .select('column_name')
+      .eq('table_name', tableName)
+      .eq('table_schema', 'public');
+
+    if (pkError) {
+      console.warn(`No se pudo obtener llave primaria para ${tableName}:`, pkError);
+    }
+
+    const primaryKey = pkData && pkData.length > 0 ? pkData[0].column_name : columns[0]?.column_name || 'id';
+
+    return {
+      tableName,
+      columns: columns || [],
+      primaryKey: primaryKey,
+      displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    };
+  } catch (error) {
+    console.error(`Error obteniendo esquema de ${tableName}:`, error);
+    throw error;
+  }
+}
+
+// Validar que una tabla existe dinámicamente
+async function validateTableExists(tableName) {
+  try {
+    const tables = await getDynamicTables();
+    if (!tables.includes(tableName)) {
+      throw new Error(`Tabla '${tableName}' no encontrada`);
+    }
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
 
 // Middleware
 app.use(cors());
@@ -64,26 +142,88 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// CREATE - Crear nuevo registro
-app.post('/webhook/create', async (req, res) => {
-  try {
-    const data = req.body;
-    logOperation('CREATE REQUEST', data);
+// ========== ENDPOINTS DINÁMICOS ==========
 
-    // Validar que el campo Legajo existe
-    if (!data.Legajo) {
+// Obtener todas las tablas disponibles
+app.get('/api/tables', async (req, res) => {
+  try {
+    const tables = await getDynamicTables();
+    
+    res.json({
+      success: true,
+      tables: tables.map(tableName => ({
+        id: tableName,
+        name: tableName,
+        displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        description: `Tabla ${tableName.replace(/_/g, ' ')}`
+      })),
+      total: tables.length
+    });
+  } catch (error) {
+    console.error('Error obteniendo tablas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las tablas disponibles',
+      error: error.message
+    });
+  }
+});
+
+// Obtener esquema de una tabla específica
+app.get('/api/tables/:tableName/schema', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    
+    // Validar que la tabla existe
+    await validateTableExists(tableName);
+    
+    const schema = await getTableSchema(tableName);
+    
+    res.json({
+      success: true,
+      schema: schema
+    });
+  } catch (error) {
+    console.error(`Error obteniendo esquema de ${req.params.tableName}:`, error);
+    const status = error.message.includes('no encontrada') ? 404 : 500;
+    res.status(status).json({
+      success: false,
+      message: error.message,
+      error: error.message
+    });
+  }
+});
+
+// ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
+
+// CREATE - Crear nuevo registro
+// CREATE - Crear nuevo registro (versión dinámica)
+app.post('/api/tables/:tableName/create', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const data = req.body;
+    
+    // Validar tabla y obtener esquema
+    await validateTableExists(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    logOperation('CREATE REQUEST', { tableName, data });
+
+    // Validar que el campo primaryKey existe
+    if (!data[primaryKey]) {
       return res.status(400).json({
         success: false,
-        message: 'El campo Legajo es obligatorio para crear un registro.',
+        message: `El campo ${primaryKey} es obligatorio para crear un registro.`,
       });
     }
 
-    // Comprobar si ya existe un registro con el mismo Legajo
+    // Comprobar si ya existe un registro con la misma clave primaria
     const { data: existingRecord, error: searchError } = await supabase
-      .from('cooperativas')
-      .select('Legajo')
-      .eq('Legajo', data.Legajo)
-      .maybeSingle(); // Usar maybeSingle() en lugar de single()
+      .from(tableName)
+      .select(primaryKey)
+      .eq(primaryKey, data[primaryKey])
+      .maybeSingle();
 
     if (searchError) {
       const errorInfo = handleSupabaseError(searchError, 'búsqueda de registro existente');
@@ -96,13 +236,13 @@ app.post('/webhook/create', async (req, res) => {
     if (existingRecord) {
       return res.status(409).json({
         success: false,
-        message: 'Ya existe un registro con el Legajo proporcionado.',
+        message: `Ya existe un registro con el ${primaryKey} proporcionado.`,
       });
     }
 
     // Insertar nuevo registro
     const { data: newRecord, error: insertError } = await supabase
-      .from('cooperativas')
+      .from(tableName)
       .insert([data])
       .select()
       .single();
@@ -120,7 +260,7 @@ app.post('/webhook/create', async (req, res) => {
     res.json({
       success: true,
       message: 'Registro creado exitosamente',
-      Legajo: newRecord.Legajo,
+      primaryKey: newRecord[primaryKey],
       data: newRecord
     });
   } catch (error) {
@@ -134,14 +274,22 @@ app.post('/webhook/create', async (req, res) => {
 });
 
 // READ - Leer todos los registros
-app.get('/webhook/read', async (req, res) => {
+// READ - Leer todos los registros (versión dinámica)
+app.get('/api/tables/:tableName/read', async (req, res) => {
   try {
-    logOperation('READ REQUEST', 'Solicitando todos los registros');
+    const { tableName } = req.params;
+    
+    // Validar tabla y obtener esquema
+    await validateTableExists(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    logOperation('READ REQUEST', { tableName });
 
     const { data, error } = await supabase
-      .from('cooperativas')
+      .from(tableName)
       .select('*')
-      .order('Legajo', { ascending: true });
+      .order(primaryKey, { ascending: true });
 
     if (error) {
       const errorInfo = handleSupabaseError(error, 'lectura de registros');
@@ -153,7 +301,7 @@ app.get('/webhook/read', async (req, res) => {
 
     // Mapear datos para mantener compatibilidad con el frontend
     const mappedData = data.map((record, index) => ({
-      _Legajo: record.Legajo,
+      _primaryKey: record[primaryKey],
       ...record,
       _rowIndex: index + 1
     }));
@@ -163,7 +311,9 @@ app.get('/webhook/read', async (req, res) => {
     res.json({
       success: true,
       data: mappedData,
-      total: mappedData.length
+      total: mappedData.length,
+      primaryKey: primaryKey,
+      tableName: tableName
     });
   } catch (error) {
     console.error('❌ Error inesperado en READ:', error);
@@ -176,34 +326,23 @@ app.get('/webhook/read', async (req, res) => {
 });
 
 // SEARCH - Búsqueda simple
-app.get('/webhook/search', async (req, res) => {
+app.get('/api/:category/:table/search', async (req, res) => {
   try {
+    const { category, table } = req.params;
     const { searchText, searchField } = req.query;
-    logOperation('SEARCH REQUEST', { searchText, searchField });
+    const tableConfig = validateTable(category, table);
+    const primaryKey = tableConfig.primaryKey;
+    
+    logOperation('SEARCH REQUEST', { category, table, searchText, searchField });
 
-    let query = supabase.from('cooperativas').select('*');
+    let query = supabase.from(table).select('*');
 
     // Aplicar filtro si existe
     if (searchText && searchField) {
-      // Validar que el campo de búsqueda existe
-      const validFields = [
-        'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-        'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
-        'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
-        'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
-      ];
-      
-      if (!validFields.includes(searchField)) {
-        return res.status(400).json({
-          success: false,
-          message: `Campo de búsqueda '${searchField}' no válido`
-        });
-      }
-      
       query = query.ilike(searchField, `%${searchText}%`);
     }
 
-    query = query.order('Legajo', { ascending: true });
+    query = query.order(primaryKey, { ascending: true });
 
     const { data, error } = await query;
     
@@ -217,7 +356,7 @@ app.get('/webhook/search', async (req, res) => {
 
     // Mapear datos para mantener compatibilidad
     const mappedData = data.map((record, index) => ({
-      _Legajo: record.Legajo,
+      _primaryKey: record[primaryKey],
       ...record,
       _rowIndex: index + 1
     }));
@@ -229,7 +368,8 @@ app.get('/webhook/search', async (req, res) => {
       data: mappedData,
       total: mappedData.length,
       searchText: searchText || null,
-      searchField: searchField || null
+      searchField: searchField || null,
+      primaryKey: primaryKey
     });
   } catch (error) {
     console.error('❌ Error inesperado en SEARCH:', error);
@@ -242,10 +382,13 @@ app.get('/webhook/search', async (req, res) => {
 });
 
 // UPDATE - Actualizar registro
-app.put('/webhook/update', async (req, res) => {
+app.put('/api/:category/:table/update', async (req, res) => {
   try {
+    const { category, table } = req.params;
     const { searchCriteria, updateData } = req.body;
-    logOperation('UPDATE REQUEST', { searchCriteria, updateData });
+    const tableConfig = validateTable(category, table);
+    
+    logOperation('UPDATE REQUEST', { category, table, searchCriteria, updateData });
     
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
@@ -257,14 +400,14 @@ app.put('/webhook/update', async (req, res) => {
     // Limpiar updateData de campos internos
     const cleanUpdateData = { ...updateData };
     delete cleanUpdateData._rowIndex;
-    delete cleanUpdateData._Legajo;
+    delete cleanUpdateData._primaryKey;
 
     const { data, error } = await supabase
-      .from('cooperativas')
+      .from(table)
       .update(cleanUpdateData)
       .eq(searchCriteria.field, searchCriteria.value)
       .select()
-      .maybeSingle(); // Usar maybeSingle() en lugar de single()
+      .maybeSingle();
 
     if (error) {
       const errorInfo = handleSupabaseError(error, 'actualización de registro');
@@ -288,7 +431,7 @@ app.put('/webhook/update', async (req, res) => {
       message: 'Registro actualizado correctamente',
       data: {
         ...data,
-        _Legajo: data.Legajo,
+        _primaryKey: data[tableConfig.primaryKey],
         _rowIndex: 1
       }
     });
@@ -303,10 +446,13 @@ app.put('/webhook/update', async (req, res) => {
 });
 
 // DELETE - Eliminar registro
-app.delete('/webhook/delete', async (req, res) => {
+app.delete('/api/:category/:table/delete', async (req, res) => {
   try {
+    const { category, table } = req.params;
     const { searchCriteria } = req.body;
-    logOperation('DELETE REQUEST', searchCriteria);
+    const tableConfig = validateTable(category, table);
+    
+    logOperation('DELETE REQUEST', { category, table, searchCriteria });
 
     if (!searchCriteria || !searchCriteria.field || !searchCriteria.value) {
       return res.status(400).json({
@@ -316,11 +462,11 @@ app.delete('/webhook/delete', async (req, res) => {
     }
 
     const { data: deletedRecord, error } = await supabase
-      .from('cooperativas')
+      .from(table)
       .delete()
       .eq(searchCriteria.field, searchCriteria.value)
       .select()
-      .maybeSingle(); // Usar maybeSingle() en lugar de single()
+      .maybeSingle();
 
     if (error) {
       const errorInfo = handleSupabaseError(error, 'eliminación de registro');
@@ -355,13 +501,16 @@ app.delete('/webhook/delete', async (req, res) => {
 });
 
 // FIELDS - Obtener campos disponibles usando introspección de Supabase
-app.get('/webhook/fields', async (req, res) => {
+app.get('/api/:category/:table/fields', async (req, res) => {
   try {
-    logOperation('FIELDS REQUEST', 'Obteniendo campos de la tabla');
+    const { category, table } = req.params;
+    validateTable(category, table);
+    
+    logOperation('FIELDS REQUEST', { category, table });
 
     // Intentar obtener los campos mediante una consulta de muestra
     const { data: sampleData, error } = await supabase
-      .from('cooperativas')
+      .from(table)
       .select('*')
       .limit(1)
       .maybeSingle();
@@ -378,14 +527,6 @@ app.get('/webhook/fields', async (req, res) => {
     let fields = [];
     if (sampleData) {
       fields = Object.keys(sampleData).filter(key => !key.startsWith('_'));
-    } else {
-      // Fallback a campos predefinidos si no hay datos
-      fields = [
-        'Legajo', 'Cooperativa', 'Matrícula', 'ActaPcial', 'EmisMat', 'Dirección',
-        'DirecciónVerificada', 'Tel', 'Presid', 'Mail', 'EstadoEntid', 'FechaAsamb',
-        'TipoAsamb', 'ConsejoAdmin', 'Sindicatura', 'Localidad', 'Departamento',
-        'CodPost', 'Cuit', 'Tipo', 'Subtipo', 'Observaciones', 'Latitud', 'Longitud'
-      ];
     }
 
     logOperation('FIELDS SUCCESS', `${fields.length} campos encontrados`);
@@ -410,7 +551,7 @@ app.get('/health', async (req, res) => {
   try {
     const startTime = Date.now();
     
-    // Probar conexión con una consulta simple
+    // Probar conexión con una consulta simple en la tabla cooperativas
     const { data, error } = await supabase
       .from('cooperativas')
       .select('count', { count: 'exact', head: true });
@@ -428,98 +569,21 @@ app.get('/health', async (req, res) => {
       });
     }
 
-    res.json({ 
-      status: 'healthy', 
-      database: 'connected',
-      responseTime: `${responseTime}ms`,
-      supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
-      supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
-      timestamp: new Date().toISOString()
-    });
+  res.json({ 
+    status: 'healthy', 
+    database: 'connected',
+    responseTime: `${responseTime}ms`,
+    supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
+    supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
+    dynamicTables: 'enabled',
+    timestamp: new Date().toISOString()
+  });
   } catch (error) {
     console.error('❌ Health check error:', error);
     res.status(503).json({ 
       status: 'unhealthy', 
       database: 'error',
       error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Test connection mejorado
-app.get('/test-connection', async (req, res) => {
-  try {
-    console.log('🔄 Probando conexión a Supabase...');
-    
-    const startTime = Date.now();
-    
-    // Probar múltiples operaciones
-    const tests = [];
-    
-    // Test 1: Contar registros
-    try {
-      const { count, error: countError } = await supabase
-        .from('cooperativas')
-        .select('*', { count: 'exact', head: true });
-      
-      tests.push({
-        test: 'count_records',
-        success: !countError,
-        result: countError ? countError.message : `${count} registros`,
-        error: countError?.message
-      });
-    } catch (e) {
-      tests.push({
-        test: 'count_records',
-        success: false,
-        error: e.message
-      });
-    }
-
-    // Test 2: Leer un registro
-    try {
-      const { data, error: readError } = await supabase
-        .from('cooperativas')
-        .select('Legajo')
-        .limit(1)
-        .maybeSingle();
-      
-      tests.push({
-        test: 'read_sample',
-        success: !readError,
-        result: readError ? readError.message : (data ? 'Datos disponibles' : 'Sin datos'),
-        error: readError?.message
-      });
-    } catch (e) {
-      tests.push({
-        test: 'read_sample',
-        success: false,
-        error: e.message
-      });
-    }
-
-    const responseTime = Date.now() - startTime;
-    const allTestsPassed = tests.every(test => test.success);
-
-    console.log(`✅ Test de conexión completado en ${responseTime}ms`);
-
-    res.json({
-      status: allTestsPassed ? 'success' : 'partial_failure',
-      message: allTestsPassed ? 'Todas las pruebas pasaron' : 'Algunas pruebas fallaron',
-      responseTime: `${responseTime}ms`,
-      environment: {
-        supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
-        supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing'
-      },
-      tests: tests,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ Error en test de conexión:', error);
-    res.status(500).json({
-      status: 'error',
-      message: error.message,
       timestamp: new Date().toISOString()
     });
   }
@@ -540,19 +604,27 @@ app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend available at /`);
   console.log(`🏥 Health check available at /health`);
-  console.log(`🔧 Test connection available at /test-connection`);
+  console.log(`🔄 Sistema dinámico activado - detectando tablas automáticamente`);
   
-  // Probar conexión al iniciar
+  // Probar conexión y mostrar tablas disponibles
   try {
     console.log('🔄 Probando conexión inicial a Supabase...');
     const { error } = await supabase
-      .from('cooperativas')
+      .from('information_schema.tables')
       .select('count', { count: 'exact', head: true });
     
     if (error) {
       console.error('❌ Error de conexión inicial:', error.message);
     } else {
       console.log('✅ Conexión a Supabase exitosa');
+      
+      // Mostrar tablas disponibles
+      try {
+        const tables = await getDynamicTables();
+        console.log(`📊 Tablas detectadas: ${tables.join(', ')}`);
+      } catch (tableError) {
+        console.log('⚠️ No se pudieron listar las tablas automáticamente');
+      }
     }
   } catch (error) {
     console.error('❌ Error al probar conexión inicial:', error.message);
