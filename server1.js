@@ -27,6 +27,84 @@ const supabase = createClient(
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// ========== FUNCIONES PARA METADATOS DINÁMICOS ==========
+
+// Obtener todas las tablas disponibles en la base de datos
+async function getDynamicTables() {
+  try {
+    const { data, error } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .eq('table_type', 'BASE TABLE')
+      .order('table_name');
+    
+    if (error) throw error;
+    return data.map(row => row.table_name);
+  } catch (error) {
+    console.error('Error obteniendo tablas:', error);
+    throw error;
+  }
+}
+
+// Obtener metadatos de una tabla específica
+async function getTableSchema(tableName) {
+  try {
+    // Obtener información de columnas
+    const { data: columns, error: columnsError } = await supabase
+      .from('information_schema.columns')
+      .select(`
+        column_name,
+        data_type,
+        is_nullable,
+        column_default,
+        ordinal_position,
+        character_maximum_length
+      `)
+      .eq('table_name', tableName)
+      .eq('table_schema', 'public')
+      .order('ordinal_position');
+
+    if (columnsError) throw columnsError;
+
+    // Obtener llave primaria
+    const { data: pkData, error: pkError } = await supabase
+      .from('information_schema.key_column_usage')
+      .select('column_name')
+      .eq('table_name', tableName)
+      .eq('table_schema', 'public');
+
+    if (pkError) {
+      console.warn(`No se pudo obtener llave primaria para ${tableName}:`, pkError);
+    }
+
+    const primaryKey = pkData && pkData.length > 0 ? pkData[0].column_name : columns[0]?.column_name || 'id';
+
+    return {
+      tableName,
+      columns: columns || [],
+      primaryKey: primaryKey,
+      displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    };
+  } catch (error) {
+    console.error(`Error obteniendo esquema de ${tableName}:`, error);
+    throw error;
+  }
+}
+
+// Validar que una tabla existe dinámicamente
+async function validateTableExists(tableName) {
+  try {
+    const tables = await getDynamicTables();
+    if (!tables.includes(tableName)) {
+      throw new Error(`Tabla '${tableName}' no encontrada`);
+    }
+    return true;
+  } catch (error) {
+    throw error;
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -64,18 +142,73 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ========== ENDPOINTS DINÁMICOS ==========
+
+// Obtener todas las tablas disponibles
+app.get('/api/tables', async (req, res) => {
+  try {
+    const tables = await getDynamicTables();
+    
+    res.json({
+      success: true,
+      tables: tables.map(tableName => ({
+        id: tableName,
+        name: tableName,
+        displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        description: `Tabla ${tableName.replace(/_/g, ' ')}`
+      })),
+      total: tables.length
+    });
+  } catch (error) {
+    console.error('Error obteniendo tablas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las tablas disponibles',
+      error: error.message
+    });
+  }
+});
+
+// Obtener esquema de una tabla específica
+app.get('/api/tables/:tableName/schema', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    
+    // Validar que la tabla existe
+    await validateTableExists(tableName);
+    
+    const schema = await getTableSchema(tableName);
+    
+    res.json({
+      success: true,
+      schema: schema
+    });
+  } catch (error) {
+    console.error(`Error obteniendo esquema de ${req.params.tableName}:`, error);
+    const status = error.message.includes('no encontrada') ? 404 : 500;
+    res.status(status).json({
+      success: false,
+      message: error.message,
+      error: error.message
+    });
+  }
+});
+
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 
 // CREATE - Crear nuevo registro
-app.post('/api/:category/:table/create', async (req, res) => {
+// CREATE - Crear nuevo registro (versión dinámica)
+app.post('/api/tables/:tableName/create', async (req, res) => {
   try {
-    const { category, table } = req.params;
+    const { tableName } = req.params;
     const data = req.body;
     
-    const tableConfig = validateTable(category, table);
-    const primaryKey = tableConfig.primaryKey;
+    // Validar tabla y obtener esquema
+    await validateTableExists(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
     
-    logOperation('CREATE REQUEST', { category, table, data });
+    logOperation('CREATE REQUEST', { tableName, data });
 
     // Validar que el campo primaryKey existe
     if (!data[primaryKey]) {
@@ -87,7 +220,7 @@ app.post('/api/:category/:table/create', async (req, res) => {
 
     // Comprobar si ya existe un registro con la misma clave primaria
     const { data: existingRecord, error: searchError } = await supabase
-      .from(table)
+      .from(tableName)
       .select(primaryKey)
       .eq(primaryKey, data[primaryKey])
       .maybeSingle();
@@ -109,7 +242,7 @@ app.post('/api/:category/:table/create', async (req, res) => {
 
     // Insertar nuevo registro
     const { data: newRecord, error: insertError } = await supabase
-      .from(table)
+      .from(tableName)
       .insert([data])
       .select()
       .single();
@@ -141,16 +274,20 @@ app.post('/api/:category/:table/create', async (req, res) => {
 });
 
 // READ - Leer todos los registros
-app.get('/api/:category/:table/read', async (req, res) => {
+// READ - Leer todos los registros (versión dinámica)
+app.get('/api/tables/:tableName/read', async (req, res) => {
   try {
-    const { category, table } = req.params;
-    const tableConfig = validateTable(category, table);
-    const primaryKey = tableConfig.primaryKey;
+    const { tableName } = req.params;
     
-    logOperation('READ REQUEST', { category, table });
+    // Validar tabla y obtener esquema
+    await validateTableExists(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    logOperation('READ REQUEST', { tableName });
 
     const { data, error } = await supabase
-      .from(table)
+      .from(tableName)
       .select('*')
       .order(primaryKey, { ascending: true });
 
@@ -175,7 +312,8 @@ app.get('/api/:category/:table/read', async (req, res) => {
       success: true,
       data: mappedData,
       total: mappedData.length,
-      primaryKey: primaryKey
+      primaryKey: primaryKey,
+      tableName: tableName
     });
   } catch (error) {
     console.error('❌ Error inesperado en READ:', error);
@@ -431,14 +569,15 @@ app.get('/health', async (req, res) => {
       });
     }
 
-    res.json({ 
-      status: 'healthy', 
-      database: 'connected',
-      responseTime: `${responseTime}ms`,
-      supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
-      supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
-      timestamp: new Date().toISOString()
-    });
+  res.json({ 
+    status: 'healthy', 
+    database: 'connected',
+    responseTime: `${responseTime}ms`,
+    supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
+    supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
+    dynamicTables: 'enabled',
+    timestamp: new Date().toISOString()
+  });
   } catch (error) {
     console.error('❌ Health check error:', error);
     res.status(503).json({ 
@@ -465,18 +604,27 @@ app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend available at /`);
   console.log(`🏥 Health check available at /health`);
+  console.log(`🔄 Sistema dinámico activado - detectando tablas automáticamente`);
   
-  // Probar conexión al iniciar
+  // Probar conexión y mostrar tablas disponibles
   try {
     console.log('🔄 Probando conexión inicial a Supabase...');
     const { error } = await supabase
-      .from('cooperativas')
+      .from('information_schema.tables')
       .select('count', { count: 'exact', head: true });
     
     if (error) {
       console.error('❌ Error de conexión inicial:', error.message);
     } else {
       console.log('✅ Conexión a Supabase exitosa');
+      
+      // Mostrar tablas disponibles
+      try {
+        const tables = await getDynamicTables();
+        console.log(`📊 Tablas detectadas: ${tables.join(', ')}`);
+      } catch (tableError) {
+        console.log('⚠️ No se pudieron listar las tablas automáticamente');
+      }
     }
   } catch (error) {
     console.error('❌ Error al probar conexión inicial:', error.message);
