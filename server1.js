@@ -24,62 +24,6 @@ const supabase = createClient(
   }
 );
 
-// CONFIGURACIÓN DE TABLAS DISPONIBLES
-const AVAILABLE_TABLES = {
-  cooperativas: {
-    name: 'Cooperativas',
-    description: 'Sistema de gestión de entidades (cooperativas)',
-    tables: {
-      cooperativas: {
-        name: 'Cooperativas General',
-        description: 'Registro principal de cooperativas de la Provincia de Río Negro',
-        primaryKey: 'Matrícula'
-      },
-      financ_anr_coope: {
-        name: 'Financiamientos y ANR Cooperativas',
-        description: 'Registro de financiamientos y ANR otorgados a cooperativas de la Provincia de Río Negro',
-        primaryKey: 'orden'
-      },
-      asesoria_contable: {
-        name: 'Asesoría Contable',
-        description: 'Registro de asesorías contables brindadas a cooperativas y mutuales de la Provincia de Río Negro',
-        primaryKey: 'nota'
-      },
-      capacitaciones: {
-        name: 'Capacitaciones',
-        description: 'Registro de capacitaciones brindadas a cooperativas y mutuales de la Provincia de Río Negro',
-        primaryKey: 'id'
-      }
-    }
-  },
-  mutuales: {
-    name: 'Mutuales',
-    description: 'Sistema de gestión de entidades (mutuales)',
-    tables: {
-      mutuales: {
-        name: 'Mutuales General',
-        description: 'Registro principal de mutuales de la Provincia de Río Negro',
-        primaryKey: 'mat_nac'
-      },
-      financ_anr_mutuales: {
-        name: 'Financiamientos y ANR Mutuales',
-        description: 'Registro de financiamientos y ANR otorgados a mutuales de la Provincia de Río Negro',
-        primaryKey: 'orden'
-      },
-      asesoria_contable: {
-        name: 'Asesoría Contable',
-        description: 'Registro de asesorías contables brindadas a cooperativas y mutuales de la Provincia de Río Negro',
-        primaryKey: 'nota'
-      },
-      capacitaciones: {
-        name: 'Capacitaciones',
-        description: 'Registro de capacitaciones brindadas a cooperativas y mutuales de la Provincia de Río Negro',
-        primaryKey: 'id'
-      }
-    }
-  }
-};
-
 const app = express();
 const PORT = process.env.PORT || 8000;
 
@@ -94,19 +38,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Función auxiliar para logging
 const logOperation = (operation, data) => {
   console.log(`🔄 ${operation}:`, JSON.stringify(data, null, 2));
-};
-
-// Función auxiliar para validar tabla
-const validateTable = (category, tableName) => {
-  if (!AVAILABLE_TABLES[category]) {
-    throw new Error(`Categoría '${category}' no válida`);
-  }
-  
-  if (!AVAILABLE_TABLES[category].tables[tableName]) {
-    throw new Error(`Tabla '${tableName}' no válida para categoría '${category}'`);
-  }
-  
-  return AVAILABLE_TABLES[category].tables[tableName];
 };
 
 // Función auxiliar para manejo de errores de Supabase
@@ -131,65 +62,6 @@ const handleSupabaseError = (error, operation) => {
 // Ruta principal para servir el frontend
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// NUEVOS ENDPOINTS PARA CONFIGURACIÓN
-
-// Obtener categorías disponibles
-app.get('/api/categories', (req, res) => {
-  try {
-    const categories = Object.keys(AVAILABLE_TABLES).map(key => ({
-      id: key,
-      name: AVAILABLE_TABLES[key].name,
-      description: AVAILABLE_TABLES[key].description
-    }));
-    
-    res.json({
-      success: true,
-      categories: categories
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener categorías',
-      error: error.message
-    });
-  }
-});
-
-// Obtener tablas de una categoría
-app.get('/api/categories/:category/tables', (req, res) => {
-  try {
-    const { category } = req.params;
-    
-    if (!AVAILABLE_TABLES[category]) {
-      return res.status(404).json({
-        success: false,
-        message: `Categoría '${category}' no encontrada`
-      });
-    }
-    
-    const tables = Object.keys(AVAILABLE_TABLES[category].tables).map(key => ({
-      id: key,
-      ...AVAILABLE_TABLES[category].tables[key]
-    }));
-    
-    res.json({
-      success: true,
-      category: {
-        id: category,
-        name: AVAILABLE_TABLES[category].name,
-        description: AVAILABLE_TABLES[category].description
-      },
-      tables: tables
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener tablas',
-      error: error.message
-    });
-  }
 });
 
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
@@ -565,7 +437,6 @@ app.get('/health', async (req, res) => {
       responseTime: `${responseTime}ms`,
       supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
       supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
-      availableCategories: Object.keys(AVAILABLE_TABLES),
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -594,7 +465,6 @@ app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend available at /`);
   console.log(`🏥 Health check available at /health`);
-  console.log(`📊 Available categories: ${Object.keys(AVAILABLE_TABLES).join(', ')}`);
   
   // Probar conexión al iniciar
   try {
