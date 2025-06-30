@@ -473,28 +473,6 @@
                     
                     <div class="category-grid" id="categories-container">
                         <!-- Cooperativas Category -->
-                        <div class="category-card" data-category="cooperativas">
-                            <div class="category-icon">
-                                <i class="fas fa-users"></i>
-                            </div>
-                            <h3>Cooperativas</h3>
-                            <p>Sistema de gestión de entidades (cooperativas)</p>
-                            <div class="category-stats">
-                                <span class="table-count">4 tablas disponibles</span>
-                            </div>
-                        </div>
-            
-                        <!-- Mutuales Category -->
-                        <div class="category-card" data-category="mutuales">
-                            <div class="category-icon">
-                                <i class="fas fa-handshake"></i>
-                            </div>
-                            <h3>Mutuales</h3>
-                            <p>Sistema de gestión de entidades (mutuales)</p>
-                            <div class="category-stats">
-                                <span class="table-count">4 tablas disponibles</span>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -623,14 +601,267 @@
     <script>
         const API_BASE = window.location.origin;
 
-        // Variables globales
-        let currentCategory = null;
+        // Variables globales para sistema dinámico
         let currentTable = null;
-        let currentTableConfig = null;
+        let currentTableSchema = null;
         let currentRecords = [];
         let availableFields = [];
         let currentEditingRow = null;
         let currentDeletingRow = null;
+        let dynamicTables = [];
+
+        // ========== FUNCIONES DE CARGA DINÁMICA ==========
+        
+        // Cargar todas las tablas disponibles dinámicamente
+        async function loadDynamicTables() {
+            try {
+                showStatus('Cargando tablas disponibles...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/tables`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    dynamicTables = result.tables;
+                    displayDynamicTables(result.tables);
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading dynamic tables:', error);
+                showStatus('Error al cargar tablas: ' + error.message, 'error');
+            }
+        }
+        
+        // Mostrar tablas dinámicamente en el menú principal
+        function displayDynamicTables(tables) {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = '';
+            
+            tables.forEach(table => {
+                const card = document.createElement('div');
+                card.className = 'category-card';
+                card.onclick = () => selectDynamicTable(table.id);
+                
+                // Asignar íconos basados en el nombre de la tabla
+                let icon = '📊'; // ícono por defecto
+                if (table.name.toLowerCase().includes('cooperativa')) icon = '🏢';
+                if (table.name.toLowerCase().includes('mutual')) icon = '🤝';
+                if (table.name.toLowerCase().includes('financ')) icon = '💰';
+                if (table.name.toLowerCase().includes('capacit')) icon = '📚';
+                if (table.name.toLowerCase().includes('asesoria')) icon = '📋';
+                
+                card.innerHTML = `
+                    <span class="icon">${icon}</span>
+                    <h3>${table.displayName}</h3>
+                    <p>${table.description}</p>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        // Cargar esquema de tabla específica
+        async function loadTableSchema(tableName) {
+            try {
+                showStatus('Cargando estructura de tabla...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/tables/${tableName}/schema`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentTableSchema = result.schema;
+                    setupDynamicCrudInterface();
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading table schema:', error);
+                showStatus('Error al cargar esquema: ' + error.message, 'error');
+            }
+        }
+        
+        // Seleccionar tabla dinámica
+        async function selectDynamicTable(tableName) {
+            try {
+                currentTable = tableName;
+                
+                // Cargar esquema de la tabla
+                await loadTableSchema(tableName);
+                
+                // Cambiar a la pantalla de operaciones CRUD
+                showScreen('crud-operations');
+                
+                // Actualizar breadcrumb
+                const tableDisplay = currentTableSchema ? currentTableSchema.displayName : tableName;
+                updateBreadcrumb([
+                    { text: 'Inicio', onclick: 'goToMainMenu()' },
+                    { text: tableDisplay, active: true }
+                ]);
+                
+            } catch (error) {
+                console.error('Error selecting table:', error);
+                showStatus('Error al seleccionar tabla: ' + error.message, 'error');
+            }
+        }
+
+        // ========== CONFIGURACIÓN DINÁMICA DE INTERFAZ ==========
+
+        // Configurar interfaz CRUD dinámicamente
+        function setupDynamicCrudInterface() {
+            if (!currentTableSchema) return;
+            
+            // Actualizar títulos
+            document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${currentTableSchema.displayName}`;
+            document.getElementById('search-title').textContent = `Buscar Registros - ${currentTableSchema.displayName}`;
+            
+            // Configurar formulario de creación
+            setupDynamicCreateForm();
+            
+            // Configurar búsqueda global
+            loadDynamicFieldsForGlobalSearch();
+            
+            // Mostrar pestaña de crear por defecto
+            showTab('create');
+        }
+        
+        // Generar formulario de creación dinámicamente
+        function setupDynamicCreateForm() {
+            if (!currentTableSchema || !currentTableSchema.columns) return;
+            
+            const fieldsContainer = document.getElementById('create-fields');
+            fieldsContainer.innerHTML = '';
+            
+            currentTableSchema.columns.forEach(column => {
+                const fieldDiv = document.createElement('div');
+                fieldDiv.className = 'form-group';
+                
+                // Determinar tipo de input basado en el tipo de dato
+                const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
+                const required = column.is_nullable === 'NO' ? 'required' : '';
+                const isPrimaryKey = column.column_name === currentTableSchema.primaryKey;
+                
+                // Crear label con información adicional
+                let labelText = column.column_name;
+                if (isPrimaryKey) labelText += ' (Clave Primaria)';
+                if (required) labelText += ' *';
+                
+                fieldDiv.innerHTML = `
+                    <label for="${column.column_name}">
+                        ${labelText}
+                        <small style="color: #666; font-weight: normal;">(${column.data_type})</small>
+                    </label>
+                    ${createInputElement(column, inputType, required)}
+                `;
+                
+                fieldsContainer.appendChild(fieldDiv);
+            });
+        }
+        
+        // Crear elemento de input apropiado
+        function createInputElement(column, inputType, required) {
+            const commonAttributes = `
+                id="${column.column_name}" 
+                name="${column.column_name}" 
+                ${required}
+                ${column.character_maximum_length ? `maxlength="${column.character_maximum_length}"` : ''}
+            `;
+            
+            if (inputType === 'textarea') {
+                return `<textarea ${commonAttributes} rows="3"></textarea>`;
+            } else if (inputType === 'select') {
+                // Para campos que parecen ser de selección
+                return `<select ${commonAttributes}>
+                    <option value="">Seleccionar...</option>
+                </select>`;
+            } else {
+                return `<input type="${inputType}" ${commonAttributes}>`;
+            }
+        }
+        
+        // Mapear tipos de PostgreSQL a tipos de input HTML
+        function getInputTypeFromDataType(dataType, columnName) {
+            const lowerDataType = dataType.toLowerCase();
+            const lowerColumnName = columnName.toLowerCase();
+            
+            // Mapeo por tipo de dato
+            const typeMap = {
+                'integer': 'number',
+                'bigint': 'number',
+                'smallint': 'number',
+                'decimal': 'number',
+                'numeric': 'number',
+                'real': 'number',
+                'double precision': 'number',
+                'money': 'number',
+                'date': 'date',
+                'timestamp': 'datetime-local',
+                'timestamptz': 'datetime-local',
+                'time': 'time',
+                'timetz': 'time',
+                'boolean': 'checkbox'
+            };
+            
+            // Verificar por tipo de dato primero
+            if (typeMap[lowerDataType]) {
+                return typeMap[lowerDataType];
+            }
+            
+            // Para tipos de texto, verificar por nombre de columna
+            if (lowerDataType.includes('varchar') || lowerDataType.includes('text') || lowerDataType.includes('char')) {
+                // Detectar emails
+                if (lowerColumnName.includes('email') || lowerColumnName.includes('mail')) {
+                    return 'email';
+                }
+                // Detectar teléfonos
+                if (lowerColumnName.includes('tel') || lowerColumnName.includes('phone') || lowerColumnName.includes('telefono')) {
+                    return 'tel';
+                }
+                // Detectar URLs
+                if (lowerColumnName.includes('url') || lowerColumnName.includes('web') || lowerColumnName.includes('site')) {
+                    return 'url';
+                }
+                // Detectar fechas por nombre
+                if (lowerColumnName.includes('fecha') || lowerColumnName.includes('date')) {
+                    return 'date';
+                }
+                // Para campos de texto largo
+                if (lowerDataType === 'text' || (lowerDataType.includes('varchar') && lowerColumnName.includes('descripcion'))) {
+                    return 'textarea';
+                }
+            }
+            
+            return 'text'; // Por defecto
+        }
+        
+        // Cargar campos para búsqueda global
+        async function loadDynamicFieldsForGlobalSearch() {
+            if (!currentTableSchema || !currentTableSchema.columns) return;
+            
+            try {
+                const select = document.getElementById('globalSearchField');
+                if (select) {
+                    select.innerHTML = '<option value="">Selecciona un campo...</option>';
+                    
+                    currentTableSchema.columns.forEach(column => {
+                        select.innerHTML += `<option value="${column.column_name}">${column.column_name} (${column.data_type})</option>`;
+                    });
+                    
+                    availableFields = currentTableSchema.columns.map(col => col.column_name);
+                }
+            } catch (error) {
+                console.error('Error loading fields for search:', error);
+                showStatus('Error al cargar campos para búsqueda', 'error');
+            }
+        }
+
+        // ========== FUNCIONES AUXILIARES DINÁMICAS ==========
+
+        // Obtener URL de API para operaciones CRUD
+        function getDynamicApiUrl(operation) {
+            return `${API_BASE}/api/tables/${currentTable}/${operation}`;
+        }
 
         // ========== NAVIGATION SYSTEM ==========
         function updateBreadcrumb(items) {
@@ -650,9 +881,8 @@
         }
 
         function goToMainMenu() {
-            currentCategory = null;
             currentTable = null;
-            currentTableConfig = null;
+            currentTableSchema = null;
             showScreen('main-menu');
             updateBreadcrumb([
                 { text: 'Inicio', active: true }
@@ -660,183 +890,7 @@
             clearStatus();
         }
 
-        function goToTableSelection(category) {
-            showScreen('table-selection');
-            updateBreadcrumb([
-                { text: 'Inicio', onclick: 'goToMainMenu()' },
-                { text: category.charAt(0).toUpperCase() + category.slice(1), active: true }
-            ]);
-        }
-
-        function goToCrudOperations(category, tableName) {
-            showScreen('crud-operations');
-            const tableDisplayName = currentTableConfig ? currentTableConfig.displayName : tableName;
-            updateBreadcrumb([
-                { text: 'Inicio', onclick: 'goToMainMenu()' },
-                { text: category.charAt(0).toUpperCase() + category.slice(1), onclick: `loadCategoryTables('${category}')` },
-                { text: tableDisplayName, active: true }
-            ]);
-        }
-
-        // ========== DATA LOADING ==========
-        async function loadCategories() {
-            try {
-                showStatus('Cargando categorías...', 'info');
-                
-                const response = await fetch(`${API_BASE}/api/categories`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayCategories(result.categories);
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error('Error loading categories:', error);
-                showStatus('Error al cargar categorías: ' + error.message, 'error');
-            }
-        }
-
-        function displayCategories(categories) {
-            const container = document.getElementById('categories-container');
-            container.innerHTML = '';
-            
-            categories.forEach(category => {
-                const card = document.createElement('div');
-                card.className = 'category-card';
-                card.onclick = () => loadCategoryTables(category.id);
-                
-                const icon = category.id === 'cooperativas' ? '🏢' : '🤝';
-                
-                card.innerHTML = `
-                    <span class="icon">${icon}</span>
-                    <h3>${category.name}</h3>
-                    <p>${category.description}</p>
-                `;
-                
-                container.appendChild(card);
-            });
-        }
-
-        async function loadCategoryTables(category) {
-            try {
-                currentCategory = category;
-                showStatus('Cargando tablas...', 'info');
-                
-                const response = await fetch(`${API_BASE}/api/categories/${category}/tables`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    displayCategoryTables(result.tables, category);
-                    goToTableSelection(category);
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error('Error loading tables:', error);
-                showStatus('Error al cargar tablas: ' + error.message, 'error');
-            }
-        }
-
-        function displayCategoryTables(tables, category) {
-            const container = document.getElementById('table-selection-content');
-            container.innerHTML = `
-                <h2>${category.charAt(0).toUpperCase() + category.slice(1)}</h2>
-                <p>Selecciona la tabla con la que deseas trabajar</p>
-                <div class="table-grid">
-                    ${tables.map(table => `
-                        <div class="table-card" onclick="selectTable('${category}', '${table.name}')">
-                            <h4>${table.displayName}</h4>
-                            <p>${table.description}</p>
-                        </div>
-                    `).join('')}
-                </div>
-                <div style="margin-top: 30px;">
-                    <button onclick="goToMainMenu()" class="btn btn-back">← Volver al inicio</button>
-                </div>
-            `;
-        }
-
-        async function selectTable(category, tableName) {
-            try {
-                currentCategory = category;
-                currentTable = tableName;
-                
-                showStatus('Cargando configuración de tabla...', 'info');
-                
-                // Load table configuration
-                const response = await fetch(`${API_BASE}/api/tables/${category}/${tableName}/config`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentTableConfig = result.config;
-                    setupCrudInterface();
-                    goToCrudOperations(category, tableName);
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error('Error loading table config:', error);
-                showStatus('Error al cargar configuración: ' + error.message, 'error');
-            }
-        }
-
-        function setupCrudInterface() {
-            if (!currentTableConfig) return;
-            
-            // Update titles
-            document.getElementById('create-title').textContent = `Crear Nuevo ${currentTableConfig.displayName}`;
-            document.getElementById('search-title').textContent = `Buscar ${currentTableConfig.displayName}`;
-            
-            // Setup create form
-            setupCreateForm();
-            
-            // Setup global search
-            loadFieldsForGlobalSearch();
-            
-            // Show global search for appropriate tabs
-            showTab('create');
-        }
-
-        function setupCreateForm() {
-            const fieldsContainer = document.getElementById('create-fields');
-            fieldsContainer.innerHTML = '';
-            
-            // Generate form fields based on table configuration
-            currentTableConfig.fields.forEach(fieldName => {
-                const fieldDiv = document.createElement('div');
-                fieldDiv.className = 'form-group';
-                
-                // Determine input type based on field name
-                let inputType = 'text';
-                let required = fieldName === currentTableConfig.primaryKey ? 'required' : '';
-                
-                if (fieldName.toLowerCase().includes('fecha') || fieldName.toLowerCase().includes('date')) {
-                    inputType = 'date';
-                }
-                if (fieldName.toLowerCase().includes('email') || fieldName.toLowerCase().includes('mail')) {
-                    inputType = 'email';
-                }
-                if (fieldName.toLowerCase().includes('tel') || fieldName.toLowerCase().includes('telefono')) {
-                    inputType = 'tel';
-                }
-                
-                fieldDiv.innerHTML = `
-                    <label for="${fieldName}">${fieldName}:</label>
-                    <input type="${inputType}" id="${fieldName}" name="${fieldName}" ${required}>
-                `;
-                
-                fieldsContainer.appendChild(fieldDiv);
-            });
-        }
-
         // ========== CRUD OPERATIONS ==========
-        function getApiUrl(operation) {
-            return `${API_BASE}/api/tables/${currentCategory}/${currentTable}/${operation}`;
-        }
 
         // Create form handler
         document.addEventListener('DOMContentLoaded', function() {
@@ -908,24 +962,6 @@
         }
 
         // ========== GLOBAL SEARCH ==========
-        async function loadFieldsForGlobalSearch() {
-            if (!currentTableConfig) return;
-            
-            try {
-                const select = document.getElementById('globalSearchField');
-                if (select) {
-                    select.innerHTML = '<option value="">Selecciona un campo...</option>';
-                    currentTableConfig.fields.forEach(field => {
-                        select.innerHTML += `<option value="${field}">${field}</option>`;
-                    });
-                    availableFields = currentTableConfig.fields;
-                }
-            } catch (error) {
-                console.error('Error loading fields:', error);
-                showStatus('Error al cargar campos', 'error');
-            }
-        }
-
         async function performGlobalSearch() {
             const searchText = document.getElementById('globalSearchText').value.trim();
             const searchField = document.getElementById('globalSearchField').value;
@@ -938,7 +974,7 @@
             try {
                 showStatus('Buscando...', 'info');
                 
-                const url = `${getApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                const url = `${getDynamicApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
                 const response = await fetch(url);
                 const result = await response.json();
 
@@ -1015,7 +1051,8 @@
                 showStatus('Cargando registros...', 'info');
                 document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
                 
-                const response = await fetch(getApiUrl('read'));
+                // Usar la nueva función dinámica
+                const response = await fetch(getDynamicApiUrl('read'));
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1037,9 +1074,217 @@
             try {
                 showStatus('Cargando registros...', 'info');
                 
-                const response = await fetch(getApiUrl('read'));
+                // Usar la nueva función dinámica
+                const response = await fetch(getDynamicApiUrl('read'));
                 const result = await response.json();
                 
                 if (result.success) {
                     currentRecords = result.data;
-                    displaySearchResults(
+                    displaySearchResults(result.data);
+                    showStatus(`${result.total} registros cargados`, 'success');
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading records:', error);
+                showStatus('Error al cargar registros: ' + error.message, 'error');
+            }
+        }
+
+        // -------- UPDATE FUNCTIONS --------
+        function editRecord(legajo) {
+            console.log('Editando registro con Legajo:', legajo);
+            
+            const record = currentRecords.find(r => (r.Legajo || r._Legajo) == legajo);
+            if (!record) {
+                showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
+                return;
+            }
+            
+            currentEditingRow = record;
+            showTab('update');
+            showUpdateForm(record);
+        }
+
+        function showUpdateForm(record) {
+            document.getElementById('update-form-container').style.display = 'block';
+            document.getElementById('update-records-container').style.display = 'none';
+            
+            const legajo = record.Legajo || record._Legajo;
+            document.getElementById('update-Legajo').value = legajo;
+            
+            const fieldsContainer = document.getElementById('update-fields');
+            fieldsContainer.innerHTML = '';
+            
+            // Crear campos para edición
+            Object.entries(record).forEach(([key, value]) => {
+                if (key === '_Legajo' || key === '_rowIndex') return;
+                
+                const fieldId = `update-${key.replace(/\s+/g, '_')}`;
+                const fieldHtml = `
+                    <div class="form-group">
+                        <label for="${fieldId}">${key}:</label>
+                        <input type="text" id="${fieldId}" name="${key}" value="${value || ''}">
+                    </div>
+                `;
+                fieldsContainer.innerHTML += fieldHtml;
+            });
+        }
+
+        function cancelUpdate() {
+            document.getElementById('update-form-container').style.display = 'none';
+            document.getElementById('update-records-container').style.display = 'block';
+            currentEditingRow = null;
+            showTab('search');
+        }
+
+        // -------- DELETE FUNCTIONS --------
+        function deleteRecord(legajo) {
+            console.log('Eliminando registro con Legajo:', legajo);
+            
+            const record = currentRecords.find(r => (r.Legajo || r._Legajo) == legajo);
+            if (!record) {
+                showStatus('No se encontró el registro con Legajo: ' + legajo, 'error');
+                return;
+            }
+            
+            currentDeletingRow = record;
+            showTab('delete');
+            showDeleteConfirmation(record);
+        }
+
+        function showDeleteConfirmation(record) {
+            const container = document.getElementById('delete-records');
+            const legajo = record.Legajo || record._Legajo;
+            
+            container.innerHTML = `
+                <div class="delete-confirmation">
+                    <h3>🗑️ Eliminar Registro #${legajo}</h3>
+                    
+                    <div class="record">
+                        ${Object.entries(record)
+                            .filter(([k]) => k !== '_Legajo' && k !== '_rowIndex')
+                            .map(([k, v]) => `<strong>${k}:</strong> ${v || ''}`)
+                            .join('<br>')}
+                    </div>
+                    
+                    <div class="status-message error">
+                        <p>¿Estás seguro que deseas eliminar este registro? Esta acción no se puede deshacer.</p>
+                    </div>
+                    
+                    <div class="confirmation-buttons">
+                        <button class="btn btn-danger" onclick="confirmDelete('${legajo}')">Sí, eliminar</button>
+                        <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function confirmDelete(legajo) {
+            try {
+                showStatus('Eliminando registro...', 'info');
+                
+                const response = await fetch(`${API_BASE}/webhook/delete`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        searchCriteria: { 
+                            field: 'Legajo',  
+                            value: legajo 
+                        } 
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('Registro eliminado correctamente', 'success');
+                    document.getElementById('delete-records').innerHTML = `
+                        <div class="empty-state">
+                            <span class="icon">🗑️</span>
+                            <h3>Seleccionar Registro para Eliminar</h3>
+                            <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                        </div>
+                    `;
+                    currentDeletingRow = null;
+                    showTab('search');
+                    loadAllRecords();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error en la eliminación:', error);
+                showStatus('Error al eliminar: ' + error.message, 'error');
+            }
+        }
+
+        function cancelDelete() {
+            currentDeletingRow = null;
+            document.getElementById('delete-records').innerHTML = `
+                <div class="empty-state">
+                    <span class="icon">🗑️</span>
+                    <h3>Seleccionar Registro para Eliminar</h3>
+                    <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                </div>
+            `;
+            showTab('search');
+            showStatus('Eliminación cancelada', 'info');
+        }
+
+        // Inicializar aplicación cuando se carga la página
+        document.addEventListener('DOMContentLoaded', function() {
+            // Cargar tablas dinámicamente
+            loadDynamicTables();
+            
+            // Configurar formulario de creación
+            document.getElementById('createForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+        
+                const formData = new FormData(this);
+                const data = Object.fromEntries(formData.entries());
+        
+                try {
+                    showStatus('Creando registro...', 'info');
+                    
+                    const response = await fetch(getDynamicApiUrl('create'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+        
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showCreateSuccess();
+                    } else {
+                        showStatus('Error al crear el registro: ' + result.message, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                }
+            });
+        });
+
+        // -------- UTILITY FUNCTIONS --------
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        // Inicializar al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Página cargada, inicializando...');
+            showTab('create');
+        });
+    </script>
+</body>
+</html>
+                    
