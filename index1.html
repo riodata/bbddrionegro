@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión - Gobierno de Río Negro</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4a90e2, #357abd);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        /* Breadcrumb Navigation */
+        .breadcrumb {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .breadcrumb-item {
+            color: #6c757d;
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .breadcrumb-item:hover {
+            color: #4a90e2;
+        }
+
+        .breadcrumb-item.active {
+            color: #495057;
+            font-weight: 600;
+        }
+
+        .breadcrumb-separator {
+            color: #adb5bd;
+        }
+
+        /* Main content */
+        .content {
+            padding: 30px;
+        }
+
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        /* Main Menu Styles */
+        .main-menu {
+            text-align: center;
+        }
+
+        .main-menu h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
+        .main-menu p {
+            color: #6c757d;
+            margin-bottom: 40px;
+            font-size: 1.2rem;
+        }
+
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .category-card {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 12px;
+            padding: 40px 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .category-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-color: #4a90e2;
+        }
+
+        .category-card .icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .category-card h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .category-card p {
+            color: #6c757d;
+            font-size: 1rem;
+        }
+
+        /* Table Selection Styles */
+        .table-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .table-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .table-card:hover {
+            border-color: #4a90e2;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.1);
+        }
+
+        .table-card h4 {
+            color: #4a90e2;
+            margin-bottom: 12px;
+            font-size: 1.3rem;
+        }
+
+        .table-card p {
+            color: #6c757d;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* Existing styles for CRUD operations */
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            color: #6c757d;
+        }
+
+        .tab.active {
+            background: white;
+            color: #4a90e2;
+            border-bottom: 3px solid #4a90e2;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4a90e2, #357abd);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(74, 144, 226, 0.3);
+        }
+
+        .btn-back {
+            background: linear-gradient(135deg, #6c757d, #495057);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+        }
+
+        .btn-clear {
+            background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+        }
+
+        /* Form styles */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+
+        /* Status and loading styles */
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #e9ecef;
+        }
+
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            display: block;
+            opacity: 0.5;
+        }
+
+        .create-success {
+            text-align: center;
+            padding: 40px;
+            background: #d4edda;
+            border: 2px solid #c3e6cb;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+
+        .create-success h2 {
+            color: #155724;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
+        .create-success .success-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+
+        .create-success p {
+            color: #155724;
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+
+        /* Search and records styles */
+        .search-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+
+        .search-field {
+            flex: 2;
+        }
+
+        .search-dropdown {
+            flex: 1;
+        }
+
+        .search-buttons {
+            flex: 1;
+        }
+
+        .records-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .record {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            background: #f8f9fa;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .record:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .record-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 8px;
+        }
+
+        .record-title {
+            font-weight: bold;
+            color: #4a90e2;
+        }
+
+        .record-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .record .btn {
+            padding: 6px 14px;
+            font-size: 0.92rem;
+            margin-right: 0;
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 768px) {
+            .category-grid, .table-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+
+            .search-row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Gobierno de la Provincia Río Negro</h1>
+            <p>🗄️ Sistema de gestión de bases de datos</p>
+        </div>
+
+        <!-- Breadcrumb Navigation -->
+        <div class="breadcrumb">
+            <span id="breadcrumb-content">
+                <span class="breadcrumb-item active">Inicio</span>
+            </span>
+        </div>
+
+        <div class="content">
+            <div id="status-message"></div>
+
+            <!-- MAIN MENU SCREEN -->
+            <div id="main-menu" class="screen active">
+                <div class="main-menu">
+                    <h2>Sistema de Gestión</h2>
+                    <p>Elige el sistema en el que quieres operar</p>
+                    
+                    <div class="category-grid" id="categories-container">
+                        <!-- Categories will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- CATEGORY TABLES SCREEN -->
+            <div id="table-selection" class="screen">
+                <div id="table-selection-content">
+                    <!-- Table selection will be loaded here -->
+                </div>
+            </div>
+
+            <!-- CRUD OPERATIONS SCREEN -->
+            <div id="crud-operations" class="screen">
+                <!-- Global search bar -->
+                <div id="global-search" class="search-container" style="display: none;">
+                    <h3>🔍 Buscar Registros</h3>
+                    <div class="search-row">
+                        <div class="search-field">
+                            <label for="globalSearchText">Texto a buscar:</label>
+                            <input type="text" id="globalSearchText" placeholder="Ingresa el texto a buscar...">
+                        </div>
+                        <div class="search-dropdown">
+                            <label for="globalSearchField">Campo:</label>
+                            <select id="globalSearchField">
+                                <option value="">Selecciona un campo...</option>
+                            </select>
+                        </div>
+                        <div class="search-buttons">
+                            <button onclick="performGlobalSearch()" class="btn">🔍 Buscar</button>
+                            <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
+                            <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
+                            <button onclick="refreshFields()" class="btn" title="Actualizar campos">🔄 Campos</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab active" onclick="showTab('create')">➕ Crear</button>
+                    <button class="tab" onclick="showTab('search')">📋 Buscar</button>
+                    <button class="tab" onclick="showTab('update')">✏️ Actualizar</button>
+                    <button class="tab" onclick="showTab('delete')">🗑️ Eliminar</button>
+                </div>
+
+                <!-- Tab contents -->
+                <div id="create" class="tab-content active">
+                    <div id="create-form-container">
+                        <h2 id="create-title">Crear Nuevo Registro</h2>
+                        <form id="createForm">
+                            <div id="create-fields"></div>
+                            <button type="submit" class="btn">Crear Registro</button>
+                        </form>
+                    </div>
+
+                    <div id="create-success-container" style="display: none;">
+                        <div class="create-success">
+                            <span class="success-icon">✅</span>
+                            <h2>¡Registro creado exitosamente!</h2>
+                            <p>El registro se ha guardado correctamente en la base de datos.</p>
+                            <div>
+                                <button onclick="createAnotherRecord()" class="btn btn-success">➕ Crear otro registro</button>
+                                <button onclick="viewAllRecords()" class="btn btn-warning">📋 Ver registros cargados</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="search" class="tab-content">
+                    <h2 id="search-title">Buscar Registros</h2>
+                    <div style="margin: 20px 0;">
+                        <button onclick="loadAllRecords()" class="btn">📋 Cargar Todos los Registros</button>
+                    </div>
+                    <div id="search-records-container" class="records-container">
+                        <div class="empty-state">
+                            <span class="icon">🔍</span>
+                            <h3>Buscar Registros</h3>
+                            <p>Utiliza la barra de búsqueda de arriba o haz clic en "Cargar Todos los Registros" para comenzar</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="update" class="tab-content">
+                    <h2>Actualizar Registro</h2>
+                    <div id="update-form-container" style="display: none;">
+                        <h3>✏️ Editando Registro</h3>
+                        <form id="updateForm">
+                            <input type="hidden" id="update-primary-key" name="">
+                            <div id="update-fields"></div>
+                            <div style="margin-top: 20px;">
+                                <button type="submit" class="btn">💾 Guardar Cambios</button>
+                                <button type="button" onclick="cancelUpdate()" class="btn btn-clear">❌ Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div id="update-records-container" class="records-container">
+                        <div class="empty-state">
+                            <span class="icon">✏️</span>
+                            <h3>Seleccionar Registro para Editar</h3>
+                            <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas actualizar</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="delete" class="tab-content">
+                    <h2>Eliminar Registro</h2>
+                    <div id="delete-records" class="records-container">
+                        <div class="empty-state">
+                            <span class="icon">🗑️</span>
+                            <h3>Seleccionar Registro para Eliminar</h3>
+                            <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        // Variables globales
+        let currentCategory = null;
+        let currentTable = null;
+        let currentTableConfig = null;
+        let currentRecords = [];
+        let availableFields = [];
+        let currentEditingRow = null;
+        let currentDeletingRow = null;
+
+        // ========== NAVIGATION SYSTEM ==========
+        function updateBreadcrumb(items) {
+            const breadcrumbContent = document.getElementById('breadcrumb-content');
+            breadcrumbContent.innerHTML = items.map((item, index) => 
+                `<span class="breadcrumb-item ${item.active ? 'active' : ''}" 
+                      ${item.onclick ? `onclick="${item.onclick}"` : ''} 
+                      ${item.onclick ? 'style="cursor: pointer;"' : ''}>${item.text}</span>`
+            ).join('<span class="breadcrumb-separator">›</span>');
+        }
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function goToMainMenu() {
+            currentCategory = null;
+            currentTable = null;
+            currentTableConfig = null;
+            showScreen('main-menu');
+            updateBreadcrumb([
+                { text: 'Inicio', active: true }
+            ]);
+            clearStatus();
+        }
+
+        function goToTableSelection(category) {
+            showScreen('table-selection');
+            updateBreadcrumb([
+                { text: 'Inicio', onclick: 'goToMainMenu()' },
+                { text: category.charAt(0).toUpperCase() + category.slice(1), active: true }
+            ]);
+        }
+
+        function goToCrudOperations(category, tableName) {
+            showScreen('crud-operations');
+            const tableDisplayName = currentTableConfig ? currentTableConfig.displayName : tableName;
+            updateBreadcrumb([
+                { text: 'Inicio', onclick: 'goToMainMenu()' },
+                { text: category.charAt(0).toUpperCase() + category.slice(1), onclick: `loadCategoryTables('${category}')` },
+                { text: tableDisplayName, active: true }
+            ]);
+        }
+
+        // ========== DATA LOADING ==========
+        async function loadCategories() {
+            try {
+                showStatus('Cargando categorías...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/categories`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayCategories(result.categories);
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                showStatus('Error al cargar categorías: ' + error.message, 'error');
+            }
+        }
+
+        function displayCategories(categories) {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = '';
+            
+            categories.forEach(category => {
+                const card = document.createElement('div');
+                card.className = 'category-card';
+                card.onclick = () => loadCategoryTables(category.id);
+                
+                const icon = category.id === 'cooperativas' ? '🏢' : '🤝';
+                
+                card.innerHTML = `
+                    <span class="icon">${icon}</span>
+                    <h3>${category.name}</h3>
+                    <p>${category.description}</p>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        async function loadCategoryTables(category) {
+            try {
+                currentCategory = category;
+                showStatus('Cargando tablas...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/categories/${category}/tables`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayCategoryTables(result.tables, category);
+                    goToTableSelection(category);
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading tables:', error);
+                showStatus('Error al cargar tablas: ' + error.message, 'error');
+            }
+        }
+
+        function displayCategoryTables(tables, category) {
+            const container = document.getElementById('table-selection-content');
+            container.innerHTML = `
+                <h2>${category.charAt(0).toUpperCase() + category.slice(1)}</h2>
+                <p>Selecciona la tabla con la que deseas trabajar</p>
+                <div class="table-grid">
+                    ${tables.map(table => `
+                        <div class="table-card" onclick="selectTable('${category}', '${table.name}')">
+                            <h4>${table.displayName}</h4>
+                            <p>${table.description}</p>
+                        </div>
+                    `).join('')}
+                </div>
+                <div style="margin-top: 30px;">
+                    <button onclick="goToMainMenu()" class="btn btn-back">← Volver al inicio</button>
+                </div>
+            `;
+        }
+
+        async function selectTable(category, tableName) {
+            try {
+                currentCategory = category;
+                currentTable = tableName;
+                
+                showStatus('Cargando configuración de tabla...', 'info');
+                
+                // Load table configuration
+                const response = await fetch(`${API_BASE}/api/tables/${category}/${tableName}/config`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentTableConfig = result.config;
+                    setupCrudInterface();
+                    goToCrudOperations(category, tableName);
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading table config:', error);
+                showStatus('Error al cargar configuración: ' + error.message, 'error');
+            }
+        }
+
+        function setupCrudInterface() {
+            if (!currentTableConfig) return;
+            
+            // Update titles
+            document.getElementById('create-title').textContent = `Crear Nuevo ${currentTableConfig.displayName}`;
+            document.getElementById('search-title').textContent = `Buscar ${currentTableConfig.displayName}`;
+            
+            // Setup create form
+            setupCreateForm();
+            
+            // Setup global search
+            loadFieldsForGlobalSearch();
+            
+            // Show global search for appropriate tabs
+            showTab('create');
+        }
+
+        function setupCreateForm() {
+            const fieldsContainer = document.getElementById('create-fields');
+            fieldsContainer.innerHTML = '';
+            
+            // Generate form fields based on table configuration
+            currentTableConfig.fields.forEach(fieldName => {
+                const fieldDiv = document.createElement('div');
+                fieldDiv.className = 'form-group';
+                
+                // Determine input type based on field name
+                let inputType = 'text';
+                let required = fieldName === currentTableConfig.primaryKey ? 'required' : '';
+                
+                if (fieldName.toLowerCase().includes('fecha') || fieldName.toLowerCase().includes('date')) {
+                    inputType = 'date';
+                }
+                if (fieldName.toLowerCase().includes('email') || fieldName.toLowerCase().includes('mail')) {
+                    inputType = 'email';
+                }
+                if (fieldName.toLowerCase().includes('tel') || fieldName.toLowerCase().includes('telefono')) {
+                    inputType = 'tel';
+                }
+                
+                fieldDiv.innerHTML = `
+                    <label for="${fieldName}">${fieldName}:</label>
+                    <input type="${inputType}" id="${fieldName}" name="${fieldName}" ${required}>
+                `;
+                
+                fieldsContainer.appendChild(fieldDiv);
+            });
+        }
+
+        // ========== CRUD OPERATIONS ==========
+        function getApiUrl(operation) {
+            return `${API_BASE}/api/tables/${currentCategory}/${currentTable}/${operation}`;
+        }
+
+        // Create form handler
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('createForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                const formData = new FormData(this);
+                const data = Object.fromEntries(formData.entries());
+
+                try {
+                    showStatus('Creando registro...', 'info');
+                    
+                    const response = await fetch(getApiUrl('create'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showCreateSuccess();
+                    } else {
+                        showStatus('Error al crear el registro: ' + result.message, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                }
+            });
+        });
+
+        // ========== TAB MANAGEMENT ==========
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            
+            const selectedTab = document.getElementById(tabName);
+            const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
+            
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+            
+            if (selectedButton) {
+                selectedButton.classList.add('active');
+            }
+
+            // Show global search for appropriate tabs
+            const globalSearch = document.getElementById('global-search');
+            if (['search', 'update', 'delete'].includes(tabName)) {
+                globalSearch.style.display = 'block';
+                loadFieldsForGlobalSearch();
+            } else {
+                globalSearch.style.display = 'none';
+            }
+
+            // Reset containers when switching tabs
+            if (tabName === 'update') {
+                document.getElementById('update-form-container').style.display = 'none';
+                document.getElementById('update-records-container').style.display = 'block';
+            }
+
+            if (tabName === 'create') {
+                showCreateForm();
+            }
+        }
+
+        // ========== GLOBAL SEARCH ==========
+        async function loadFieldsForGlobalSearch() {
+            if (!currentTableConfig) return;
+            
+            try {
+                const select = document.getElementById('globalSearchField');
+                if (select) {
+                    select.innerHTML = '<option value="">Selecciona un campo...</option>';
+                    currentTableConfig.fields.forEach(field => {
+                        select.innerHTML += `<option value="${field}">${field}</option>`;
+                    });
+                    availableFields = currentTableConfig.fields;
+                }
+            } catch (error) {
+                console.error('Error loading fields:', error);
+                showStatus('Error al cargar campos', 'error');
+            }
+        }
+
+        async function performGlobalSearch() {
+            const searchText = document.getElementById('globalSearchText').value.trim();
+            const searchField = document.getElementById('globalSearchField').value;
+            
+            if (!searchText || !searchField) {
+                showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
+                return;
+            }
+
+            try {
+                showStatus('Buscando...', 'info');
+                
+                const url = `${getApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.success) {
+                    currentRecords = result.data;
+                    displaySearchResults(result.data);
+                    showStatus(`Se encontraron ${result.total} registro(s)`, 'success');
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error en búsqueda:', error);
+                showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
+            }
+        }
+
+        function clearGlobalSearch() {
+            document.getElementById('globalSearchText').value = '';
+            document.getElementById('globalSearchField').value = '';
+            
+            currentRecords = [];
+            
+            const activeTab = document.querySelector('.tab-content.active').id;
+            let container, emptyMessage;
+            
+            if (activeTab === 'search') {
+                container = document.getElementById('search-records-container');
+                emptyMessage = `
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <h3>Buscar Registros</h3>
+                        <p>Utiliza la barra de búsqueda de arriba o haz clic en "Cargar Todos los Registros" para comenzar</p>
+                    </div>
+                `;
+            } else if (activeTab === 'update') {
+                container = document.getElementById('update-records-container');
+                emptyMessage = `
+                    <div class="empty-state">
+                        <span class="icon">✏️</span>
+                        <h3>Seleccionar Registro para Editar</h3>
+                        <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas actualizar</p>
+                    </div>
+                `;
+            } else if (activeTab === 'delete') {
+                container = document.getElementById('delete-records');
+                emptyMessage = `
+                    <div class="empty-state">
+                        <span class="icon">🗑️</span>
+                        <h3>Seleccionar Registro para Eliminar</h3>
+                        <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas eliminar</p>
+                    </div>
+                `;
+            }
+            
+            if (container && emptyMessage) {
+                container.innerHTML = emptyMessage;
+            }
+            
+            showStatus('Búsqueda limpiada - Realiza una nueva búsqueda para ver registros', 'info');
+        }
+
+        async function loadAllGlobalRecords() {
+            const activeTab = document.querySelector('.tab-content.active').id;
+            
+            if (activeTab === 'search') {
+                loadAllRecords();
+            } else {
+                loadAllRecordsForCurrentTab();
+            }
+        }
+
+        async function loadAllRecords() {
+            try {
+                showStatus('Cargando registros...', 'info');
+                document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
+                
+                const response = await fetch(getApiUrl('read'));
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentRecords = result.data;
+                    displaySearchResults(result.data);
+                    showStatus(`${result.total} registros cargados`, 'success');
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading records:', error);
+                document.getElementById('search-records-container').innerHTML = 
+                    `<div class="error">Error al cargar registros: ${error.message}</div>`;
+                showStatus('Error al cargar registros: ' + error.message, 'error');
+            }
+        }
+
+        async function loadAllRecordsForCurrentTab() {
+            try {
+                showStatus('Cargando registros...', 'info');
+                
+                const response = await fetch(getApiUrl('read'));
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentRecords = result.data;
+                    displaySearchResults(
