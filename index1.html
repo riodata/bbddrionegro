@@ -472,15 +472,45 @@
                     <p>Elige el sistema en el que quieres operar</p>
                     
                     <div class="category-grid" id="categories-container">
-                        <!-- Categories will be loaded here -->
+                        <!-- Cooperativas Category -->
+                        <div class="category-card" data-category="cooperativas">
+                            <div class="category-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <h3>Cooperativas</h3>
+                            <p>Sistema de gestión de entidades (cooperativas)</p>
+                            <div class="category-stats">
+                                <span class="table-count">4 tablas disponibles</span>
+                            </div>
+                        </div>
+            
+                        <!-- Mutuales Category -->
+                        <div class="category-card" data-category="mutuales">
+                            <div class="category-icon">
+                                <i class="fas fa-handshake"></i>
+                            </div>
+                            <h3>Mutuales</h3>
+                            <p>Sistema de gestión de entidades (mutuales)</p>
+                            <div class="category-stats">
+                                <span class="table-count">4 tablas disponibles</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- CATEGORY TABLES SCREEN -->
             <div id="table-selection" class="screen">
-                <div id="table-selection-content">
-                    <!-- Table selection will be loaded here -->
+                <div class="table-selection-header">              
+                    <button class="back-btn" onclick="showMainMenu()">
+                        <i class="fas fa-arrow-left"></i> Volver al menú principal
+                    </button>
+                    <h2 id="category-title">Seleccionar Tabla</h2>
+                    <p id="category-description">Elige la tabla con la que quieres trabajar</p>
+                </div>
+                
+                <div id="table-selection-content" class="tables-grid">
+                    <!-- Las tablas se cargarán dinámicamente aquí -->
                 </div>
             </div>
 
