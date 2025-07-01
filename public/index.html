@@ -610,7 +610,113 @@
         let currentDeletingRow = null;
         let dynamicTables = [];
 
-        // ========== FUNCIONES DE CARGA DINÁMICA ==========
+        // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
+
+        // Cargar todas las categorías disponibles dinámicamente
+        async function loadDynamicCategories() {
+            try {
+                showStatus('Cargando categorías disponibles...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/categories`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayDynamicCategories(result.categories);
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading dynamic categories:', error);
+                showStatus('Error al cargar categorías: ' + error.message, 'error');
+            }
+        }
+        
+        // Mostrar categorías dinámicamente en el menú principal
+        function displayDynamicCategories(categories) {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = '';
+            
+            categories.forEach(category => {
+                const card = document.createElement('div');
+                card.className = 'category-card';
+                card.onclick = () => selectCategory(category.id);
+                
+                card.innerHTML = `
+                    <span class="icon">${category.icon}</span>
+                    <h3>${category.displayName}</h3>
+                    <p>${category.description}</p>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        // Seleccionar categoría y mostrar sus tablas
+        async function selectCategory(categoryName) {
+            try {
+                showStatus('Cargando tablas de la categoría...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/categories/${categoryName}/tables`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayCategoryTables(result.tables, categoryName);
+                    showScreen('table-selection');
+                    
+                    // Actualizar breadcrumb
+                    const categoryDisplay = result.tables.length > 0 ? 
+                        result.tables[0].displayName.split(' - ')[0] : categoryName;
+                    updateBreadcrumb([
+                        { text: 'Inicio', onclick: 'goToMainMenu()' },
+                        { text: categoryDisplay, active: true }
+                    ]);
+                    
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error selecting category:', error);
+                showStatus('Error al cargar tablas de la categoría: ' + error.message, 'error');
+            }
+        }
+        
+        // Mostrar tablas de una categoría
+        function displayCategoryTables(tables, categoryName) {
+            const container = document.getElementById('table-selection-content');
+            const titleElement = document.getElementById('category-title');
+            const descriptionElement = document.getElementById('category-description');
+            
+            // Actualizar títulos
+            titleElement.textContent = `Tablas - ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)}`;
+            descriptionElement.textContent = 'Selecciona la tabla con la que quieres trabajar';
+            
+            container.innerHTML = '';
+            
+            tables.forEach(table => {
+                const card = document.createElement('div');
+                card.className = 'table-card';
+                card.onclick = () => selectDynamicTable(table.id);
+                
+                card.innerHTML = `
+                    <h4>${table.displayName}</h4>
+                    <p>${table.description}</p>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        // Inicializar la aplicación cargando categorías
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDynamicCategories();
+            
+            // Resto del código de inicialización existente...
+            document.getElementById('createForm').addEventListener('submit', async function(e) {
+                // ... código existente
+            });
+        });
         
         // Cargar todas las tablas disponibles dinámicamente
         async function loadDynamicTables() {
@@ -704,6 +810,15 @@
                 console.error('Error selecting table:', error);
                 showStatus('Error al seleccionar tabla: ' + error.message, 'error');
             }
+        }
+
+        // Función para volver al menú de selección de tablas
+        function showTableSelection() {
+            showScreen('table-selection');
+            updateBreadcrumb([
+                { text: 'Inicio', onclick: 'goToMainMenu()' },
+                { text: 'Seleccionar Tabla', active: true }
+            ]);
         }
 
         // ========== CONFIGURACIÓN DINÁMICA DE INTERFAZ ==========
