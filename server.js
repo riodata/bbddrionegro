@@ -27,9 +27,64 @@ const supabase = createClient(
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// ========== FUNCIONES PARA METADATOS DINÁMICOS ==========
+// ========== FUNCIONES PARA METADATOS DINÁMICOS CON CATEGORÍAS ==========
 
-// Obtener todas las tablas disponibles en la base de datos
+// Obtener todas las categorías disponibles
+async function getCategories() {
+  try {
+    const { data, error } = await supabase
+      .from('table_categories')
+      .select(`
+        category_name,
+        category_display_name,
+        category_description,
+        category_icon
+      `)
+      .eq('is_active', true)
+      .order('category_name');
+    
+    if (error) throw error;
+    
+    // Eliminar duplicados por categoría
+    const uniqueCategories = data.reduce((acc, current) => {
+      const existing = acc.find(item => item.category_name === current.category_name);
+      if (!existing) {
+        acc.push(current);
+      }
+      return acc;
+    }, []);
+    
+    return uniqueCategories;
+  } catch (error) {
+    console.error('Error obteniendo categorías:', error);
+    throw error;
+  }
+}
+
+// Obtener tablas de una categoría específica
+async function getTablesByCategory(categoryName) {
+  try {
+    const { data, error } = await supabase
+      .from('table_categories')
+      .select(`
+        table_name,
+        table_display_name,
+        table_description,
+        table_order
+      `)
+      .eq('category_name', categoryName)
+      .eq('is_active', true)
+      .order('table_order');
+    
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error(`Error obteniendo tablas para categoría ${categoryName}:`, error);
+    throw error;
+  }
+}
+
+// Obtener todas las tablas disponibles (mantener compatibilidad)
 async function getDynamicTables() {
   try {
     const { data, error } = await supabase
@@ -37,57 +92,13 @@ async function getDynamicTables() {
       .select('table_name')
       .eq('table_schema', 'public')
       .eq('table_type', 'BASE TABLE')
+      .neq('table_name', 'table_categories') // Excluir tabla de configuración
       .order('table_name');
     
     if (error) throw error;
     return data.map(row => row.table_name);
   } catch (error) {
     console.error('Error obteniendo tablas:', error);
-    throw error;
-  }
-}
-
-// Obtener metadatos de una tabla específica
-async function getTableSchema(tableName) {
-  try {
-    // Obtener información de columnas
-    const { data: columns, error: columnsError } = await supabase
-      .from('information_schema.columns')
-      .select(`
-        column_name,
-        data_type,
-        is_nullable,
-        column_default,
-        ordinal_position,
-        character_maximum_length
-      `)
-      .eq('table_name', tableName)
-      .eq('table_schema', 'public')
-      .order('ordinal_position');
-
-    if (columnsError) throw columnsError;
-
-    // Obtener llave primaria
-    const { data: pkData, error: pkError } = await supabase
-      .from('information_schema.key_column_usage')
-      .select('column_name')
-      .eq('table_name', tableName)
-      .eq('table_schema', 'public');
-
-    if (pkError) {
-      console.warn(`No se pudo obtener llave primaria para ${tableName}:`, pkError);
-    }
-
-    const primaryKey = pkData && pkData.length > 0 ? pkData[0].column_name : columns[0]?.column_name || 'id';
-
-    return {
-      tableName,
-      columns: columns || [],
-      primaryKey: primaryKey,
-      displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-    };
-  } catch (error) {
-    console.error(`Error obteniendo esquema de ${tableName}:`, error);
     throw error;
   }
 }
@@ -143,6 +154,71 @@ app.get('/', (req, res) => {
 });
 
 // ========== ENDPOINTS DINÁMICOS ==========
+
+// ========== ENDPOINTS PARA CATEGORÍAS ==========
+
+// ========== ENDPOINTS PARA CATEGORÍAS ==========
+
+// Obtener todas las categorías disponibles
+app.get('/api/categories', async (req, res) => {
+  try {
+    const categories = await getCategories();
+    
+    res.json({
+      success: true,
+      categories: categories.map(cat => ({
+        id: cat.category_name,
+        name: cat.category_name,
+        displayName: cat.category_display_name,
+        description: cat.category_description,
+        icon: cat.category_icon || '📊'
+      })),
+      total: categories.length
+    });
+  } catch (error) {
+    console.error('Error obteniendo categorías:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las categorías disponibles',
+      error: error.message
+    });
+  }
+});
+
+// Obtener tablas de una categoría específica
+app.get('/api/categories/:categoryName/tables', async (req, res) => {
+  try {
+    const { categoryName } = req.params;
+    const tables = await getTablesByCategory(categoryName);
+    
+    if (tables.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No se encontraron tablas para la categoría '${categoryName}'`
+      });
+    }
+    
+    res.json({
+      success: true,
+      category: categoryName,
+      tables: tables.map(table => ({
+        id: table.table_name,
+        name: table.table_name,
+        displayName: table.table_display_name,
+        description: table.table_description,
+        order: table.table_order
+      })),
+      total: tables.length
+    });
+  } catch (error) {
+    console.error(`Error obteniendo tablas para categoría ${req.params.categoryName}:`, error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las tablas de la categoría',
+      error: error.message
+    });
+  }
+});
 
 // Obtener todas las tablas disponibles
 app.get('/api/tables', async (req, res) => {
