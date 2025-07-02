@@ -612,6 +612,8 @@
 
         // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
 
+        // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
+        
         // Cargar todas las categorías disponibles dinámicamente
         async function loadDynamicCategories() {
             try {
@@ -681,6 +683,33 @@
                 showStatus('Error al cargar tablas de la categoría: ' + error.message, 'error');
             }
         }
+        
+        // Mostrar tablas de una categoría
+        function displayCategoryTables(tables, categoryName) {
+            const container = document.getElementById('table-selection-content');
+            const titleElement = document.getElementById('category-title');
+            const descriptionElement = document.getElementById('category-description');
+            
+            // Actualizar títulos
+            titleElement.textContent = `Tablas - ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)}`;
+            descriptionElement.textContent = 'Selecciona la tabla con la que quieres trabajar';
+            
+            container.innerHTML = '';
+            
+            tables.forEach(table => {
+                const card = document.createElement('div');
+                card.className = 'table-card';
+                card.onclick = () => selectDynamicTable(table.id);
+                
+                card.innerHTML = `
+                    <h4>${table.displayName}</h4>
+                    <p>${table.description}</p>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
         
         // Mostrar tablas de una categoría
         function displayCategoryTables(tables, categoryName) {
@@ -1077,6 +1106,7 @@
         }
 
         // ========== GLOBAL SEARCH ==========
+        // Actualizar la función de búsqueda global
         async function performGlobalSearch() {
             const searchText = document.getElementById('globalSearchText').value.trim();
             const searchField = document.getElementById('globalSearchField').value;
@@ -1085,14 +1115,14 @@
                 showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
                 return;
             }
-
+        
             try {
                 showStatus('Buscando...', 'info');
                 
-                const url = `${getDynamicApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                const url = `${API_BASE}/api/tables/${currentTable}/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
                 const response = await fetch(url);
                 const result = await response.json();
-
+        
                 if (result.success) {
                     currentRecords = result.data;
                     displaySearchResults(result.data);
@@ -1105,7 +1135,7 @@
                 showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
             }
         }
-
+        
         function clearGlobalSearch() {
             document.getElementById('globalSearchText').value = '';
             document.getElementById('globalSearchField').value = '';
@@ -1417,161 +1447,122 @@
         }
 
         // -------- UTILITY FUNCTIONS --------
+        // Funciones auxiliares que faltaban
         function showStatus(message, type) {
             const statusDiv = document.getElementById('status-message');
-            if (statusDiv) {
-                statusDiv.className = `status-message ${type}`;
-                statusDiv.textContent = message;
-                statusDiv.style.display = 'block';
-                
-                // Auto-hide después de 5 segundos
-                setTimeout(() => {
-                    clearStatus();
-                }, 5000);
-            } else {
-                console.log(`Status: ${type.toUpperCase()} - ${message}`);
-            }
+            statusDiv.innerHTML = `<div class="status-message ${type}">${message}</div>`;
         }
-
+        
         function clearStatus() {
             const statusDiv = document.getElementById('status-message');
-            if (statusDiv) {
-                statusDiv.style.display = 'none';
-                statusDiv.textContent = '';
-            }
+            statusDiv.innerHTML = '';
         }
-
+        
         function showCreateSuccess() {
-            const createContainer = document.getElementById('create-form-container');
-            const successContainer = document.getElementById('create-success-container');
-            
-            if (createContainer) createContainer.style.display = 'none';
-            if (successContainer) {
-                successContainer.style.display = 'block';
-            } else {
-                // Si no existe el contenedor de éxito, usar status
-                showStatus('Registro creado exitosamente', 'success');
-                document.getElementById('createForm').reset();
-            }
+            document.getElementById('create-form-container').style.display = 'none';
+            document.getElementById('create-success-container').style.display = 'block';
+            clearStatus();
         }
-
+        
         function showCreateForm() {
-            const createContainer = document.getElementById('create-form-container');
-            const successContainer = document.getElementById('create-success-container');
-            
-            if (createContainer) createContainer.style.display = 'block';
-            if (successContainer) successContainer.style.display = 'none';
+            document.getElementById('create-form-container').style.display = 'block';
+            document.getElementById('create-success-container').style.display = 'none';
         }
-
-        function createAnotherRecord() {
-            document.getElementById('createForm').reset();
-            showCreateForm();
-        }
-
-        function viewAllRecords() {
-            showTab('search');
-            loadAllRecords();
-        }
-
-        function refreshFields() {
-            if (currentTableSchema) {
-                loadDynamicFieldsForGlobalSearch();
-                showStatus('Campos actualizados', 'success');
-            } else {
-                showStatus('No hay tabla seleccionada', 'error');
-            }
-        }
-
+        
         function displaySearchResults(records) {
-            const containers = [
-                'search-records-container',
-                'update-records-container', 
-                'delete-records'
-            ];
+            const activeTab = document.querySelector('.tab-content.active').id;
+            let container;
             
-            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            switch(activeTab) {
+                case 'search':
+                    container = document.getElementById('search-records-container');
+                    break;
+                case 'update':
+                    container = document.getElementById('update-records-container');
+                    break;
+                case 'delete':
+                    container = document.getElementById('delete-records');
+                    break;
+                default:
+                    return;
+            }
             
-            containers.forEach(containerId => {
-                const container = document.getElementById(containerId);
-                if (container) {
-                    if (records.length === 0) {
-                        container.innerHTML = `
-                            <div class="empty-state">
-                                <span class="icon">📄</span>
-                                <h3>No se encontraron registros</h3>
-                                <p>No hay registros que coincidan con los criterios de búsqueda</p>
-                            </div>
-                        `;
-                    } else {
-                        container.innerHTML = records.map(record => {
-                            const pkValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey || 'N/A';
-                            return `
-                                <div class="record">
-                                    <div class="record-header">
-                                        <div class="record-title">
-                                            ${primaryKey}: ${pkValue}
-                                        </div>
-                                        <div class="record-buttons">
-                                            <button class="btn btn-warning" onclick="editRecord('${pkValue}')">✏️ Editar</button>
-                                            <button class="btn btn-danger" onclick="deleteRecord('${pkValue}')">🗑️ Eliminar</button>
-                                        </div>
-                                    </div>
-                                    <div class="record-details">
-                                        ${Object.entries(record)
-                                            .filter(([key]) => !key.startsWith('_'))
-                                            .map(([key, value]) => `<strong>${key}:</strong> ${value || 'N/A'}`)
-                                            .join(' | ')
-                                        }
-                                    </div>
-                                </div>
-                            `;
-                        }).join('');
-                    }
+            if (records.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <h3>No se encontraron registros</h3>
+                        <p>No hay registros que coincidan con los criterios de búsqueda</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = records.map(record => {
+                const recordDiv = document.createElement('div');
+                recordDiv.className = 'record';
+                
+                // Crear contenido del registro
+                let recordContent = '<div class="record-header">';
+                recordContent += `<div class="record-title">ID: ${record._primaryKey}</div>`;
+                recordContent += '<div class="record-buttons">';
+                
+                if (activeTab === 'update') {
+                    recordContent += `<button class="btn btn-warning" onclick="editRecord('${record._primaryKey}')">✏️ Editar</button>`;
                 }
-            });
-        }
-
-        // ========== INICIALIZACIÓN ÚNICA ==========
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Página cargada, inicializando sistema dinámico...');
-            
-            // Cargar tablas dinámicamente
-            loadDynamicTables();
-            
-            // Configurar formulario de creación
-            const createForm = document.getElementById('createForm');
-            if (createForm) {
-                createForm.addEventListener('submit', async function(e) {
-                    e.preventDefault();
-            
-                    const formData = new FormData(this);
-                    const data = Object.fromEntries(formData.entries());
-            
-                    try {
-                        showStatus('Creando registro...', 'info');
-                        
-                        const response = await fetch(getDynamicApiUrl('create'), {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(data),
-                        });
-            
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                            showCreateSuccess();
-                            showStatus('Registro creado exitosamente', 'success');
-                        } else {
-                            showStatus('Error al crear el registro: ' + result.message, 'error');
-                        }
-                    } catch (error) {
-                        console.error('Error:', error);
-                        showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                if (activeTab === 'delete') {
+                    recordContent += `<button class="btn btn-danger" onclick="deleteRecord('${record._primaryKey}')">🗑️ Eliminar</button>`;
+                }
+                
+                recordContent += '</div></div>';
+                
+                // Agregar campos del registro
+                Object.keys(record).forEach(key => {
+                    if (!key.startsWith('_')) {
+                        recordContent += `<div><strong>${key}:</strong> ${record[key] || 'N/A'}</div>`;
                     }
                 });
-            }
+                
+                recordDiv.innerHTML = recordContent;
+                return recordDiv.outerHTML;
+            }).join('');
+        }
+        
+        // Cambiar la inicialización para usar categorías
+        document.addEventListener('DOMContentLoaded', function() {
+            // Cargar categorías en lugar de tablas
+            loadDynamicCategories();
+            
+            // Resto del código de inicialización...
+            document.getElementById('createForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+        
+                const formData = new FormData(this);
+                const data = Object.fromEntries(formData.entries());
+        
+                try {
+                    showStatus('Creando registro...', 'info');
+                    
+                    const response = await fetch(getDynamicApiUrl('create'), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+        
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showCreateSuccess();
+                    } else {
+                        showStatus('Error al crear el registro: ' + result.message, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                }
+            });
         });
     </script>
 </body>
