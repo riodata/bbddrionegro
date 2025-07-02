@@ -208,8 +208,15 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
   try {
     const { tableName } = req.params;
     
-    // Validar que la tabla existe
-    await validateTableExists(tableName);
+    // Verificar que la tabla existe usando getDynamicTables en lugar de validateTableExists
+    const availableTables = await getDynamicTables();
+    if (!availableTables.includes(tableName)) {
+      return res.status(404).json({
+        success: false,
+        message: `Tabla '${tableName}' no encontrada`,
+        error: `Tabla '${tableName}' no encontrada`
+      });
+    }
     
     const schema = await getTableSchema(tableName);
     
