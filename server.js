@@ -84,7 +84,7 @@ async function getTablesByCategory(categoryName) {
   }
 }
 
-// Obtener todas las tablas disponibles (mantener compatibilidad)
+// Actualizar getDynamicTables para excluir tabla de configuración
 async function getDynamicTables() {
   try {
     const { data, error } = await supabase
@@ -99,19 +99,6 @@ async function getDynamicTables() {
     return data.map(row => row.table_name);
   } catch (error) {
     console.error('Error obteniendo tablas:', error);
-    throw error;
-  }
-}
-
-// Validar que una tabla existe dinámicamente
-async function validateTableExists(tableName) {
-  try {
-    const tables = await getDynamicTables();
-    if (!tables.includes(tableName)) {
-      throw new Error(`Tabla '${tableName}' no encontrada`);
-    }
-    return true;
-  } catch (error) {
     throw error;
   }
 }
@@ -152,10 +139,6 @@ const handleSupabaseError = (error, operation) => {
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// ========== ENDPOINTS DINÁMICOS ==========
-
-// ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
@@ -215,31 +198,6 @@ app.get('/api/categories/:categoryName/tables', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener las tablas de la categoría',
-      error: error.message
-    });
-  }
-});
-
-// Obtener todas las tablas disponibles
-app.get('/api/tables', async (req, res) => {
-  try {
-    const tables = await getDynamicTables();
-    
-    res.json({
-      success: true,
-      tables: tables.map(tableName => ({
-        id: tableName,
-        name: tableName,
-        displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        description: `Tabla ${tableName.replace(/_/g, ' ')}`
-      })),
-      total: tables.length
-    });
-  } catch (error) {
-    console.error('Error obteniendo tablas:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener las tablas disponibles',
       error: error.message
     });
   }
@@ -402,16 +360,19 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
 });
 
 // SEARCH - Búsqueda simple
-app.get('/api/:category/:table/search', async (req, res) => {
+app.get('/api/tables/:tableName/search', async (req, res) => {
   try {
-    const { category, table } = req.params;
+    const { tableName } = req.params;
     const { searchText, searchField } = req.query;
-    const tableConfig = validateTable(category, table);
-    const primaryKey = tableConfig.primaryKey;
     
-    logOperation('SEARCH REQUEST', { category, table, searchText, searchField });
+    // Validar tabla y obtener esquema
+    await validateTableExists(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
 
-    let query = supabase.from(table).select('*');
+    let query = supabase.from(tableName).select('*');
 
     // Aplicar filtro si existe
     if (searchText && searchField) {
