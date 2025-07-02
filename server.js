@@ -245,7 +245,14 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
     const data = req.body;
     
     // Validar tabla y obtener esquema
-    await validateTableExists(tableName);
+    const availableTables = await getDynamicTables();
+    if (!availableTables.includes(tableName)) {
+      return res.status(404).json({
+        success: false,
+        message: `Tabla '${tableName}' no encontrada`
+      });
+    }
+    
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
@@ -321,7 +328,14 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
     const { tableName } = req.params;
     
     // Validar tabla y obtener esquema
-    await validateTableExists(tableName);
+    const availableTables = await getDynamicTables();
+    if (!availableTables.includes(tableName)) {
+      return res.status(404).json({
+        success: false,
+        message: `Tabla '${tableName}' no encontrada`
+      });
+    }
+    
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
@@ -373,7 +387,14 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
     const { searchText, searchField } = req.query;
     
     // Validar tabla y obtener esquema
-    await validateTableExists(tableName);
+    const availableTables = await getDynamicTables();
+    if (!availableTables.includes(tableName)) {
+      return res.status(404).json({
+        success: false,
+        message: `Tabla '${tableName}' no encontrada`
+      });
+    }
+    
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
@@ -430,7 +451,6 @@ app.put('/api/:category/:table/update', async (req, res) => {
   try {
     const { category, table } = req.params;
     const { searchCriteria, updateData } = req.body;
-    const tableConfig = validateTable(category, table);
     
     logOperation('UPDATE REQUEST', { category, table, searchCriteria, updateData });
     
@@ -494,7 +514,6 @@ app.delete('/api/:category/:table/delete', async (req, res) => {
   try {
     const { category, table } = req.params;
     const { searchCriteria } = req.body;
-    const tableConfig = validateTable(category, table);
     
     logOperation('DELETE REQUEST', { category, table, searchCriteria });
 
@@ -548,7 +567,6 @@ app.delete('/api/:category/:table/delete', async (req, res) => {
 app.get('/api/:category/:table/fields', async (req, res) => {
   try {
     const { category, table } = req.params;
-    validateTable(category, table);
     
     logOperation('FIELDS REQUEST', { category, table });
 
