@@ -84,21 +84,119 @@ async function getTablesByCategory(categoryName) {
   }
 }
 
-// Actualizar getDynamicTables para excluir tabla de configuración
+// Obtener todas las tablas disponibles desde app_information_schema
 async function getDynamicTables() {
   try {
     const { data, error } = await supabase
-      .from('information_schema.tables')
+      .from('app_information_schema')
       .select('table_name')
-      .eq('table_schema', 'public')
-      .eq('table_type', 'BASE TABLE')
+      .neq('table_name', 'app_information_schema') // Excluir la tabla de metadatos
       .neq('table_name', 'table_categories') // Excluir tabla de configuración
       .order('table_name');
     
     if (error) throw error;
-    return data.map(row => row.table_name);
+    
+    // Obtener lista única de tablas
+    const uniqueTables = [...new Set(data.map(row => row.table_name))];
+    return uniqueTables;
   } catch (error) {
-    console.error('Error obteniendo tablas:', error);
+    console.error('Error obteniendo tablas desde app_information_schema:', error);
+    throw error;
+  }
+}
+
+// Obtener esquema completo de una tabla desde app_information_schema
+async function getTableSchema(tableName) {
+  try {
+    const { data: columns, error } = await supabase
+      .from('app_information_schema')
+      .select(`
+        column_name,
+        data_type,
+        is_nullable,
+        column_default,
+        ordinal_position,
+        max_length,
+        is_primary_key,
+        is_foreign_key,
+        foreign_table,
+        foreign_column
+      `)
+      .eq('table_name', tableName)
+      .order('ordinal_position');
+
+    if (error) throw error;
+
+    if (!columns || columns.length === 0) {
+      throw new Error(`No se encontraron columnas para la tabla '${tableName}'`);
+    }
+
+    // Encontrar la clave primaria
+    const primaryKeyColumn = columns.find(col => col.is_primary_key === true);
+    const primaryKey = primaryKeyColumn ? primaryKeyColumn.column_name : columns[0].column_name;
+
+    // Convertir el formato para mantener compatibilidad con el frontend
+    const formattedColumns = columns.map(col => ({
+      column_name: col.column_name,
+      data_type: col.data_type,
+      is_nullable: col.is_nullable ? 'YES' : 'NO',
+      column_default: col.column_default,
+      ordinal_position: col.ordinal_position,
+      character_maximum_length: col.max_length,
+      is_primary_key: col.is_primary_key,
+      is_foreign_key: col.is_foreign_key,
+      foreign_table: col.foreign_table,
+      foreign_column: col.foreign_column
+    }));
+
+    return {
+      tableName,
+      columns: formattedColumns,
+      primaryKey: primaryKey,
+      displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    };
+  } catch (error) {
+    console.error(`Error obteniendo esquema de ${tableName} desde app_information_schema:`, error);
+    throw error;
+  }
+}
+
+// Validar que una tabla existe usando app_information_schema
+async function validateTableAccess(tableName) {
+  try {
+    const { data, error } = await supabase
+      .from('app_information_schema')
+      .select('table_name')
+      .eq('table_name', tableName)
+      .limit(1);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      throw new Error(`Tabla '${tableName}' no encontrada en app_information_schema`);
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`Error validando acceso a tabla ${tableName}:`, error);
+    throw error;
+  }
+}
+
+// Obtener campos de una tabla para búsqueda (usando app_information_schema)
+async function getTableFields(tableName) {
+  try {
+    const { data, error } = await supabase
+      .from('app_information_schema')
+      .select('column_name, data_type, is_primary_key')
+      .eq('table_name', tableName)
+      .order('ordinal_position');
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error(`Error obteniendo campos de ${tableName}:`, error);
     throw error;
   }
 }
@@ -238,54 +336,51 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 
 // CREATE - Crear nuevo registro
-// CREATE - Crear nuevo registro (versión dinámica)
 app.post('/api/tables/:tableName/create', async (req, res) => {
   try {
     const { tableName } = req.params;
     const data = req.body;
     
-    // Validar tabla y obtener esquema
-    const availableTables = await getDynamicTables();
-    if (!availableTables.includes(tableName)) {
-      return res.status(404).json({
-        success: false,
-        message: `Tabla '${tableName}' no encontrada`
-      });
-    }
-    
+    // Validar tabla usando app_information_schema
+    await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
     logOperation('CREATE REQUEST', { tableName, data });
 
-    // Validar que el campo primaryKey existe
-    if (!data[primaryKey]) {
+    // Validar que el campo primaryKey existe (solo si es requerido)
+    const primaryKeyColumn = tableSchema.columns.find(col => col.column_name === primaryKey);
+    const isPrimaryKeyRequired = primaryKeyColumn && primaryKeyColumn.is_nullable === 'NO' && !primaryKeyColumn.column_default;
+    
+    if (isPrimaryKeyRequired && !data[primaryKey]) {
       return res.status(400).json({
         success: false,
         message: `El campo ${primaryKey} es obligatorio para crear un registro.`,
       });
     }
 
-    // Comprobar si ya existe un registro con la misma clave primaria
-    const { data: existingRecord, error: searchError } = await supabase
-      .from(tableName)
-      .select(primaryKey)
-      .eq(primaryKey, data[primaryKey])
-      .maybeSingle();
+    // Si hay clave primaria y no es auto-generada, verificar duplicados
+    if (data[primaryKey] && !primaryKeyColumn.column_default) {
+      const { data: existingRecord, error: searchError } = await supabase
+        .from(tableName)
+        .select(primaryKey)
+        .eq(primaryKey, data[primaryKey])
+        .maybeSingle();
 
-    if (searchError) {
-      const errorInfo = handleSupabaseError(searchError, 'búsqueda de registro existente');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
+      if (searchError && searchError.code !== 'PGRST116') {
+        const errorInfo = handleSupabaseError(searchError, 'búsqueda de registro existente');
+        return res.status(errorInfo.status).json({
+          success: false,
+          message: errorInfo.message
+        });
+      }
 
-    if (existingRecord) {
-      return res.status(409).json({
-        success: false,
-        message: `Ya existe un registro con el ${primaryKey} proporcionado.`,
-      });
+      if (existingRecord) {
+        return res.status(409).json({
+          success: false,
+          message: `Ya existe un registro con el ${primaryKey} proporcionado.`,
+        });
+      }
     }
 
     // Insertar nuevo registro
@@ -322,20 +417,12 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
 });
 
 // READ - Leer todos los registros
-// READ - Leer todos los registros (versión dinámica)
 app.get('/api/tables/:tableName/read', async (req, res) => {
   try {
     const { tableName } = req.params;
     
-    // Validar tabla y obtener esquema
-    const availableTables = await getDynamicTables();
-    if (!availableTables.includes(tableName)) {
-      return res.status(404).json({
-        success: false,
-        message: `Tabla '${tableName}' no encontrada`
-      });
-    }
-    
+    // Validar tabla usando app_information_schema
+    await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
@@ -386,15 +473,8 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
     
-    // Validar tabla y obtener esquema
-    const availableTables = await getDynamicTables();
-    if (!availableTables.includes(tableName)) {
-      return res.status(404).json({
-        success: false,
-        message: `Tabla '${tableName}' no encontrada`
-      });
-    }
-    
+    // Validar tabla usando app_information_schema
+    await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
@@ -438,6 +518,34 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error inesperado en SEARCH:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error interno del servidor',
+      error: error.message 
+    });
+  }
+});
+
+app.get('/api/tables/:tableName/fields', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    
+    await validateTableAccess(tableName);
+    const fields = await getTableFields(tableName);
+    
+    logOperation('FIELDS REQUEST', { tableName });
+
+    res.json({
+      success: true,
+      fields: fields.map(field => ({
+        name: field.column_name,
+        type: field.data_type,
+        isPrimaryKey: field.is_primary_key
+      })),
+      total: fields.length
+    });
+  } catch (error) {
+    console.error('❌ Error inesperado en FIELDS:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Error interno del servidor',
@@ -563,59 +671,13 @@ app.delete('/api/:category/:table/delete', async (req, res) => {
   }
 });
 
-// FIELDS - Obtener campos disponibles usando introspección de Supabase
-app.get('/api/:category/:table/fields', async (req, res) => {
-  try {
-    const { category, table } = req.params;
-    
-    logOperation('FIELDS REQUEST', { category, table });
-
-    // Intentar obtener los campos mediante una consulta de muestra
-    const { data: sampleData, error } = await supabase
-      .from(table)
-      .select('*')
-      .limit(1)
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') {
-      const errorInfo = handleSupabaseError(error, 'obtención de campos');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
-
-    // Si hay datos, obtener los campos del primer registro
-    let fields = [];
-    if (sampleData) {
-      fields = Object.keys(sampleData).filter(key => !key.startsWith('_'));
-    }
-
-    logOperation('FIELDS SUCCESS', `${fields.length} campos encontrados`);
-
-    res.json({
-      success: true,
-      fields: fields,
-      total: fields.length
-    });
-  } catch (error) {
-    console.error('❌ Error inesperado en FIELDS:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error interno del servidor',
-      error: error.message 
-    });
-  }
-});
-
-// Health check mejorado
 app.get('/health', async (req, res) => {
   try {
     const startTime = Date.now();
     
-    // Probar conexión con una consulta simple en la tabla cooperativas
+    // Probar conexión con app_information_schema
     const { data, error } = await supabase
-      .from('cooperativas')
+      .from('app_information_schema')
       .select('count', { count: 'exact', head: true });
 
     const responseTime = Date.now() - startTime;
@@ -631,15 +693,20 @@ app.get('/health', async (req, res) => {
       });
     }
 
-  res.json({ 
-    status: 'healthy', 
-    database: 'connected',
-    responseTime: `${responseTime}ms`,
-    supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
-    supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
-    dynamicTables: 'enabled',
-    timestamp: new Date().toISOString()
-  });
+    // Contar tablas disponibles
+    const tables = await getDynamicTables();
+
+    res.json({ 
+      status: 'healthy', 
+      database: 'connected',
+      responseTime: `${responseTime}ms`,
+      tablesAvailable: tables.length,
+      tablesList: tables,
+      supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
+      supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
+      schemaSource: 'app_information_schema',
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
     console.error('❌ Health check error:', error);
     res.status(503).json({ 
