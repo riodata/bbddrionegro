@@ -555,12 +555,17 @@ app.get('/api/tables/:tableName/fields', async (req, res) => {
 });
 
 // UPDATE - Actualizar registro
-app.put('/api/:category/:table/update', async (req, res) => {
+app.put('/api/tables/:tableName/update', async (req, res) => {
   try {
-    const { category, table } = req.params;
+    const { tableName } = req.params;
     const { searchCriteria, updateData } = req.body;
     
-    logOperation('UPDATE REQUEST', { category, table, searchCriteria, updateData });
+    // Validar tabla y obtener esquema
+    await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    logOperation('UPDATE REQUEST', { tableName, searchCriteria, updateData });
     
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
@@ -575,7 +580,7 @@ app.put('/api/:category/:table/update', async (req, res) => {
     delete cleanUpdateData._primaryKey;
 
     const { data, error } = await supabase
-      .from(table)
+      .from(tableName)
       .update(cleanUpdateData)
       .eq(searchCriteria.field, searchCriteria.value)
       .select()
@@ -603,7 +608,7 @@ app.put('/api/:category/:table/update', async (req, res) => {
       message: 'Registro actualizado correctamente',
       data: {
         ...data,
-        _primaryKey: data[tableConfig.primaryKey],
+        _primaryKey: data[primaryKey], // CORREGIDO: usar primaryKey del schema
         _rowIndex: 1
       }
     });
@@ -618,12 +623,16 @@ app.put('/api/:category/:table/update', async (req, res) => {
 });
 
 // DELETE - Eliminar registro
-app.delete('/api/:category/:table/delete', async (req, res) => {
+app.delete('/api/tables/:tableName/delete', async (req, res) => {
   try {
-    const { category, table } = req.params;
+    const { tableName } = req.params;
     const { searchCriteria } = req.body;
     
-    logOperation('DELETE REQUEST', { category, table, searchCriteria });
+    // Validar tabla y obtener esquema
+    await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    
+    logOperation('DELETE REQUEST', { tableName, searchCriteria });
 
     if (!searchCriteria || !searchCriteria.field || !searchCriteria.value) {
       return res.status(400).json({
@@ -633,7 +642,7 @@ app.delete('/api/:category/:table/delete', async (req, res) => {
     }
 
     const { data: deletedRecord, error } = await supabase
-      .from(table)
+      .from(tableName)
       .delete()
       .eq(searchCriteria.field, searchCriteria.value)
       .select()
@@ -733,26 +742,33 @@ app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend available at /`);
   console.log(`🏥 Health check available at /health`);
-  console.log(`🔄 Sistema dinámico activado - detectando tablas automáticamente`);
+  console.log(`🔄 Sistema dinámico activado - usando app_information_schema`);
   
   // Probar conexión y mostrar tablas disponibles
   try {
     console.log('🔄 Probando conexión inicial a Supabase...');
+    
+    // CORREGIDO: Usar app_information_schema en lugar de information_schema
     const { error } = await supabase
-      .from('information_schema.tables')
+      .from('app_information_schema')
       .select('count', { count: 'exact', head: true });
     
     if (error) {
       console.error('❌ Error de conexión inicial:', error.message);
     } else {
       console.log('✅ Conexión a Supabase exitosa');
+      console.log('✅ app_information_schema accesible');
       
       // Mostrar tablas disponibles
       try {
         const tables = await getDynamicTables();
         console.log(`📊 Tablas detectadas: ${tables.join(', ')}`);
+        
+        // Mostrar categorías disponibles
+        const categories = await getCategories();
+        console.log(`📁 Categorías disponibles: ${categories.map(c => c.category_name).join(', ')}`);
       } catch (tableError) {
-        console.log('⚠️ No se pudieron listar las tablas automáticamente');
+        console.log('⚠️ No se pudieron listar las tablas automáticamente:', tableError.message);
       }
     }
   } catch (error) {
