@@ -238,6 +238,58 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ========== FUNCIONES PARA ENUMS ==========
+
+// Obtener valores de un enum específico
+async function getEnumValues(enumName) {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_enum_values', { enum_name: enumName });
+    
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error(`Error obteniendo valores de enum ${enumName}:`, error);
+    throw error;
+  }
+}
+
+// Obtener todos los enums para dropdowns
+async function getAllEnumOptions() {
+  try {
+    const [
+      tipos,
+      subtipos,
+      tipo_asambleas,
+      tipo_financiamientos,
+      autoridades,
+      departamentos,
+      localidades
+    ] = await Promise.all([
+      getEnumValues('tipo'),
+      getEnumValues('subtipo'),
+      getEnumValues('tipo_asamblea'),
+      getEnumValues('tipo_financiamiento'),
+      getEnumValues('autoridades'),
+      getEnumValues('departamento'),
+      getEnumValues('localidad')
+    ]);
+
+    return {
+      tipo: tipos,
+      subtipo: subtipos,
+      tipo_asamblea: tipo_asambleas,
+      tipo_financiamiento: tipo_financiamientos,
+      autoridades: autoridades,
+      departamento: departamentos,
+      localidad: localidades
+    };
+  } catch (error) {
+    console.error('Error obteniendo todas las opciones de enum:', error);
+    throw error;
+  }
+}
+
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
@@ -329,6 +381,43 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
       success: false,
       message: error.message,
       error: error.message
+    });
+  }
+});
+
+// Endpoint para obtener opciones de dropdowns
+app.get('/api/enum-options', async (req, res) => {
+  try {
+    const options = await getAllEnumOptions();
+    res.json({
+      success: true,
+      data: options
+    });
+  } catch (error) {
+    console.error('Error en /api/enum-options:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error obteniendo opciones de dropdowns',
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para obtener un enum específico
+app.get('/api/enum-options/:enumName', async (req, res) => {
+  try {
+    const { enumName } = req.params;
+    const values = await getEnumValues(enumName);
+    res.json({
+      success: true,
+      data: values
+    });
+  } catch (error) {
+    console.error(`Error obteniendo enum ${req.params.enumName}:`, error);
+    res.status(500).json({
+      success: false,
+      error: `Error obteniendo opciones para ${req.params.enumName}`,
+      details: error.message
     });
   }
 });
