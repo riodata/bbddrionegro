@@ -901,6 +901,26 @@
                 
                 fieldsContainer.appendChild(fieldDiv);
             });
+            
+            // ¡AGREGAR ESTA LÍNEA!
+            populateEnumDropdowns();
+        }
+
+        // Poblar dropdowns de enums después de crear el formulario
+        async function populateEnumDropdowns() {
+            try {
+                // Buscar todos los selects que son campos enum
+                const selects = document.querySelectorAll('select[id]');
+                
+                for (const select of selects) {
+                    const enumType = dropdownManager.isEnumField(select.id);
+                    if (enumType) {
+                        await dropdownManager.populateDropdown(select, enumType);
+                    }
+                }
+            } catch (error) {
+                console.error('Error poblando dropdowns:', error);
+            }
         }
         
         // Crear elemento de input apropiado
@@ -912,7 +932,15 @@
                 ${column.character_maximum_length ? `maxlength="${column.character_maximum_length}"` : ''}
             `;
             
-            if (inputType === 'textarea') {
+            // Verificar si es un campo enum
+            const enumType = dropdownManager.isEnumField(column.column_name);
+            
+            if (enumType) {
+                // Crear select para campos enum
+                return `<select ${commonAttributes}>
+                    <option value="">Cargando opciones...</option>
+                </select>`;
+            } else if (inputType === 'textarea') {
                 return `<textarea ${commonAttributes} rows="3"></textarea>`;
             } else if (inputType === 'select') {
                 // Para campos que parecen ser de selección
@@ -1565,5 +1593,6 @@
             });
         });
     </script>
+    <script src="js/dropdown-utils.js"></script>
 </body>
 </html>      
