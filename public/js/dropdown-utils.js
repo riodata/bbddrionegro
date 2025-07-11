@@ -54,27 +54,23 @@ class DropdownManager {
     }
   }
 
-  // Inicializar todos los dropdowns en una página
-  async initializeDropdowns() {
-    const dropdownMappings = {
+  // Detectar si un campo debería ser un dropdown
+  isEnumField(columnName) {
+    const enumFields = {
       'localidad': 'localidad',
-      'departamento': 'departamento',
-      'autoridad': 'autoridades'
+      'departamento': 'departamento', 
+      'autoridad': 'autoridades',
+      'autoridades': 'autoridades',
+      'tipo_financ': 'tipo_financiamiento',
+      'tipo asamblea': 'tipo_asamblea',
+      'tipoaasamb': 'tipo_asamblea,
+      'tipo': 'tipo',
+      'subtipo': 'subtipo'
     };
-
-    for (const [selectId, enumType] of Object.entries(dropdownMappings)) {
-      const selectElement = document.getElementById(selectId);
-      if (selectElement) {
-        await this.populateDropdown(selectElement, enumType);
-      }
-    }
+    
+    return enumFields[columnName.toLowerCase()] || null;
   }
 }
 
 // Instancia global
 const dropdownManager = new DropdownManager();
-
-// Inicializar cuando la página cargue
-document.addEventListener('DOMContentLoaded', async () => {
-  await dropdownManager.initializeDropdowns();
-});
