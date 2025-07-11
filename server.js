@@ -290,6 +290,24 @@ async function getAllEnumOptions() {
   }
 }
 
+// Endpoint para obtener opciones de dropdowns
+app.get('/api/enum-options', async (req, res) => {
+  try {
+    const options = await getAllEnumOptions();
+    res.json({
+      success: true,
+      data: options
+    });
+  } catch (error) {
+    console.error('Error en /api/enum-options:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error obteniendo opciones de dropdowns',
+      details: error.message
+    });
+  }
+});
+
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
