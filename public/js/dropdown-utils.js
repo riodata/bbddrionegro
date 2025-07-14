@@ -62,15 +62,9 @@ class DropdownManager {
       'autoridad': 'autoridades',
       'autoridades': 'autoridades',
       'tipo_financ': 'tipo_financiamiento',
-      'tipo asamblea': 'tipo_asamblea',
-      'tipoaasamb': 'tipo_asamblea,
+      'tipo_asamblea': 'tipo_asamblea',
+      'tipoasamb': 'tipo_asamblea',
       'tipo': 'tipo',
       'subtipo': 'subtipo'
     };
     
-    return enumFields[columnName.toLowerCase()] || null;
-  }
-}
-
-// Instancia global
-const dropdownManager = new DropdownManager();
