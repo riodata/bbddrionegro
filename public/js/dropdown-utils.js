@@ -34,7 +34,8 @@ class DropdownManager {
       const enumOptions = options[enumType];
 
       if (!enumOptions) {
-        throw new Error(`Tipo de enum '${enumType}' no encontrado`);
+        console.warn(`Tipo de enum '${enumType}' no encontrado`);
+        return;
       }
 
       // Limpiar opciones existentes
@@ -68,3 +69,24 @@ class DropdownManager {
       'subtipo': 'subtipo'
     };
     
+    return enumFields[columnName.toLowerCase()] || null;
+  }
+
+  // Detectar si un campo debería ser radio buttons
+  isBooleanField(columnName) {
+    const booleanFields = [
+      'regular',
+      'activo', 
+      'activa',
+      'vigente',
+      'habilitado',
+      'habilitada',
+      'estado'
+    ];
+    
+    return booleanFields.includes(columnName.toLowerCase());
+  }
+}
+
+// Instancia global
+const dropdownManager = new DropdownManager();
