@@ -179,6 +179,42 @@
             line-height: 1.5;
         }
 
+        /* Estilos para radio buttons */
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            font-weight: normal;
+            margin-bottom: 0;
+        }
+        
+        .radio-option input[type="radio"] {
+            width: auto;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        
+        .radio-label {
+            font-size: 1rem;
+            color: #495057;
+            cursor: pointer;
+        }
+        
+        .radio-option:hover .radio-label {
+            color: #4a90e2;
+        }
+        
+        .radio-option input[type="radio"]:checked + .radio-label {
+            color: #4a90e2;
+            font-weight: 500;
+        }
+
         /* Existing styles for CRUD operations */
         .tabs {
             display: flex;
@@ -925,7 +961,6 @@
         // Crear elemento de input apropiado
         function createInputElement(column, inputType, required) {
             const commonAttributes = `
-                id="${column.column_name}" 
                 name="${column.column_name}" 
                 ${required}
                 ${column.character_maximum_length ? `maxlength="${column.character_maximum_length}"` : ''}
@@ -934,20 +969,36 @@
             // Verificar si es un campo enum
             const enumType = dropdownManager.isEnumField(column.column_name);
             
+            // Verificar si es un campo booleano/radio
+            const isBooleanField = dropdownManager.isBooleanField(column.column_name);
+            
             if (enumType) {
                 // Crear select para campos enum
-                return `<select ${commonAttributes}>
+                return `<select id="${column.column_name}" ${commonAttributes}>
                     <option value="">Cargando opciones...</option>
                 </select>`;
+            } else if (isBooleanField) {
+                // Crear radio buttons para campos booleanos
+                return `
+                    <div class="radio-group">
+                        <label class="radio-option">
+                            <input type="radio" id="${column.column_name}_si" ${commonAttributes} value="Sí" ${required ? 'required' : ''}>
+                            <span class="radio-label">Sí</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" id="${column.column_name}_no" ${commonAttributes} value="No" ${required ? 'required' : ''}>
+                            <span class="radio-label">No</span>
+                        </label>
+                    </div>
+                `;
             } else if (inputType === 'textarea') {
-                return `<textarea ${commonAttributes} rows="3"></textarea>`;
+                return `<textarea id="${column.column_name}" ${commonAttributes} rows="3"></textarea>`;
             } else if (inputType === 'select') {
-                // Para campos que parecen ser de selección
-                return `<select ${commonAttributes}>
+                return `<select id="${column.column_name}" ${commonAttributes}>
                     <option value="">Seleccionar...</option>
                 </select>`;
             } else {
-                return `<input type="${inputType}" ${commonAttributes}>`;
+                return `<input type="${inputType}" id="${column.column_name}" ${commonAttributes}>`;
             }
         }
         
