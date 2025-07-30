@@ -840,6 +840,23 @@ app.use((error, req, res, next) => {
   });
 });
 
+// Añadir ANTES de la línea app.listen()
+app.get('/mi-ip', (req, res) => {
+  res.json({
+    ip: req.ip,
+    ips: req.ips,
+    headers: {
+      'x-forwarded-for': req.get('x-forwarded-for'),
+      'x-real-ip': req.get('x-real-ip'),
+      'cf-connecting-ip': req.get('cf-connecting-ip')
+    },
+    connection: {
+      remoteAddress: req.connection?.remoteAddress,
+      socket: req.socket?.remoteAddress
+    }
+  });
+});
+
 // Iniciar servidor con validación de conexión
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
