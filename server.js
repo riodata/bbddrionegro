@@ -2,9 +2,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
-
 const { Pool } = require('pg');
+require('dotenv').config();
 
 // Validar variables de entorno para PostgreSQL
 if (!process.env.DATABASE_URL && 
@@ -15,10 +14,22 @@ if (!process.env.DATABASE_URL &&
 }
 
 // Configuración de PostgreSQL
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+let pool;
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+} else {
+  pool = new Pool({
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -28,29 +39,19 @@ const PORT = process.env.PORT || 8000;
 // Obtener todas las categorías disponibles
 async function getCategories() {
   try {
-    const { data, error } = await supabase
-      .from('table_categories')
-      .select(`
+    const query = `
+      SELECT DISTINCT 
         category_name,
         category_display_name,
         category_description,
         category_icon
-      `)
-      .eq('is_active', true)
-      .order('category_name');
+      FROM table_categories 
+      WHERE is_active = true
+      ORDER BY category_name
+    `;
     
-    if (error) throw error;
-    
-    // Eliminar duplicados por categoría
-    const uniqueCategories = data.reduce((acc, current) => {
-      const existing = acc.find(item => item.category_name === current.category_name);
-      if (!existing) {
-        acc.push(current);
-      }
-      return acc;
-    }, []);
-    
-    return uniqueCategories;
+    const result = await pool.query(query);
+    return result.rows;
   } catch (error) {
     console.error('Error obteniendo categorías:', error);
     throw error;
@@ -60,20 +61,19 @@ async function getCategories() {
 // Obtener tablas de una categoría específica
 async function getTablesByCategory(categoryName) {
   try {
-    const { data, error } = await supabase
-      .from('table_categories')
-      .select(`
+    const query = `
+      SELECT 
         table_name,
         table_display_name,
         table_description,
         table_order
-      `)
-      .eq('category_name', categoryName)
-      .eq('is_active', true)
-      .order('table_order');
+      FROM table_categories 
+      WHERE category_name = $1 AND is_active = true
+      ORDER BY table_order
+    `;
     
-    if (error) throw error;
-    return data || [];
+    const result = await pool.query(query, [categoryName]);
+    return result.rows;
   } catch (error) {
     console.error(`Error obteniendo tablas para categoría ${categoryName}:`, error);
     throw error;
@@ -83,18 +83,15 @@ async function getTablesByCategory(categoryName) {
 // Obtener todas las tablas disponibles desde app_information_schema
 async function getDynamicTables() {
   try {
-    const { data, error } = await supabase
-      .from('app_information_schema')
-      .select('table_name')
-      .neq('table_name', 'app_information_schema') // Excluir la tabla de metadatos
-      .neq('table_name', 'table_categories') // Excluir tabla de configuración
-      .order('table_name');
+    const query = `
+      SELECT DISTINCT table_name 
+      FROM app_information_schema 
+      WHERE table_name NOT IN ('app_information_schema', 'table_categories')
+      ORDER BY table_name
+    `;
     
-    if (error) throw error;
-    
-    // Obtener lista única de tablas
-    const uniqueTables = [...new Set(data.map(row => row.table_name))];
-    return uniqueTables;
+    const result = await pool.query(query);
+    return result.rows.map(row => row.table_name);
   } catch (error) {
     console.error('Error obteniendo tablas desde app_information_schema:', error);
     throw error;
@@ -104,9 +101,8 @@ async function getDynamicTables() {
 // Obtener esquema completo de una tabla desde app_information_schema
 async function getTableSchema(tableName) {
   try {
-    const { data: columns, error } = await supabase
-      .from('app_information_schema')
-      .select(`
+    const query = `
+      SELECT 
         column_name,
         data_type,
         is_nullable,
@@ -117,11 +113,13 @@ async function getTableSchema(tableName) {
         is_foreign_key,
         foreign_table,
         foreign_column
-      `)
-      .eq('table_name', tableName)
-      .order('ordinal_position');
+      FROM app_information_schema 
+      WHERE table_name = $1
+      ORDER BY ordinal_position
+    `;
 
-    if (error) throw error;
+    const result = await pool.query(query, [tableName]);
+    const columns = result.rows;
 
     if (!columns || columns.length === 0) {
       throw new Error(`No se encontraron columnas para la tabla '${tableName}'`);
@@ -160,15 +158,16 @@ async function getTableSchema(tableName) {
 // Validar que una tabla existe usando app_information_schema
 async function validateTableAccess(tableName) {
   try {
-    const { data, error } = await supabase
-      .from('app_information_schema')
-      .select('table_name')
-      .eq('table_name', tableName)
-      .limit(1);
+    const query = `
+      SELECT table_name 
+      FROM app_information_schema 
+      WHERE table_name = $1 
+      LIMIT 1
+    `;
+    
+    const result = await pool.query(query, [tableName]);
 
-    if (error) throw error;
-
-    if (!data || data.length === 0) {
+    if (result.rows.length === 0) {
       throw new Error(`Tabla '${tableName}' no encontrada en app_information_schema`);
     }
 
@@ -182,15 +181,15 @@ async function validateTableAccess(tableName) {
 // Obtener campos de una tabla para búsqueda (usando app_information_schema)
 async function getTableFields(tableName) {
   try {
-    const { data, error } = await supabase
-      .from('app_information_schema')
-      .select('column_name, data_type, is_primary_key')
-      .eq('table_name', tableName)
-      .order('ordinal_position');
-
-    if (error) throw error;
-
-    return data || [];
+    const query = `
+      SELECT column_name, data_type, is_primary_key 
+      FROM app_information_schema 
+      WHERE table_name = $1
+      ORDER BY ordinal_position
+    `;
+    
+    const result = await pool.query(query, [tableName]);
+    return result.rows;
   } catch (error) {
     console.error(`Error obteniendo campos de ${tableName}:`, error);
     throw error;
@@ -210,19 +209,19 @@ const logOperation = (operation, data) => {
   console.log(`🔄 ${operation}:`, JSON.stringify(data, null, 2));
 };
 
-// Función auxiliar para manejo de errores de Supabase
-const handleSupabaseError = (error, operation) => {
+// Función auxiliar para manejo de errores de PostgreSQL
+const handlePostgresError = (error, operation) => {
   console.error(`❌ Error en ${operation}:`, error);
-  
-  if (error.code === 'PGRST116') {
-    return { status: 404, message: 'Registro no encontrado' };
-  }
   
   if (error.code === '23505') {
     return { status: 409, message: 'Ya existe un registro con esos datos' };
   }
   
-  if (error.message.includes('connection')) {
+  if (error.code === '23503') {
+    return { status: 400, message: 'Error de referencia: algunos datos relacionados no existen' };
+  }
+  
+  if (error.code === 'ECONNREFUSED') {
     return { status: 503, message: 'Error de conexión con la base de datos' };
   }
   
@@ -239,47 +238,49 @@ app.get('/', (req, res) => {
 // Obtener valores de un enum específico
 async function getEnumValues(enumName) {
   try {
-    const { data, error } = await supabase
-      .rpc('get_enum_values', { enum_name: enumName });
+    const query = `
+      SELECT unnest(enum_range(NULL::${enumName})) as enum_value
+    `;
     
-    if (error) throw error;
-    return data || [];
+    const result = await pool.query(query);
+    return result.rows.map(row => row.enum_value);
   } catch (error) {
     console.error(`Error obteniendo valores de enum ${enumName}:`, error);
-    throw error;
+    return [];
   }
 }
 
 // Obtener todos los enums para dropdowns
 async function getAllEnumOptions() {
   try {
-    const [
-      tipos,
-      subtipos,
-      tipo_asambleas,
-      tipo_financiamientos,
-      autoridades,
-      departamentos,
-      localidades
-    ] = await Promise.all([
-      getEnumValues('tipo'),
-      getEnumValues('subtipo'),
-      getEnumValues('tipo_asamblea'),
-      getEnumValues('tipo_financiamiento'),
-      getEnumValues('autoridades'),
-      getEnumValues('departamento'),
-      getEnumValues('localidad')
-    ]);
+    const enumTypes = [
+      'tipo',
+      'subtipo', 
+      'tipo_asamblea',
+      'tipo_financiamiento',
+      'autoridades',
+      'departamento',
+      'localidad'
+    ];
 
-    return {
-      tipo: tipos,
-      subtipo: subtipos,
-      tipo_asamblea: tipo_asambleas,
-      tipo_financiamiento: tipo_financiamientos,
-      autoridades: autoridades,
-      departamento: departamentos,
-      localidad: localidades
-    };
+    const enumPromises = enumTypes.map(async (enumType) => {
+      try {
+        const values = await getEnumValues(enumType);
+        return [enumType, values];
+      } catch (error) {
+        console.log(`Enum ${enumType} no existe, saltando...`);
+        return [enumType, []];
+      }
+    });
+
+    const results = await Promise.all(enumPromises);
+    
+    const enumOptions = {};
+    results.forEach(([enumType, values]) => {
+      enumOptions[enumType] = values;
+    });
+
+    return enumOptions;
   } catch (error) {
     console.error('Error obteniendo todas las opciones de enum:', error);
     throw error;
@@ -299,6 +300,25 @@ app.get('/api/enum-options', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Error obteniendo opciones de dropdowns',
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para obtener un enum específico
+app.get('/api/enum-options/:enumName', async (req, res) => {
+  try {
+    const { enumName } = req.params;
+    const values = await getEnumValues(enumName);
+    res.json({
+      success: true,
+      data: values
+    });
+  } catch (error) {
+    console.error(`Error obteniendo enum ${req.params.enumName}:`, error);
+    res.status(500).json({
+      success: false,
+      error: `Error obteniendo opciones para ${req.params.enumName}`,
       details: error.message
     });
   }
@@ -372,7 +392,7 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
   try {
     const { tableName } = req.params;
     
-    // Verificar que la tabla existe usando getDynamicTables en lugar de validateTableExists
+    // Verificar que la tabla existe
     const availableTables = await getDynamicTables();
     if (!availableTables.includes(tableName)) {
       return res.status(404).json({
@@ -399,43 +419,6 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
   }
 });
 
-// Endpoint para obtener opciones de dropdowns
-app.get('/api/enum-options', async (req, res) => {
-  try {
-    const options = await getAllEnumOptions();
-    res.json({
-      success: true,
-      data: options
-    });
-  } catch (error) {
-    console.error('Error en /api/enum-options:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Error obteniendo opciones de dropdowns',
-      details: error.message
-    });
-  }
-});
-
-// Endpoint para obtener un enum específico
-app.get('/api/enum-options/:enumName', async (req, res) => {
-  try {
-    const { enumName } = req.params;
-    const values = await getEnumValues(enumName);
-    res.json({
-      success: true,
-      data: values
-    });
-  } catch (error) {
-    console.error(`Error obteniendo enum ${req.params.enumName}:`, error);
-    res.status(500).json({
-      success: false,
-      error: `Error obteniendo opciones para ${req.params.enumName}`,
-      details: error.message
-    });
-  }
-});
-
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 
 // CREATE - Crear nuevo registro
@@ -444,62 +427,26 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
     const { tableName } = req.params;
     const data = req.body;
     
-    // Validar tabla usando app_information_schema
+    // Validar tabla
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
     logOperation('CREATE REQUEST', { tableName, data });
 
-    // Validar que el campo primaryKey existe (solo si es requerido)
-    const primaryKeyColumn = tableSchema.columns.find(col => col.column_name === primaryKey);
-    const isPrimaryKeyRequired = primaryKeyColumn && primaryKeyColumn.is_nullable === 'NO' && !primaryKeyColumn.column_default;
+    // Construir query de inserción
+    const columns = Object.keys(data);
+    const values = Object.values(data);
+    const placeholders = values.map((_, index) => `$${index + 1}`);
     
-    if (isPrimaryKeyRequired && !data[primaryKey]) {
-      return res.status(400).json({
-        success: false,
-        message: `El campo ${primaryKey} es obligatorio para crear un registro.`,
-      });
-    }
+    const insertQuery = `
+      INSERT INTO ${tableName} (${columns.join(', ')})
+      VALUES (${placeholders.join(', ')})
+      RETURNING *
+    `;
 
-    // Si hay clave primaria y no es auto-generada, verificar duplicados
-    if (data[primaryKey] && !primaryKeyColumn.column_default) {
-      const { data: existingRecord, error: searchError } = await supabase
-        .from(tableName)
-        .select(primaryKey)
-        .eq(primaryKey, data[primaryKey])
-        .maybeSingle();
-
-      if (searchError && searchError.code !== 'PGRST116') {
-        const errorInfo = handleSupabaseError(searchError, 'búsqueda de registro existente');
-        return res.status(errorInfo.status).json({
-          success: false,
-          message: errorInfo.message
-        });
-      }
-
-      if (existingRecord) {
-        return res.status(409).json({
-          success: false,
-          message: `Ya existe un registro con el ${primaryKey} proporcionado.`,
-        });
-      }
-    }
-
-    // Insertar nuevo registro
-    const { data: newRecord, error: insertError } = await supabase
-      .from(tableName)
-      .insert([data])
-      .select()
-      .single();
-
-    if (insertError) {
-      const errorInfo = handleSupabaseError(insertError, 'creación de registro');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
+    const result = await pool.query(insertQuery, values);
+    const newRecord = result.rows[0];
     
     logOperation('CREATE SUCCESS', newRecord);
     
@@ -511,10 +458,10 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error inesperado en CREATE:', error);
-    res.status(500).json({
+    const errorInfo = handlePostgresError(error, 'creación de registro');
+    res.status(errorInfo.status).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message,
+      message: errorInfo.message
     });
   }
 });
@@ -524,28 +471,18 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
   try {
     const { tableName } = req.params;
     
-    // Validar tabla usando app_information_schema
+    // Validar tabla
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
     logOperation('READ REQUEST', { tableName });
 
-    const { data, error } = await supabase
-      .from(tableName)
-      .select('*')
-      .order(primaryKey, { ascending: true });
-
-    if (error) {
-      const errorInfo = handleSupabaseError(error, 'lectura de registros');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
+    const query = `SELECT * FROM ${tableName} ORDER BY ${primaryKey} ASC`;
+    const result = await pool.query(query);
 
     // Mapear datos para mantener compatibilidad con el frontend
-    const mappedData = data.map((record, index) => ({
+    const mappedData = result.rows.map((record, index) => ({
       _primaryKey: record[primaryKey],
       ...record,
       _rowIndex: index + 1
@@ -562,10 +499,10 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error inesperado en READ:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error interno del servidor',
-      error: error.message 
+    const errorInfo = handlePostgresError(error, 'lectura de registros');
+    res.status(errorInfo.status).json({
+      success: false,
+      message: errorInfo.message
     });
   }
 });
@@ -576,34 +513,28 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
     
-    // Validar tabla usando app_information_schema
+    // Validar tabla
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
     logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
 
-    let query = supabase.from(tableName).select('*');
+    let query = `SELECT * FROM ${tableName}`;
+    let queryParams = [];
 
     // Aplicar filtro si existe
     if (searchText && searchField) {
-      query = query.ilike(searchField, `%${searchText}%`);
+      query += ` WHERE ${searchField} ILIKE $1`;
+      queryParams.push(`%${searchText}%`);
     }
 
-    query = query.order(primaryKey, { ascending: true });
+    query += ` ORDER BY ${primaryKey} ASC`;
 
-    const { data, error } = await query;
-    
-    if (error) {
-      const errorInfo = handleSupabaseError(error, 'búsqueda de registros');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
+    const result = await pool.query(query, queryParams);
 
     // Mapear datos para mantener compatibilidad
-    const mappedData = data.map((record, index) => ({
+    const mappedData = result.rows.map((record, index) => ({
       _primaryKey: record[primaryKey],
       ...record,
       _rowIndex: index + 1
@@ -621,10 +552,10 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error inesperado en SEARCH:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error interno del servidor',
-      error: error.message 
+    const errorInfo = handlePostgresError(error, 'búsqueda de registros');
+    res.status(errorInfo.status).json({
+      success: false,
+      message: errorInfo.message
     });
   }
 });
@@ -649,10 +580,10 @@ app.get('/api/tables/:tableName/fields', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error inesperado en FIELDS:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error interno del servidor',
-      error: error.message 
+    const errorInfo = handlePostgresError(error, 'obtención de campos');
+    res.status(errorInfo.status).json({
+      success: false,
+      message: errorInfo.message
     });
   }
 });
@@ -663,7 +594,7 @@ app.put('/api/tables/:tableName/update', async (req, res) => {
     const { tableName } = req.params;
     const { searchCriteria, updateData } = req.body;
     
-    // Validar tabla y obtener esquema
+    // Validar tabla
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
@@ -682,45 +613,45 @@ app.put('/api/tables/:tableName/update', async (req, res) => {
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
-    const { data, error } = await supabase
-      .from(tableName)
-      .update(cleanUpdateData)
-      .eq(searchCriteria.field, searchCriteria.value)
-      .select()
-      .maybeSingle();
+    // Construir query de actualización
+    const updateColumns = Object.keys(cleanUpdateData);
+    const updateValues = Object.values(cleanUpdateData);
+    const setClause = updateColumns.map((col, index) => `${col} = $${index + 1}`).join(', ');
+    
+    const updateQuery = `
+      UPDATE ${tableName} 
+      SET ${setClause}
+      WHERE ${searchCriteria.field} = $${updateValues.length + 1}
+      RETURNING *
+    `;
 
-    if (error) {
-      const errorInfo = handleSupabaseError(error, 'actualización de registro');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
+    const result = await pool.query(updateQuery, [...updateValues, searchCriteria.value]);
 
-    if (!data) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: `Registro no encontrado con ${searchCriteria.field}=${searchCriteria.value}`
       });
     }
 
-    logOperation('UPDATE SUCCESS', data);
+    const updatedRecord = result.rows[0];
+    logOperation('UPDATE SUCCESS', updatedRecord);
 
     res.json({
       success: true,
       message: 'Registro actualizado correctamente',
       data: {
-        ...data,
-        _primaryKey: data[primaryKey], // CORREGIDO: usar primaryKey del schema
+        ...updatedRecord,
+        _primaryKey: updatedRecord[primaryKey],
         _rowIndex: 1
       }
     });
   } catch (error) {
     console.error('❌ Error inesperado en UPDATE:', error);
-    res.status(500).json({
+    const errorInfo = handlePostgresError(error, 'actualización de registro');
+    res.status(errorInfo.status).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: errorInfo.message
     });
   }
 });
@@ -731,9 +662,8 @@ app.delete('/api/tables/:tableName/delete', async (req, res) => {
     const { tableName } = req.params;
     const { searchCriteria } = req.body;
     
-    // Validar tabla y obtener esquema
+    // Validar tabla
     await validateTableAccess(tableName);
-    const tableSchema = await getTableSchema(tableName);
     
     logOperation('DELETE REQUEST', { tableName, searchCriteria });
 
@@ -744,28 +674,22 @@ app.delete('/api/tables/:tableName/delete', async (req, res) => {
       });
     }
 
-    const { data: deletedRecord, error } = await supabase
-      .from(tableName)
-      .delete()
-      .eq(searchCriteria.field, searchCriteria.value)
-      .select()
-      .maybeSingle();
+    const deleteQuery = `
+      DELETE FROM ${tableName} 
+      WHERE ${searchCriteria.field} = $1
+      RETURNING *
+    `;
 
-    if (error) {
-      const errorInfo = handleSupabaseError(error, 'eliminación de registro');
-      return res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
+    const result = await pool.query(deleteQuery, [searchCriteria.value]);
 
-    if (!deletedRecord) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: `No se encontró un registro con ${searchCriteria.field}: ${searchCriteria.value}`,
       });
     }
 
+    const deletedRecord = result.rows[0];
     logOperation('DELETE SUCCESS', deletedRecord);
 
     res.json({
@@ -775,10 +699,10 @@ app.delete('/api/tables/:tableName/delete', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error inesperado en DELETE:', error);
-    res.status(500).json({
+    const errorInfo = handlePostgresError(error, 'eliminación de registro');
+    res.status(errorInfo.status).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message,
+      message: errorInfo.message
     });
   }
 });
@@ -788,22 +712,8 @@ app.get('/health', async (req, res) => {
     const startTime = Date.now();
     
     // Probar conexión con app_information_schema
-    const { data, error } = await supabase
-      .from('app_information_schema')
-      .select('count', { count: 'exact', head: true });
-
+    const result = await pool.query('SELECT COUNT(*) FROM app_information_schema');
     const responseTime = Date.now() - startTime;
-
-    if (error) {
-      console.error('❌ Health check falló:', error);
-      return res.status(503).json({ 
-        status: 'unhealthy', 
-        database: 'disconnected',
-        error: error.message,
-        responseTime: `${responseTime}ms`,
-        timestamp: new Date().toISOString()
-      });
-    }
 
     // Contar tablas disponibles
     const tables = await getDynamicTables();
@@ -814,8 +724,8 @@ app.get('/health', async (req, res) => {
       responseTime: `${responseTime}ms`,
       tablesAvailable: tables.length,
       tablesList: tables,
-      supabaseUrl: process.env.SUPABASE_URL ? 'configured' : 'missing',
-      supabaseKey: process.env.SUPABASE_ANON_KEY ? 'configured' : 'missing',
+      dbHost: process.env.DB_HOST ? 'configured' : 'missing',
+      dbUser: process.env.DB_USER ? 'configured' : 'missing',
       schemaSource: 'app_information_schema',
       timestamp: new Date().toISOString()
     });
@@ -830,17 +740,7 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Middleware de manejo de errores global
-app.use((error, req, res, next) => {
-  console.error('❌ Error no manejado:', error);
-  res.status(500).json({
-    success: false,
-    message: 'Error interno del servidor',
-    error: error.message
-  });
-});
-
-// Añadir ANTES de la línea app.listen()
+// Ruta para obtener IP (temporal)
 app.get('/mi-ip', (req, res) => {
   res.json({
     ip: req.ip,
@@ -857,6 +757,16 @@ app.get('/mi-ip', (req, res) => {
   });
 });
 
+// Middleware de manejo de errores global
+app.use((error, req, res, next) => {
+  console.error('❌ Error no manejado:', error);
+  res.status(500).json({
+    success: false,
+    message: 'Error interno del servidor',
+    error: error.message
+  });
+});
+
 // Iniciar servidor con validación de conexión
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -866,30 +776,22 @@ app.listen(PORT, async () => {
   
   // Probar conexión y mostrar tablas disponibles
   try {
-    console.log('🔄 Probando conexión inicial a Supabase...');
+    console.log('🔄 Probando conexión inicial a PostgreSQL...');
     
-    // CORREGIDO: Usar app_information_schema en lugar de information_schema
-    const { error } = await supabase
-      .from('app_information_schema')
-      .select('count', { count: 'exact', head: true });
+    const result = await pool.query('SELECT 1');
+    console.log('✅ Conexión a PostgreSQL exitosa');
+    console.log('✅ app_information_schema accesible');
     
-    if (error) {
-      console.error('❌ Error de conexión inicial:', error.message);
-    } else {
-      console.log('✅ Conexión a Supabase exitosa');
-      console.log('✅ app_information_schema accesible');
+    // Mostrar tablas disponibles
+    try {
+      const tables = await getDynamicTables();
+      console.log(`📊 Tablas detectadas: ${tables.join(', ')}`);
       
-      // Mostrar tablas disponibles
-      try {
-        const tables = await getDynamicTables();
-        console.log(`📊 Tablas detectadas: ${tables.join(', ')}`);
-        
-        // Mostrar categorías disponibles
-        const categories = await getCategories();
-        console.log(`📁 Categorías disponibles: ${categories.map(c => c.category_name).join(', ')}`);
-      } catch (tableError) {
-        console.log('⚠️ No se pudieron listar las tablas automáticamente:', tableError.message);
-      }
+      // Mostrar categorías disponibles
+      const categories = await getCategories();
+      console.log(`📁 Categorías disponibles: ${categories.map(c => c.category_name).join(', ')}`);
+    } catch (tableError) {
+      console.log('⚠️ No se pudieron listar las tablas automáticamente:', tableError.message);
     }
   } catch (error) {
     console.error('❌ Error al probar conexión inicial:', error.message);
