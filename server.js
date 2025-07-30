@@ -4,25 +4,21 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 
-// Validar variables de entorno al inicio
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-  console.error('❌ Error: Variables de entorno SUPABASE_URL y SUPABASE_ANON_KEY son obligatorias');
+// Validar variables de entorno para PostgreSQL
+if (!process.env.DATABASE_URL && 
+    (!process.env.DB_HOST || !process.env.DB_NAME || !process.env.DB_USER || !process.env.DB_PASSWORD)) {
+  console.error('❌ Error: Se requiere DATABASE_URL o las variables DB_HOST, DB_NAME, DB_USER, DB_PASSWORD');
   console.error('Verifica tu archivo .env');
   process.exit(1);
 }
 
-// Configuración de Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-  {
-    auth: {
-      persistSession: false
-    }
-  }
-);
+// Configuración de PostgreSQL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 const app = express();
 const PORT = process.env.PORT || 8000;
