@@ -5,6 +5,17 @@ const path = require('path');
 const { Pool } = require('pg');
 require('dotenv').config();
 
+// ========== CONFIGURACIÓN Y VALIDACIÓN DE VARIABLES DE ENTORNO ==========
+
+console.log('🔍 Debug - Variables de entorno:');
+console.log(`  NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`  DB_HOST: ${process.env.DB_HOST ? 'configured' : 'missing'}`);
+console.log(`  DB_PORT: ${process.env.DB_PORT ? 'configured' : 'missing'}`);
+console.log(`  DB_NAME: ${process.env.DB_NAME ? 'configured' : 'missing'}`);
+console.log(`  DB_USER: ${process.env.DB_USER ? 'configured' : 'missing'}`);
+console.log(`  DB_PASSWORD: ${process.env.DB_PASSWORD ? 'configured' : 'missing'}`);
+console.log(`  DATABASE_URL: ${process.env.DATABASE_URL ? 'configured' : 'missing'}`);
+
 // Validar variables de entorno para PostgreSQL
 if (!process.env.DATABASE_URL && 
     (!process.env.DB_HOST || !process.env.DB_NAME || !process.env.DB_USER || !process.env.DB_PASSWORD)) {
@@ -13,22 +24,58 @@ if (!process.env.DATABASE_URL &&
   process.exit(1);
 }
 
-// Configuración de PostgreSQL
+// ========== CONFIGURACIÓN OPTIMIZADA DE POSTGRESQL ==========
+
 let pool;
+let poolConfig;
+
 if (process.env.DATABASE_URL) {
-  pool = new Pool({
+  console.log('📊 Configurando pool con DATABASE_URL...');
+  poolConfig = {
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-  });
+    // Forzar SSL deshabilitado para desarrollo local
+    ssl: false,
+    // Configuraciones adicionales para desarrollo local
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,  // Aumentado a 5 segundos
+    acquireTimeoutMillis: 5000,     // Timeout para obtener conexión del pool
+  };
 } else {
-  pool = new Pool({
+  console.log('📊 Configurando pool con variables individuales...');
+  poolConfig = {
     host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
+    port: process.env.DB_PORT || 5432,
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    ssl: false  // Siempre falso para conexiones directas (desarrollo local)
-  });
+    // Forzar SSL completamente deshabilitado para desarrollo local
+    ssl: false,
+    // Configuraciones adicionales para desarrollo local
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,  // Aumentado a 5 segundos
+    acquireTimeoutMillis: 5000,     // Timeout para obtener conexión del pool
+  };
+}
+
+console.log('🔧 Configuración del pool PostgreSQL:');
+console.log(`  Host: ${poolConfig.host || 'from URL'}`);
+console.log(`  Port: ${poolConfig.port || 'from URL'}`);
+console.log(`  Database: ${poolConfig.database || 'from URL'}`);
+console.log(`  User: ${poolConfig.user || 'from URL'}`);
+console.log(`  SSL: ${poolConfig.ssl}`);
+console.log(`  Max connections: ${poolConfig.max}`);
+console.log(`  Connection timeout: ${poolConfig.connectionTimeoutMillis}ms`);
+console.log(`  Acquire timeout: ${poolConfig.acquireTimeoutMillis}ms`);
+console.log(`  Idle timeout: ${poolConfig.idleTimeoutMillis}ms`);
+
+try {
+  pool = new Pool(poolConfig);
+  console.log('✅ Pool PostgreSQL creado exitosamente');
+} catch (error) {
+  console.error('❌ Error creando pool PostgreSQL:', error);
+  process.exit(1);
 }
 
 const app = express();
@@ -213,6 +260,14 @@ const logOperation = (operation, data) => {
 const handlePostgresError = (error, operation) => {
   console.error(`❌ Error en ${operation}:`, error);
   
+  // Errores específicos de SSL
+  if (error.message && (error.message.includes('SSL') || error.message.includes('ssl'))) {
+    console.error('🔍 Error SSL detectado:');
+    console.error('   - El servidor PostgreSQL puede requerir configuración SSL específica');
+    console.error('   - Verificar que ssl: false esté configurado correctamente');
+    return { status: 503, message: 'Error de configuración SSL en la conexión a base de datos' };
+  }
+  
   if (error.code === '23505') {
     return { status: 409, message: 'Ya existe un registro con esos datos' };
   }
@@ -223,6 +278,10 @@ const handlePostgresError = (error, operation) => {
   
   if (error.code === 'ECONNREFUSED') {
     return { status: 503, message: 'Error de conexión con la base de datos' };
+  }
+  
+  if (error.message && error.message.includes('Connection terminated due to connection timeout')) {
+    return { status: 503, message: 'Timeout de conexión con la base de datos' };
   }
   
   return { status: 500, message: error.message || 'Error interno del servidor' };
@@ -778,22 +837,46 @@ app.listen(PORT, async () => {
   try {
     console.log('🔄 Probando conexión inicial a PostgreSQL...');
     
-    const result = await pool.query('SELECT 1');
-    console.log('✅ Conexión a PostgreSQL exitosa');
+    const startTime = Date.now();
+    const result = await pool.query('SELECT 1 as test');
+    const connectionTime = Date.now() - startTime;
+    
+    console.log(`✅ Conexión a PostgreSQL exitosa (${connectionTime}ms)`);
     console.log('✅ app_information_schema accesible');
     
     // Mostrar tablas disponibles
     try {
       const tables = await getDynamicTables();
-      console.log(`📊 Tablas detectadas: ${tables.join(', ')}`);
+      console.log(`📊 Tablas detectadas (${tables.length}): ${tables.join(', ')}`);
       
       // Mostrar categorías disponibles
       const categories = await getCategories();
-      console.log(`📁 Categorías disponibles: ${categories.map(c => c.category_name).join(', ')}`);
+      console.log(`📁 Categorías disponibles (${categories.length}): ${categories.map(c => c.category_name).join(', ')}`);
     } catch (tableError) {
       console.log('⚠️ No se pudieron listar las tablas automáticamente:', tableError.message);
     }
   } catch (error) {
-    console.error('❌ Error al probar conexión inicial:', error.message);
+    console.error('❌ Error al probar conexión inicial:');
+    console.error(`   Mensaje: ${error.message}`);
+    console.error(`   Código: ${error.code || 'No disponible'}`);
+    
+    // Diagnóstico adicional para errores SSL
+    if (error.message.includes('SSL') || error.message.includes('ssl')) {
+      console.error('🔍 Error relacionado con SSL detectado:');
+      console.error('   - Verificar que el servidor PostgreSQL no requiera SSL');
+      console.error('   - Configuración actual: ssl: false');
+      console.error('   - Para conexiones locales, SSL debe estar deshabilitado');
+    }
+    
+    // Diagnóstico para errores de conexión
+    if (error.code === 'ECONNREFUSED') {
+      console.error('🔍 Error de conexión rechazada:');
+      console.error('   - Verificar que PostgreSQL esté ejecutándose');
+      console.error('   - Verificar host y puerto en variables de entorno');
+      console.error(`   - Host configurado: ${process.env.DB_HOST}`);
+      console.error(`   - Puerto configurado: ${process.env.DB_PORT || 5432}`);
+    }
+    
+    console.error('⚠️ El servidor continuará ejecutándose, pero la base de datos no está disponible');
   }
 });
