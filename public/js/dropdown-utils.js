@@ -12,7 +12,17 @@ class DropdownManager {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/enum-options`);
+      // Get auth token
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('No authentication token');
+      }
+
+      const response = await fetch(`${this.baseUrl}/api/enum-options`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const result = await response.json();
       
       if (result.success) {

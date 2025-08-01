@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 // Validar variables de entorno para PostgreSQL
@@ -31,10 +34,140 @@ if (process.env.DATABASE_URL) {
   });
 }
 
+// Pool para operaciones de aplicación (usado después del login)
+let appPool;
+if (process.env.APP_DB_USER && process.env.APP_DB_PASSWORD) {
+  if (process.env.DATABASE_URL) {
+    const dbUrl = new URL(process.env.DATABASE_URL);
+    dbUrl.username = process.env.APP_DB_USER;
+    dbUrl.password = process.env.APP_DB_PASSWORD;
+    appPool = new Pool({
+      connectionString: dbUrl.toString(),
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+  } else {
+    appPool = new Pool({
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      database: process.env.DB_NAME,
+      user: process.env.APP_DB_USER,
+      password: process.env.APP_DB_PASSWORD,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+  }
+}
+
+// Configuración de email para recuperación de contraseñas
+let emailTransporter;
+if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  emailTransporter = nodemailer.createTransporter({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+}
+
+// Función para obtener el pool apropiado (app pool si está disponible, sino pool principal)
+function getActivePool() {
+  return appPool || pool;
+}
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 
 // ========== FUNCIONES PARA METADATOS DINÁMICOS CON CATEGORÍAS ==========
+
+// ========== FUNCIONES DE AUTENTICACIÓN ==========
+
+// Función para generar JWT
+function generateToken(user) {
+  return jwt.sign(
+    { 
+      id: user.id, 
+      email: user.email 
+    },
+    process.env.JWT_SECRET || 'default-secret-change-in-production',
+    { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+  );
+}
+
+// Middleware de autenticación
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Token de acceso requerido'
+    });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET || 'default-secret-change-in-production', (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        success: false,
+        message: 'Token inválido o expirado'
+      });
+    }
+    
+    req.user = user;
+    next();
+  });
+}
+
+// Función para generar token de recuperación
+function generateResetToken() {
+  return jwt.sign(
+    { purpose: 'password-reset', timestamp: Date.now() },
+    process.env.JWT_SECRET || 'default-secret-change-in-production',
+    { expiresIn: '1h' }
+  );
+}
+
+// Función para enviar email de recuperación
+async function sendPasswordResetEmail(email, resetToken) {
+  if (!emailTransporter) {
+    throw new Error('Configuración de email no disponible');
+  }
+
+  const resetLink = `${process.env.APP_BASE_URL || 'http://localhost:8000'}/reset-password?token=${resetToken}`;
+  
+  const mailOptions = {
+    from: `"${process.env.EMAIL_FROM_NAME || 'Sistema de Gestión'}" <${process.env.EMAIL_FROM || process.env.SMTP_USER}>`,
+    to: email,
+    subject: 'Recuperación de Contraseña - Sistema de Gestión',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #4a90e2;">Recuperación de Contraseña</h2>
+        <p>Has solicitado recuperar tu contraseña para el Sistema de Gestión del Gobierno de Río Negro.</p>
+        <p>Haz clic en el siguiente enlace para restablecer tu contraseña:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetLink}" 
+             style="background-color: #4a90e2; color: white; padding: 12px 24px; 
+                    text-decoration: none; border-radius: 5px; display: inline-block;">
+            Restablecer Contraseña
+          </a>
+        </div>
+        <p style="color: #666; font-size: 14px;">
+          Este enlace es válido por 1 hora. Si no solicitaste este cambio, puedes ignorar este email.
+        </p>
+        <p style="color: #666; font-size: 14px;">
+          Si tienes problemas con el enlace, copia y pega esta URL en tu navegador:<br>
+          <span style="word-break: break-all;">${resetLink}</span>
+        </p>
+      </div>
+    `
+  };
+
+  await emailTransporter.sendMail(mailOptions);
+}
+
+// ========== FUNCIONES PARA METADATOS DINÁMICOS CON CATEGORÍAS (CONTINÚA) ==========
 
 // Obtener todas las categorías disponibles
 async function getCategories() {
@@ -50,7 +183,7 @@ async function getCategories() {
       ORDER BY category_name
     `;
     
-    const result = await pool.query(query);
+    const result = await getActivePool().query(query);
     return result.rows;
   } catch (error) {
     console.error('Error obteniendo categorías:', error);
@@ -72,7 +205,7 @@ async function getTablesByCategory(categoryName) {
       ORDER BY table_order
     `;
     
-    const result = await pool.query(query, [categoryName]);
+    const result = await getActivePool().query(query, [categoryName]);
     return result.rows;
   } catch (error) {
     console.error(`Error obteniendo tablas para categoría ${categoryName}:`, error);
@@ -90,7 +223,7 @@ async function getDynamicTables() {
       ORDER BY table_name
     `;
     
-    const result = await pool.query(query);
+    const result = await getActivePool().query(query);
     return result.rows.map(row => row.table_name);
   } catch (error) {
     console.error('Error obteniendo tablas desde app_information_schema:', error);
@@ -118,7 +251,7 @@ async function getTableSchema(tableName) {
       ORDER BY ordinal_position
     `;
 
-    const result = await pool.query(query, [tableName]);
+    const result = await getActivePool().query(query, [tableName]);
     const columns = result.rows;
 
     if (!columns || columns.length === 0) {
@@ -165,7 +298,7 @@ async function validateTableAccess(tableName) {
       LIMIT 1
     `;
     
-    const result = await pool.query(query, [tableName]);
+    const result = await getActivePool().query(query, [tableName]);
 
     if (result.rows.length === 0) {
       throw new Error(`Tabla '${tableName}' no encontrada en app_information_schema`);
@@ -188,7 +321,7 @@ async function getTableFields(tableName) {
       ORDER BY ordinal_position
     `;
     
-    const result = await pool.query(query, [tableName]);
+    const result = await getActivePool().query(query, [tableName]);
     return result.rows;
   } catch (error) {
     console.error(`Error obteniendo campos de ${tableName}:`, error);
@@ -233,6 +366,270 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ========== RUTAS DE AUTENTICACIÓN ==========
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email y contraseña son requeridos'
+      });
+    }
+
+    // Buscar usuario por email
+    const userQuery = 'SELECT * FROM users WHERE email = $1 AND is_active = true';
+    const userResult = await pool.query(userQuery, [email]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuario no encontrado. Contacte a su superior para obtener acceso al sistema.'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Verificar contraseña
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Contraseña incorrecta',
+        showPasswordRecovery: true
+      });
+    }
+
+    // Actualizar último ingreso
+    await pool.query(
+      'UPDATE users SET ultimo_ingreso = CURRENT_TIMESTAMP WHERE id = $1',
+      [user.id]
+    );
+
+    // Generar token JWT
+    const token = generateToken(user);
+
+    res.json({
+      success: true,
+      message: 'Inicio de sesión exitoso',
+      token: token,
+      user: {
+        id: user.id,
+        email: user.email,
+        ultimo_ingreso: user.ultimo_ingreso
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Solicitar recuperación de contraseña
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email es requerido'
+      });
+    }
+
+    // Verificar si el usuario existe
+    const userQuery = 'SELECT * FROM users WHERE email = $1 AND is_active = true';
+    const userResult = await pool.query(userQuery, [email]);
+
+    if (userResult.rows.length === 0) {
+      // Por seguridad, no revelar si el email existe o no
+      return res.json({
+        success: true,
+        message: 'Si el email existe en nuestro sistema, recibirás instrucciones para recuperar tu contraseña.'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Generar token de recuperación
+    const resetToken = generateResetToken();
+
+    // Guardar token en base de datos
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, resetToken, new Date(Date.now() + 60 * 60 * 1000)] // 1 hora
+    );
+
+    // Enviar email
+    try {
+      await sendPasswordResetEmail(email, resetToken);
+    } catch (emailError) {
+      console.error('Error enviando email:', emailError);
+      return res.status(500).json({
+        success: false,
+        message: 'Error al enviar el email de recuperación. Contacte al administrador.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Se ha enviado un email con instrucciones para recuperar tu contraseña.'
+    });
+
+  } catch (error) {
+    console.error('Error en forgot-password:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Verificar token de recuperación
+app.get('/api/auth/verify-reset-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Verificar token en base de datos
+    const tokenQuery = `
+      SELECT rt.*, u.email 
+      FROM password_reset_tokens rt 
+      JOIN users u ON rt.user_id = u.id 
+      WHERE rt.token = $1 AND rt.expires_at > CURRENT_TIMESTAMP AND rt.used_at IS NULL
+    `;
+    
+    const tokenResult = await pool.query(tokenQuery, [token]);
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado'
+      });
+    }
+
+    // Verificar JWT
+    try {
+      jwt.verify(token, process.env.JWT_SECRET || 'default-secret-change-in-production');
+    } catch (jwtError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Token válido',
+      email: tokenResult.rows[0].email
+    });
+
+  } catch (error) {
+    console.error('Error verificando token:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Cambiar contraseña con token de recuperación
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token y nueva contraseña son requeridos'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'La contraseña debe tener al menos 6 caracteres'
+      });
+    }
+
+    // Verificar token en base de datos
+    const tokenQuery = `
+      SELECT rt.*, u.id as user_id 
+      FROM password_reset_tokens rt 
+      JOIN users u ON rt.user_id = u.id 
+      WHERE rt.token = $1 AND rt.expires_at > CURRENT_TIMESTAMP AND rt.used_at IS NULL
+    `;
+    
+    const tokenResult = await pool.query(tokenQuery, [token]);
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado'
+      });
+    }
+
+    const tokenData = tokenResult.rows[0];
+
+    // Hash de la nueva contraseña
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Actualizar contraseña del usuario
+    await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2',
+      [passwordHash, tokenData.user_id]
+    );
+
+    // Marcar token como usado
+    await pool.query(
+      'UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [tokenData.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error cambiando contraseña:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Verificar token JWT (para validar sesión)
+app.get('/api/auth/verify', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Token válido',
+    user: req.user
+  });
+});
+
+// Logout (invalidar token - opcional, ya que JWT es stateless)
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Sesión cerrada exitosamente'
+  });
+});
+
+// Ruta para servir página de recuperación de contraseña
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
+});
+
 // ========== FUNCIONES PARA ENUMS ==========
 
 // Obtener valores de un enum específico
@@ -242,7 +639,7 @@ async function getEnumValues(enumName) {
       SELECT unnest(enum_range(NULL::${enumName})) as enum_value
     `;
     
-    const result = await pool.query(query);
+    const result = await getActivePool().query(query);
     return result.rows.map(row => row.enum_value);
   } catch (error) {
     console.error(`Error obteniendo valores de enum ${enumName}:`, error);
@@ -288,7 +685,7 @@ async function getAllEnumOptions() {
 }
 
 // Endpoint para obtener opciones de dropdowns
-app.get('/api/enum-options', async (req, res) => {
+app.get('/api/enum-options', authenticateToken, async (req, res) => {
   try {
     const options = await getAllEnumOptions();
     res.json({
@@ -306,7 +703,7 @@ app.get('/api/enum-options', async (req, res) => {
 });
 
 // Endpoint para obtener un enum específico
-app.get('/api/enum-options/:enumName', async (req, res) => {
+app.get('/api/enum-options/:enumName', authenticateToken, async (req, res) => {
   try {
     const { enumName } = req.params;
     const values = await getEnumValues(enumName);
@@ -327,7 +724,7 @@ app.get('/api/enum-options/:enumName', async (req, res) => {
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
-app.get('/api/categories', async (req, res) => {
+app.get('/api/categories', authenticateToken, async (req, res) => {
   try {
     const categories = await getCategories();
     
@@ -353,7 +750,7 @@ app.get('/api/categories', async (req, res) => {
 });
 
 // Obtener tablas de una categoría específica
-app.get('/api/categories/:categoryName/tables', async (req, res) => {
+app.get('/api/categories/:categoryName/tables', authenticateToken, async (req, res) => {
   try {
     const { categoryName } = req.params;
     const tables = await getTablesByCategory(categoryName);
@@ -388,7 +785,7 @@ app.get('/api/categories/:categoryName/tables', async (req, res) => {
 });
 
 // Obtener esquema de una tabla específica
-app.get('/api/tables/:tableName/schema', async (req, res) => {
+app.get('/api/tables/:tableName/schema', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -422,7 +819,7 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 
 // CREATE - Crear nuevo registro
-app.post('/api/tables/:tableName/create', async (req, res) => {
+app.post('/api/tables/:tableName/create', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     const data = req.body;
@@ -445,7 +842,7 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
       RETURNING *
     `;
 
-    const result = await pool.query(insertQuery, values);
+    const result = await getActivePool().query(insertQuery, values);
     const newRecord = result.rows[0];
     
     logOperation('CREATE SUCCESS', newRecord);
@@ -467,7 +864,7 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
 });
 
 // READ - Leer todos los registros
-app.get('/api/tables/:tableName/read', async (req, res) => {
+app.get('/api/tables/:tableName/read', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -479,7 +876,7 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
     logOperation('READ REQUEST', { tableName });
 
     const query = `SELECT * FROM ${tableName} ORDER BY ${primaryKey} ASC`;
-    const result = await pool.query(query);
+    const result = await getActivePool().query(query);
 
     // Mapear datos para mantener compatibilidad con el frontend
     const mappedData = result.rows.map((record, index) => ({
@@ -508,7 +905,7 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
 });
 
 // SEARCH - Búsqueda simple
-app.get('/api/tables/:tableName/search', async (req, res) => {
+app.get('/api/tables/:tableName/search', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
@@ -531,7 +928,7 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
 
     query += ` ORDER BY ${primaryKey} ASC`;
 
-    const result = await pool.query(query, queryParams);
+    const result = await getActivePool().query(query, queryParams);
 
     // Mapear datos para mantener compatibilidad
     const mappedData = result.rows.map((record, index) => ({
@@ -560,7 +957,7 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
   }
 });
 
-app.get('/api/tables/:tableName/fields', async (req, res) => {
+app.get('/api/tables/:tableName/fields', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -589,7 +986,7 @@ app.get('/api/tables/:tableName/fields', async (req, res) => {
 });
 
 // UPDATE - Actualizar registro
-app.put('/api/tables/:tableName/update', async (req, res) => {
+app.put('/api/tables/:tableName/update', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchCriteria, updateData } = req.body;
@@ -625,7 +1022,7 @@ app.put('/api/tables/:tableName/update', async (req, res) => {
       RETURNING *
     `;
 
-    const result = await pool.query(updateQuery, [...updateValues, searchCriteria.value]);
+    const result = await getActivePool().query(updateQuery, [...updateValues, searchCriteria.value]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -657,7 +1054,7 @@ app.put('/api/tables/:tableName/update', async (req, res) => {
 });
 
 // DELETE - Eliminar registro
-app.delete('/api/tables/:tableName/delete', async (req, res) => {
+app.delete('/api/tables/:tableName/delete', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchCriteria } = req.body;
@@ -680,7 +1077,7 @@ app.delete('/api/tables/:tableName/delete', async (req, res) => {
       RETURNING *
     `;
 
-    const result = await pool.query(deleteQuery, [searchCriteria.value]);
+    const result = await getActivePool().query(deleteQuery, [searchCriteria.value]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({

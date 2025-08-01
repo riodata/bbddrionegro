@@ -92,6 +92,70 @@
             text-align: center;
         }
 
+        /* Login Screen Styles */
+        .login-form, .forgot-password-form {
+            max-width: 400px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .login-form h2, .forgot-password-form h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 2rem;
+        }
+
+        .login-form p, .forgot-password-form p {
+            color: #6c757d;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+
+        .login-links {
+            margin-top: 20px;
+        }
+
+        .login-links a {
+            color: #4a90e2;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .login-links a:hover {
+            text-decoration: underline;
+        }
+
+        .user-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .user-info span {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .btn-logout {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            padding: 8px 16px;
+            font-size: 0.9rem;
+        }
+
+        .btn-logout:hover {
+            background: linear-gradient(135deg, #c82333, #a71e2a);
+        }
+
+        /* Main Menu Styles (continued) */
+        .main-menu {
+            text-align: center;
+        }
+
         .main-menu h2 {
             color: #495057;
             margin-bottom: 20px;
@@ -501,9 +565,64 @@
         <div class="content">
             <div id="status-message"></div>
 
+            <!-- LOGIN SCREEN -->
+            <div id="login-screen" class="screen active">
+                <div class="login-form">
+                    <h2>Ingreso al sistema</h2>
+                    <p>Ingresa tus credenciales para acceder al sistema</p>
+                    
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label for="loginEmail">Correo electrónico:</label>
+                            <input type="email" id="loginEmail" name="email" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="loginPassword">Contraseña:</label>
+                            <input type="password" id="loginPassword" name="password" required>
+                        </div>
+
+                        <button type="submit" class="btn" id="loginBtn">
+                            🔐 Ingresar
+                        </button>
+                    </form>
+
+                    <div class="login-links">
+                        <a href="#" id="forgot-password-link">¿Olvidaste tu contraseña?</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FORGOT PASSWORD SCREEN -->
+            <div id="forgot-password-screen" class="screen">
+                <div class="forgot-password-form">
+                    <h2>Recuperar Contraseña</h2>
+                    <p>Ingresa tu correo electrónico para recibir instrucciones de recuperación</p>
+                    
+                    <form id="forgotPasswordForm">
+                        <div class="form-group">
+                            <label for="forgotEmail">Correo electrónico:</label>
+                            <input type="email" id="forgotEmail" name="email" required>
+                        </div>
+
+                        <button type="submit" class="btn" id="forgotBtn">
+                            📧 Enviar enlace de recuperación
+                        </button>
+                    </form>
+
+                    <div class="login-links">
+                        <a href="#" id="back-to-login-link">← Volver al inicio de sesión</a>
+                    </div>
+                </div>
+            </div>
+
             <!-- MAIN MENU SCREEN -->
-            <div id="main-menu" class="screen active">
+            <div id="main-menu" class="screen">
                 <div class="main-menu">
+                    <div class="user-info">
+                        <span id="user-email"></span>
+                        <button class="btn btn-logout" id="logoutBtn">Cerrar Sesión</button>
+                    </div>
                     <h2>Sistema de Gestión</h2>
                     <p>Elige el sistema en el que quieres operar</p>
                     
@@ -637,7 +756,195 @@
     <script>
         const API_BASE = window.location.origin;
 
+        // ========== AUTHENTICATION MANAGEMENT ==========
+
+        // Token management
+        function getAuthToken() {
+            return localStorage.getItem('authToken');
+        }
+
+        function setAuthToken(token) {
+            localStorage.setItem('authToken', token);
+        }
+
+        function removeAuthToken() {
+            localStorage.removeItem('authToken');
+        }
+
+        function getUserInfo() {
+            const userInfo = localStorage.getItem('userInfo');
+            return userInfo ? JSON.parse(userInfo) : null;
+        }
+
+        function setUserInfo(user) {
+            localStorage.setItem('userInfo', JSON.stringify(user));
+        }
+
+        function removeUserInfo() {
+            localStorage.removeItem('userInfo');
+        }
+
+        // Check if user is authenticated
+        function isAuthenticated() {
+            return getAuthToken() !== null;
+        }
+
+        // Make authenticated API requests
+        async function authenticatedFetch(url, options = {}) {
+            const token = getAuthToken();
+            
+            if (!token) {
+                showLoginScreen();
+                throw new Error('No hay token de autenticación');
+            }
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                ...options.headers
+            };
+
+            try {
+                const response = await fetch(url, { ...options, headers });
+                
+                if (response.status === 401 || response.status === 403) {
+                    // Token expirado o inválido
+                    removeAuthToken();
+                    removeUserInfo();
+                    showLoginScreen();
+                    throw new Error('Sesión expirada');
+                }
+                
+                return response;
+            } catch (error) {
+                console.error('Error en authenticatedFetch:', error);
+                throw error;
+            }
+        }
+
+        // Login form handler
+        async function handleLogin(email, password) {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    setAuthToken(result.token);
+                    setUserInfo(result.user);
+                    showMainMenu();
+                    loadDynamicCategories();
+                    return { success: true };
+                } else {
+                    return { success: false, message: result.message, showPasswordRecovery: result.showPasswordRecovery };
+                }
+            } catch (error) {
+                console.error('Error en login:', error);
+                return { success: false, message: 'Error de conexión. Inténtalo de nuevo.' };
+            }
+        }
+
+        // Forgot password handler
+        async function handleForgotPassword(email) {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email }),
+                });
+
+                const result = await response.json();
+                return result;
+            } catch (error) {
+                console.error('Error en forgot password:', error);
+                return { success: false, message: 'Error de conexión. Inténtalo de nuevo.' };
+            }
+        }
+
+        // Logout handler
+        function handleLogout() {
+            removeAuthToken();
+            removeUserInfo();
+            showLoginScreen();
+            clearStatus();
+        }
+
+        // Screen management
+        function showLoginScreen() {
+            showScreen('login-screen');
+            updateBreadcrumb([
+                { text: 'Inicio de Sesión', active: true }
+            ]);
+        }
+
+        function showForgotPasswordScreen() {
+            showScreen('forgot-password-screen');
+            updateBreadcrumb([
+                { text: 'Recuperar Contraseña', active: true }
+            ]);
+        }
+
+        function showMainMenu() {
+            const user = getUserInfo();
+            if (user) {
+                document.getElementById('user-email').textContent = user.email;
+            }
+            showScreen('main-menu');
+            updateBreadcrumb([
+                { text: 'Inicio', active: true }
+            ]);
+        }
+
+        // Check authentication on page load
+        async function checkAuthentication() {
+            const token = getAuthToken();
+            
+            if (!token) {
+                showLoginScreen();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/verify`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    showMainMenu();
+                    loadDynamicCategories();
+                } else {
+                    removeAuthToken();
+                    removeUserInfo();
+                    showLoginScreen();
+                }
+            } catch (error) {
+                console.error('Error verificando autenticación:', error);
+                removeAuthToken();
+                removeUserInfo();
+                showLoginScreen();
+            }
+        }
+
+        // ========== VARIABLES GLOBALES PARA SISTEMA DINÁMICO (CONTINÚA) ==========
+        
         // Variables globales para sistema dinámico
+        let currentTable = null;
+        let currentTableSchema = null;
+        let currentRecords = [];
+        let availableFields = [];
+        let currentEditingRow = null;
+        let currentDeletingRow = null;
+        let dynamicTables = [];
         let currentTable = null;
         let currentTableSchema = null;
         let currentRecords = [];
@@ -655,7 +962,7 @@
             try {
                 showStatus('Cargando categorías disponibles...', 'info');
                 
-                const response = await fetch(`${API_BASE}/api/categories`);
+                const response = await authenticatedFetch(`${API_BASE}/api/categories`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -695,7 +1002,7 @@
             try {
                 showStatus('Cargando tablas de la categoría...', 'info');
                 
-                const response = await fetch(`${API_BASE}/api/categories/${categoryName}/tables`);
+                const response = await authenticatedFetch(`${API_BASE}/api/categories/${categoryName}/tables`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -837,7 +1144,7 @@
             try {
                 showStatus('Cargando estructura de tabla...', 'info');
                 
-                const response = await fetch(`${API_BASE}/api/tables/${tableName}/schema`);
+                const response = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/schema`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1198,7 +1505,7 @@
                 showStatus('Buscando...', 'info');
                 
                 const url = `${API_BASE}/api/tables/${currentTable}/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
-                const response = await fetch(url);
+                const response = await authenticatedFetch(url);
                 const result = await response.json();
         
                 if (result.success) {
@@ -1275,7 +1582,7 @@
                 document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
                 
                 // Usar la nueva función dinámica
-                const response = await fetch(getDynamicApiUrl('read'));
+                const response = await authenticatedFetch(getDynamicApiUrl('read'));
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1298,7 +1605,7 @@
                 showStatus('Cargando registros...', 'info');
                 
                 // Usar la nueva función dinámica
-                const response = await fetch(getDynamicApiUrl('read'));
+                const response = await authenticatedFetch(getDynamicApiUrl('read'));
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1476,9 +1783,8 @@
                 
                 const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
                 
-                const response = await fetch(getDynamicApiUrl('delete'), {
+                const response = await authenticatedFetch(getDynamicApiUrl('delete'), {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         searchCriteria: { 
                             field: primaryKey,  
@@ -1605,29 +1911,96 @@
             }).join('');
         }
         
-        // Cambiar la inicialización para usar categorías
+        // ========== EVENT HANDLERS AND INITIALIZATION ==========
+        
+        // Inicializar la aplicación
         document.addEventListener('DOMContentLoaded', function() {
-            // Cargar categorías en lugar de tablas
-            loadDynamicCategories();
-            
-            // Resto del código de inicialización...
+            // Check authentication first
+            checkAuthentication();
+
+            // Login form handler
+            document.getElementById('loginForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('loginEmail').value;
+                const password = document.getElementById('loginPassword').value;
+                const loginBtn = document.getElementById('loginBtn');
+                
+                loginBtn.disabled = true;
+                loginBtn.textContent = '🔄 Iniciando sesión...';
+                
+                const result = await handleLogin(email, password);
+                
+                if (result.success) {
+                    clearStatus();
+                } else {
+                    showStatus('❌ ' + result.message, 'error');
+                    if (result.showPasswordRecovery) {
+                        showStatus('❌ ' + result.message + ' <br><a href="#" id="show-recovery">¿Olvidaste tu contraseña?</a>', 'error');
+                        document.getElementById('show-recovery').addEventListener('click', function(e) {
+                            e.preventDefault();
+                            showForgotPasswordScreen();
+                        });
+                    }
+                }
+                
+                loginBtn.disabled = false;
+                loginBtn.textContent = '🔐 Ingresar';
+            });
+
+            // Forgot password form handler
+            document.getElementById('forgotPasswordForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('forgotEmail').value;
+                const forgotBtn = document.getElementById('forgotBtn');
+                
+                forgotBtn.disabled = true;
+                forgotBtn.textContent = '🔄 Enviando...';
+                
+                const result = await handleForgotPassword(email);
+                
+                if (result.success) {
+                    showStatus('✅ ' + result.message, 'success');
+                } else {
+                    showStatus('❌ ' + result.message, 'error');
+                }
+                
+                forgotBtn.disabled = false;
+                forgotBtn.textContent = '📧 Enviar enlace de recuperación';
+            });
+
+            // Navigation handlers
+            document.getElementById('forgot-password-link').addEventListener('click', function(e) {
+                e.preventDefault();
+                showForgotPasswordScreen();
+            });
+
+            document.getElementById('back-to-login-link').addEventListener('click', function(e) {
+                e.preventDefault();
+                showLoginScreen();
+            });
+
+            document.getElementById('logoutBtn').addEventListener('click', function(e) {
+                e.preventDefault();
+                handleLogout();
+            });
+
+            // CRUD form handler (existing)
             document.getElementById('createForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
-        
+
                 const formData = new FormData(this);
                 const data = Object.fromEntries(formData.entries());
-        
+
                 try {
                     showStatus('Creando registro...', 'info');
                     
-                    const response = await fetch(getDynamicApiUrl('create'), {
+                    const response = await authenticatedFetch(getDynamicApiUrl('create'), {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
                         body: JSON.stringify(data),
                     });
-        
+
                     const result = await response.json();
                     
                     if (result.success) {
