@@ -60,7 +60,7 @@ if (process.env.APP_DB_USER && process.env.APP_DB_PASSWORD) {
 // Configuración de email para recuperación de contraseñas
 let emailTransporter;
 if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-  emailTransporter = nodemailer.createTransporter({
+  emailTransporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT) || 587,
     secure: process.env.SMTP_SECURE === 'true',
