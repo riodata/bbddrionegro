@@ -8,10 +8,13 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
-    "pg": "^8.11.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^7.0.5",
+    "pg": "^8.11.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
@@ -19,7 +22,11 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["postgresql", "express", "api"],
+  "keywords": [
+    "postgresql",
+    "express",
+    "api"
+  ],
   "author": "Rio Data Analisis",
   "license": "MIT"
 }
