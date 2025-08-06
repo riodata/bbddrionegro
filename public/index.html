@@ -803,7 +803,7 @@
             const data = await res.json();
             if (data.success) {
                 statusDiv.innerText = '¡Contraseña actualizada! Ya puedes ingresar.';
-                setTimeout(() => { window.location.href = '/'; }, 3000);
+                setTimeout(() => { showScreen('login-screen'); }, 3000);
             } else {
                 statusDiv.innerText = data.message || 'Error al actualizar contraseña.';
             }
