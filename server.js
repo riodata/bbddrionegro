@@ -479,7 +479,7 @@ app.post('/api/password-reset/request', async (req, res) => {
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 
 // CREATE - Crear nuevo registro
-app.post('/api/tables/:tableName/create', async (req, res) => {
+app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     const data = req.body;
@@ -524,7 +524,7 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
 });
 
 // READ - Leer todos los registros
-app.get('/api/tables/:tableName/read', async (req, res) => {
+app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -565,7 +565,7 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
 });
 
 // SEARCH - Búsqueda simple
-app.get('/api/tables/:tableName/search', async (req, res) => {
+app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
@@ -646,7 +646,7 @@ app.get('/api/tables/:tableName/fields', async (req, res) => {
 });
 
 // UPDATE - Actualizar registro
-app.put('/api/tables/:tableName/update', async (req, res) => {
+app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchCriteria, updateData } = req.body;
@@ -714,7 +714,7 @@ app.put('/api/tables/:tableName/update', async (req, res) => {
 });
 
 // DELETE - Eliminar registro
-app.delete('/api/tables/:tableName/delete', async (req, res) => {
+app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchCriteria } = req.body;
