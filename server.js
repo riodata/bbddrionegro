@@ -1,6 +1,7 @@
 // server.js
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const path = require('path');
 const axios = require('axios'); // Agrega axios para enviar la petición al webhook de n8n
 const auth = require('./auth');
@@ -17,8 +18,6 @@ if (!process.env.DATABASE_URL &&
   process.exit(1);
 }
 
-console.log('PG_CA_CERT:', process.env.PG_CA_CERT);
-
 const pool = new Pool({
   host: process.env.PGHOST,
   port: process.env.PGPORT,
@@ -27,7 +26,7 @@ const pool = new Pool({
   database: process.env.PGDATABASE,
   ssl: {
     rejectUnauthorized: true,
-    ca: process.env.PG_CA_CERT
+    ca: fs.readFileSync(CA_PATH).toString()
   }
 });
 
