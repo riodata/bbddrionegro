@@ -3,7 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios'); // Agrega axios para enviar la petición al webhook de n8n
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
+const { authenticateToken, optionalAuth, requireRole, requireActiveUser } = require('./middleware/auth');
 require('dotenv').config();
 
 // Validar variables de entorno para PostgreSQL
@@ -229,9 +232,19 @@ const handlePostgresError = (error, operation) => {
   return { status: 500, message: error.message || 'Error interno del servidor' };
 };
 
-// Ruta principal para servir el frontend
+// Ruta principal para servir el frontend (index redirige al login)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Ruta para el login
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Ruta para la aplicación principal (protegida)
+app.get('/app', authenticateToken, requireActiveUser, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
 // ========== FUNCIONES PARA ENUMS ==========
@@ -289,7 +302,7 @@ async function getAllEnumOptions() {
 }
 
 // Endpoint para obtener opciones de dropdowns
-app.get('/api/enum-options', async (req, res) => {
+app.get('/api/enum-options', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const options = await getAllEnumOptions();
     res.json({
@@ -307,7 +320,7 @@ app.get('/api/enum-options', async (req, res) => {
 });
 
 // Endpoint para obtener un enum específico
-app.get('/api/enum-options/:enumName', async (req, res) => {
+app.get('/api/enum-options/:enumName', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { enumName } = req.params;
     const values = await getEnumValues(enumName);
@@ -328,7 +341,7 @@ app.get('/api/enum-options/:enumName', async (req, res) => {
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
-app.get('/api/categories', async (req, res) => {
+app.get('/api/categories', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const categories = await getCategories();
     
@@ -354,7 +367,7 @@ app.get('/api/categories', async (req, res) => {
 });
 
 // Obtener tablas de una categoría específica
-app.get('/api/categories/:categoryName/tables', async (req, res) => {
+app.get('/api/categories/:categoryName/tables', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { categoryName } = req.params;
     const tables = await getTablesByCategory(categoryName);
@@ -389,7 +402,7 @@ app.get('/api/categories/:categoryName/tables', async (req, res) => {
 });
 
 // Obtener esquema de una tabla específica
-app.get('/api/tables/:tableName/schema', async (req, res) => {
+app.get('/api/tables/:tableName/schema', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -462,10 +475,223 @@ app.post('/api/password-reset/request', async (req, res) => {
   }
 });
 
-// ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
+// ========== ENDPOINTS DE AUTENTICACIÓN ==========
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email y contraseña son requeridos'
+      });
+    }
+
+    // Buscar usuario en la base de datos
+    const userQuery = 'SELECT * FROM users WHERE email = $1 AND is_active = true';
+    const userResult = await pool.query(userQuery, [email]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuario no registrado. Contacta a tu superior para obtener acceso.'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Verificar contraseña
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Contraseña incorrecta'
+      });
+    }
+
+    // Actualizar último login
+    await pool.query(
+      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
+      [user.id]
+    );
+
+    // Crear JWT token
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        is_active: user.is_active
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    // TODO: Cambiar conexión de base de datos a koyeb_app_user después del login
+    // Esta funcionalidad se implementará cuando la base de datos esté accesible
+
+    res.json({
+      success: true,
+      message: 'Login exitoso',
+      token: token,
+      user: {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        role: user.role,
+        last_login: user.last_login
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Verificar token endpoint
+app.get('/api/auth/verify', authenticateToken, requireActiveUser, (req, res) => {
+  res.json({
+    success: true,
+    user: req.user
+  });
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+  // En un sistema más complejo, aquí se invalidaría el token en una blacklist
+  res.json({
+    success: true,
+    message: 'Logout exitoso'
+  });
+});
+
+// Register endpoint (solo para administradores)
+app.post('/api/auth/register', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const { email, password, first_name, last_name, role = 'user' } = req.body;
+
+    if (!email || !password || !first_name || !last_name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Todos los campos son requeridos'
+      });
+    }
+
+    // Verificar si el usuario ya existe
+    const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'El usuario ya existe'
+      });
+    }
+
+    // Hash de la contraseña
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // Insertar nuevo usuario
+    const insertQuery = `
+      INSERT INTO users (email, password_hash, first_name, last_name, role, is_active)
+      VALUES ($1, $2, $3, $4, $5, true)
+      RETURNING id, email, first_name, last_name, role, created_at
+    `;
+    
+    const result = await pool.query(insertQuery, [
+      email, passwordHash, first_name, last_name, role
+    ]);
+
+    const newUser = result.rows[0];
+
+    res.status(201).json({
+      success: true,
+      message: 'Usuario creado exitosamente',
+      user: newUser
+    });
+
+  } catch (error) {
+    console.error('Error en registro:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Reset password endpoint
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token y nueva contraseña son requeridos'
+      });
+    }
+
+    // Verificar token
+    const tokenQuery = `
+      SELECT prt.*, u.email 
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token = $1 AND prt.used = false AND prt.expires_at > CURRENT_TIMESTAMP
+    `;
+    
+    const tokenResult = await pool.query(tokenQuery, [token]);
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado'
+      });
+    }
+
+    const resetData = tokenResult.rows[0];
+
+    // Hash de la nueva contraseña
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(newPassword, saltRounds);
+
+    // Actualizar contraseña del usuario
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [passwordHash, resetData.user_id]
+    );
+
+    // Marcar token como usado
+    await pool.query(
+      'UPDATE password_reset_tokens SET used = true WHERE id = $1',
+      [resetData.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error en reset password:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD (PROTEGIDAS)
 
 // CREATE - Crear nuevo registro
-app.post('/api/tables/:tableName/create', async (req, res) => {
+app.post('/api/tables/:tableName/create', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     const data = req.body;
@@ -510,7 +736,7 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
 });
 
 // READ - Leer todos los registros
-app.get('/api/tables/:tableName/read', async (req, res) => {
+app.get('/api/tables/:tableName/read', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -551,7 +777,7 @@ app.get('/api/tables/:tableName/read', async (req, res) => {
 });
 
 // SEARCH - Búsqueda simple
-app.get('/api/tables/:tableName/search', async (req, res) => {
+app.get('/api/tables/:tableName/search', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
@@ -603,7 +829,7 @@ app.get('/api/tables/:tableName/search', async (req, res) => {
   }
 });
 
-app.get('/api/tables/:tableName/fields', async (req, res) => {
+app.get('/api/tables/:tableName/fields', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -632,7 +858,7 @@ app.get('/api/tables/:tableName/fields', async (req, res) => {
 });
 
 // UPDATE - Actualizar registro
-app.put('/api/tables/:tableName/update', async (req, res) => {
+app.put('/api/tables/:tableName/update', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchCriteria, updateData } = req.body;
@@ -700,7 +926,7 @@ app.put('/api/tables/:tableName/update', async (req, res) => {
 });
 
 // DELETE - Eliminar registro
-app.delete('/api/tables/:tableName/delete', async (req, res) => {
+app.delete('/api/tables/:tableName/delete', authenticateToken, requireActiveUser, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchCriteria } = req.body;

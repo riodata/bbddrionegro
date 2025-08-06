@@ -5,6 +5,50 @@ class DropdownManager {
     this.cache = new Map();
   }
 
+  // Función auxiliar para realizar peticiones autenticadas
+  async authenticatedFetch(url, options = {}) {
+    const token = localStorage.getItem('authToken');
+    
+    if (!token) {
+      window.location.href = '/login.html';
+      throw new Error('No authentication token');
+    }
+
+    const defaultOptions = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    };
+
+    const mergedOptions = {
+      ...defaultOptions,
+      ...options,
+      headers: {
+        ...defaultOptions.headers,
+        ...options.headers
+      }
+    };
+
+    try {
+      const response = await fetch(url, mergedOptions);
+      
+      if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('authToken');
+        window.location.href = '/login.html';
+        throw new Error('Authentication failed');
+      }
+      
+      return response;
+    } catch (error) {
+      if (error.message.includes('Authentication') || error.message.includes('Token')) {
+        localStorage.removeItem('authToken');
+        window.location.href = '/login.html';
+      }
+      throw error;
+    }
+  }
+
   // Obtener todas las opciones de enums
   async getAllOptions() {
     if (this.cache.has('all_options')) {
@@ -12,7 +56,7 @@ class DropdownManager {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/enum-options`);
+      const response = await this.authenticatedFetch(`${this.baseUrl}/api/enum-options`);
       const result = await response.json();
       
       if (result.success) {
