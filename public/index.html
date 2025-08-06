@@ -489,6 +489,12 @@
         <div class="header">
             <h1>Gobierno de la Provincia Río Negro</h1>
             <p>🗄️ Sistema de gestión de bases de datos</p>
+            <div class="user-info" style="position: absolute; top: 20px; right: 20px; color: rgba(255,255,255,0.9);">
+                <span id="userWelcome"></span>
+                <button onclick="logout()" style="margin-left: 15px; padding: 8px 15px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 5px; cursor: pointer; font-size: 0.9rem;">
+                    🚪 Cerrar Sesión
+                </button>
+            </div>
         </div>
 
         <!-- Breadcrumb Navigation -->
@@ -637,6 +643,86 @@
     <script>
         const API_BASE = window.location.origin;
 
+        // Authentication functions
+        function getAuthToken() {
+            return localStorage.getItem('authToken');
+        }
+
+        function getAuthHeaders() {
+            const token = getAuthToken();
+            return token ? { 'Authorization': `Bearer ${token}` } : {};
+        }
+
+        function redirectToLogin() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+
+        function logout() {
+            if (confirm('¿Estás seguro que deseas cerrar sesión?')) {
+                fetch(`${API_BASE}/api/auth/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    }
+                }).finally(() => {
+                    redirectToLogin();
+                });
+            }
+        }
+
+        function checkAuthentication() {
+            const token = getAuthToken();
+            if (!token) {
+                redirectToLogin();
+                return false;
+            }
+
+            // Verify token
+            fetch(`${API_BASE}/api/auth/verify`, {
+                headers: getAuthHeaders()
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (!result.success) {
+                    redirectToLogin();
+                } else {
+                    // Update user welcome message
+                    const user = JSON.parse(localStorage.getItem('user') || '{}');
+                    document.getElementById('userWelcome').textContent = 
+                        `Bienvenido, ${user.name || user.email || 'Usuario'}`;
+                }
+            })
+            .catch(() => {
+                redirectToLogin();
+            });
+
+            return true;
+        }
+
+        // Modify fetch functions to include authentication
+        async function authenticatedFetch(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders(),
+                ...(options.headers || {})
+            };
+
+            const response = await fetch(url, {
+                ...options,
+                headers
+            });
+
+            if (response.status === 401 || response.status === 403) {
+                redirectToLogin();
+                throw new Error('Authentication required');
+            }
+
+            return response;
+        }
+
         // Variables globales para sistema dinámico
         let currentTable = null;
         let currentTableSchema = null;
@@ -655,7 +741,7 @@
             try {
                 showStatus('Cargando categorías disponibles...', 'info');
                 
-                const response = await fetch(`${API_BASE}/api/categories`);
+                const response = await authenticatedFetch(`${API_BASE}/api/categories`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -775,6 +861,11 @@
         
         // Inicializar la aplicación cargando categorías
         document.addEventListener('DOMContentLoaded', function() {
+            // Check authentication first
+            if (!checkAuthentication()) {
+                return;
+            }
+
             loadDynamicCategories();
             
             // Resto del código de inicialización existente...

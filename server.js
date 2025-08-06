@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios'); // Agrega axios para enviar la petición al webhook de n8n
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -16,9 +18,17 @@ if (!process.env.DATABASE_URL &&
 
 // Configuración de PostgreSQL
 let pool;
+let appPool; // Pool para operaciones después del login
+
 if (process.env.DATABASE_URL) {
   pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+  
+  // Pool para operaciones de aplicación (después del login)
+  appPool = new Pool({
+    connectionString: process.env.DATABASE_URL.replace(/user=[^;]+/, `user=${process.env.APP_DB_USER}`).replace(/password=[^;]+/, `password=${process.env.APP_DB_PASS}`),
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   });
 } else {
@@ -30,6 +40,16 @@ if (process.env.DATABASE_URL) {
     password: process.env.DB_PASSWORD,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   });
+  
+  // Pool para operaciones de aplicación (después del login)
+  appPool = new Pool({
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    database: process.env.DB_NAME,
+    user: process.env.APP_DB_USER,
+    password: process.env.APP_DB_PASS,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
 }
 
 const app = express();
@@ -38,7 +58,7 @@ const PORT = process.env.PORT || 8000;
 // ========== FUNCIONES PARA METADATOS DINÁMICOS CON CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
-async function getCategories() {
+async function getCategories(dbPool = pool) {
   try {
     const query = `
       SELECT DISTINCT 
@@ -51,7 +71,7 @@ async function getCategories() {
       ORDER BY category_name
     `;
     
-    const result = await pool.query(query);
+    const result = await dbPool.query(query);
     return result.rows;
   } catch (error) {
     console.error('Error obteniendo categorías:', error);
@@ -205,6 +225,240 @@ app.use(express.urlencoded({ extended: true }));
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ========== AUTHENTICATION MIDDLEWARE ==========
+
+// Middleware para verificar JWT
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Token de acceso requerido' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Token inválido' });
+    }
+    req.user = user;
+    next();
+  });
+}
+
+// Middleware opcional para verificar autenticación (permite acceso sin token)
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token) {
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+      if (!err) {
+        req.user = user;
+      }
+    });
+  }
+  next();
+}
+
+// ========== AUTHENTICATION ENDPOINTS ==========
+
+// Endpoint de login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email y contraseña son requeridos'
+      });
+    }
+
+    // Buscar usuario en la base de datos
+    const userQuery = 'SELECT * FROM users WHERE email = $1 AND is_active = true';
+    const userResult = await pool.query(userQuery, [email]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuario no registrado. Contacte a su superior para obtener acceso.'
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    // Verificar contraseña
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Contraseña incorrecta',
+        showPasswordRecovery: true
+      });
+    }
+
+    // Actualizar último ingreso
+    const updateLastLogin = 'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1';
+    await pool.query(updateLastLogin, [user.id]);
+
+    // Generar JWT token
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        email: user.email, 
+        name: user.name 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Login exitoso',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        last_login: user.last_login
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en login:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para verificar token
+app.get('/api/auth/verify', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    user: req.user
+  });
+});
+
+// Endpoint de logout (invalidar token del lado del cliente)
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Logout exitoso'
+  });
+});
+
+// Endpoint para recuperar contraseña (mejorado)
+app.post('/api/auth/password-reset/request', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email requerido" });
+  }
+
+  try {
+    // Busca usuario en DB
+    const userResult = await pool.query('SELECT id, name FROM users WHERE email = $1 AND is_active = true LIMIT 1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    }
+    const user = userResult.rows[0];
+
+    // Genera token único
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    // Guarda el token en la base
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+      [user.id, token, expires]
+    );
+
+    // Arma el link de recuperación
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:8000'}/reset-password.html?token=${token}`;
+
+    // Envía los datos al webhook de n8n
+    if (process.env.N8N_WEBHOOK_URL) {
+      await axios.post(process.env.N8N_WEBHOOK_URL, {
+        email,
+        resetLink,
+        nombre: user.name || email
+      });
+    }
+
+    return res.json({ success: true, message: "Solicitud enviada. Revisa tu email." });
+  } catch (err) {
+    console.error("Error en password reset:", err);
+    return res.status(500).json({ success: false, message: "Error interno" });
+  }
+});
+
+// Endpoint para cambiar contraseña con token
+app.post('/api/auth/password-reset/confirm', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token y nueva contraseña son requeridos'
+      });
+    }
+
+    // Verificar token
+    const tokenQuery = `
+      SELECT prt.*, u.email 
+      FROM password_reset_tokens prt 
+      JOIN users u ON prt.user_id = u.id 
+      WHERE prt.token = $1 AND prt.expires_at > CURRENT_TIMESTAMP AND prt.used = false
+    `;
+    const tokenResult = await pool.query(tokenQuery, [token]);
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token inválido o expirado'
+      });
+    }
+
+    const tokenData = tokenResult.rows[0];
+
+    // Hash de la nueva contraseña
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Actualizar contraseña del usuario
+    await pool.query(
+      'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [hashedPassword, tokenData.user_id]
+    );
+
+    // Marcar token como usado
+    await pool.query(
+      'UPDATE password_reset_tokens SET used = true WHERE id = $1',
+      [tokenData.id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Contraseña actualizada exitosamente'
+    });
+
+  } catch (error) {
+    console.error('Error en reset password confirm:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Función auxiliar para obtener el pool correcto (autenticado vs no autenticado)
+function getDbPool(req) {
+  return req.user ? appPool : pool;
+}
+
 // Función auxiliar para logging
 const logOperation = (operation, data) => {
   console.log(`🔄 ${operation}:`, JSON.stringify(data, null, 2));
@@ -229,9 +483,15 @@ const handlePostgresError = (error, operation) => {
   return { status: 500, message: error.message || 'Error interno del servidor' };
 };
 
-// Ruta principal para servir el frontend
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Ruta principal - redirigir a login si no está autenticado
+app.get('/', optionalAuth, (req, res) => {
+  if (req.user) {
+    // Usuario autenticado, servir dashboard
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  } else {
+    // Usuario no autenticado, servir página de login
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  }
 });
 
 // ========== FUNCIONES PARA ENUMS ==========
@@ -328,9 +588,10 @@ app.get('/api/enum-options/:enumName', async (req, res) => {
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
-app.get('/api/categories', async (req, res) => {
+app.get('/api/categories', authenticateToken, async (req, res) => {
   try {
-    const categories = await getCategories();
+    const dbPool = getDbPool(req);
+    const categories = await getCategories(dbPool);
     
     res.json({
       success: true,
@@ -798,6 +1059,67 @@ app.get('/mi-ip', (req, res) => {
       socket: req.socket?.remoteAddress
     }
   });
+});
+
+// Endpoint para inicializar tablas de autenticación (solo para setup inicial)
+app.post('/api/setup/init-auth-tables', async (req, res) => {
+  try {
+    // Create users table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          name VARCHAR(255),
+          is_active BOOLEAN DEFAULT true,
+          last_login TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create password reset tokens table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          token VARCHAR(255) UNIQUE NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id)`);
+
+    // Insert default admin user (password: admin123)
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    await pool.query(`
+      INSERT INTO users (email, password_hash, name, is_active)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (email) DO NOTHING
+    `, ['admin@rionegro.gov.ar', hashedPassword, 'Administrador', true]);
+
+    res.json({
+      success: true,
+      message: 'Tablas de autenticación creadas exitosamente',
+      defaultUser: {
+        email: 'admin@rionegro.gov.ar',
+        password: 'admin123'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating auth tables:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al crear tablas de autenticación',
+      error: error.message
+    });
+  }
 });
 
 // Middleware de manejo de errores global
