@@ -17,6 +17,8 @@ if (!process.env.DATABASE_URL &&
   process.exit(1);
 }
 
+console.log('PG_CA_CERT:', process.env.PG_CA_CERT);
+
 const pool = new Pool({
   host: process.env.PGHOST,
   port: process.env.PGPORT,
