@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios'); // Agrega axios para enviar la petición al webhook de n8n
+const auth = require('./auth');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -34,6 +37,17 @@ if (process.env.DATABASE_URL) {
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+
+// ENDPOINTS de autenticación
+app.post('/api/login', auth.login);
+app.post('/api/register', auth.register);
+app.post('/api/logout', auth.logout);
+app.post('/api/password-reset/confirm', auth.passwordResetConfirm);
+
+// Ejemplo de protección con middleware JWT en una ruta:
+app.get('/api/protected', auth.requireAuth, (req, res) => {
+  res.json({ success: true, user: req.user, message: "Acceso autorizado." });
+});
 
 // ========== FUNCIONES PARA METADATOS DINÁMICOS CON CATEGORÍAS ==========
 
