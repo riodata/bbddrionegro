@@ -80,7 +80,7 @@ async function getCategories(dbPool = pool) {
 }
 
 // Obtener tablas de una categoría específica
-async function getTablesByCategory(categoryName) {
+async function getTablesByCategory(categoryName, dbPool = pool) {
   try {
     const query = `
       SELECT 
@@ -93,7 +93,7 @@ async function getTablesByCategory(categoryName) {
       ORDER BY table_order
     `;
     
-    const result = await pool.query(query, [categoryName]);
+    const result = await dbPool.query(query, [categoryName]);
     return result.rows;
   } catch (error) {
     console.error(`Error obteniendo tablas para categoría ${categoryName}:`, error);
@@ -120,7 +120,7 @@ async function getDynamicTables() {
 }
 
 // Obtener esquema completo de una tabla desde app_information_schema
-async function getTableSchema(tableName) {
+async function getTableSchema(tableName, dbPool = pool) {
   try {
     const query = `
       SELECT 
@@ -139,7 +139,7 @@ async function getTableSchema(tableName) {
       ORDER BY ordinal_position
     `;
 
-    const result = await pool.query(query, [tableName]);
+    const result = await dbPool.query(query, [tableName]);
     const columns = result.rows;
 
     if (!columns || columns.length === 0) {
@@ -177,7 +177,7 @@ async function getTableSchema(tableName) {
 }
 
 // Validar que una tabla existe usando app_information_schema
-async function validateTableAccess(tableName) {
+async function validateTableAccess(tableName, dbPool = pool) {
   try {
     const query = `
       SELECT table_name 
@@ -186,7 +186,7 @@ async function validateTableAccess(tableName) {
       LIMIT 1
     `;
     
-    const result = await pool.query(query, [tableName]);
+    const result = await dbPool.query(query, [tableName]);
 
     if (result.rows.length === 0) {
       throw new Error(`Tabla '${tableName}' no encontrada en app_information_schema`);
@@ -726,14 +726,16 @@ app.post('/api/password-reset/request', async (req, res) => {
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 
 // CREATE - Crear nuevo registro
-app.post('/api/tables/:tableName/create', async (req, res) => {
+app.post('/api/tables/:tableName/create', authenticateToken, async (req, res) => {
   try {
     const { tableName } = req.params;
     const data = req.body;
     
+    const dbPool = getDbPool(req);
+    
     // Validar tabla
-    await validateTableAccess(tableName);
-    const tableSchema = await getTableSchema(tableName);
+    await validateTableAccess(tableName, dbPool);
+    const tableSchema = await getTableSchema(tableName, dbPool);
     const primaryKey = tableSchema.primaryKey;
     
     logOperation('CREATE REQUEST', { tableName, data });
@@ -749,7 +751,7 @@ app.post('/api/tables/:tableName/create', async (req, res) => {
       RETURNING *
     `;
 
-    const result = await pool.query(insertQuery, values);
+    const result = await dbPool.query(insertQuery, values);
     const newRecord = result.rows[0];
     
     logOperation('CREATE SUCCESS', newRecord);
