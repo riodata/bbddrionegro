@@ -468,6 +468,27 @@
             margin-right: 0;
             margin-bottom: 0;
         }
+        
+        #login-screen,
+        #password-reset-modal {
+            max-width: 400px;
+            margin: 60px auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px #0002;
+            padding: 32px;
+            display: none;
+        }
+        #login-screen.active,
+        #password-reset-modal.active {
+            display: block;
+        }
+        #login-status,
+        #reset-status {
+            margin-top: 16px;
+            font-weight: 500;
+            color: #e74c3c;
+        }
 
         @media (max-width: 768px) {
             .category-grid, .table-grid {
@@ -501,6 +522,38 @@
         <div class="content">
             <div id="status-message"></div>
 
+            <!-- LOGIN SCREEN -->
+            <div id="login-screen" class="active screen">
+                <h2 style="margin-bottom:16px;">Iniciar sesión</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">Contraseña</label>
+                        <input type="password" id="login-password" required>
+                    </div>
+                    <button type="submit" class="btn">Ingresar</button>
+                </form>
+                <div id="login-status"></div>
+                <button type="button" onclick="showPasswordReset()" class="btn btn-clear" style="margin-top:16px;">¿Olvidaste tu contraseña?</button>
+            </div>
+
+            <!-- RECUPERACIÓN DE CONTRASEÑA -->
+            <div id="password-reset-modal" class="screen">
+                <h2>Recuperar Contraseña</h2>
+                <form id="reset-form" onsubmit="submitPasswordReset(event)">
+                    <div class="form-group">
+                        <label for="resetEmail">Email</label>
+                        <input type="email" id="resetEmail" required placeholder="Ingresa tu email">
+                    </div>
+                    <button type="submit" class="btn">Enviar</button>
+                    <button type="button" onclick="closePasswordReset()" class="btn btn-clear" style="margin-top:8px;">Cerrar</button>
+                </form>
+                <div id="reset-status"></div>
+            </div>
+            
             <!-- MAIN MENU SCREEN -->
             <div id="main-menu" class="screen active">
                 <div class="main-menu">
@@ -646,7 +699,74 @@
         let currentDeletingRow = null;
         let dynamicTables = [];
 
-        // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
+        // Mostrar solo login al inicio
+        document.addEventListener('DOMContentLoaded', function() {
+            showScreen('login-screen');
+        });
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // LOGIN
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const statusDiv = document.getElementById('login-status');
+            statusDiv.innerText = 'Verificando...';
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    statusDiv.innerText = '';
+                    showScreen('main-menu');
+                    // Si usas JWT, guarda el token aquí: localStorage.setItem('token', data.token)
+                    // Carga datos del sistema
+                    if (typeof loadDynamicCategories === 'function') loadDynamicCategories();
+                } else {
+                    statusDiv.innerText = data.message || 'Credenciales inválidas';
+                }
+            } catch(e) {
+                statusDiv.innerText = 'Error de conexión';
+            }
+        });
+
+        // RECUPERACIÓN DE CONTRASEÑA
+        function showPasswordReset() {
+            showScreen('password-reset-modal');
+        }
+        function closePasswordReset() {
+            showScreen('login-screen');
+            document.getElementById('reset-status').innerText = '';
+            document.getElementById('resetEmail').value = '';
+        }
+        async function submitPasswordReset(event) {
+            event.preventDefault();
+            const email = document.getElementById('resetEmail').value;
+            const statusDiv = document.getElementById('reset-status');
+            if (!email) {
+                statusDiv.innerText = 'Debes ingresar un email válido.';
+                return;
+            }
+            statusDiv.innerText = 'Enviando solicitud...';
+            try {
+                const res = await fetch('/api/password-reset/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                statusDiv.innerText = data.message;
+            } catch(e) {
+                statusDiv.innerText = 'Error al enviar la solicitud. Intenta más tarde.';
+            }
+        }
 
         // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
         
