@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const axios = require('axios'); // Agrega axios para enviar la petición al webhook de n8n
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -416,6 +417,48 @@ app.get('/api/tables/:tableName/schema', async (req, res) => {
       message: error.message,
       error: error.message
     });
+  }
+});
+
+// Endpoint para solicitar recuperación de contraseña
+app.post('/api/password-reset/request', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email requerido" });
+  }
+
+  try {
+    // Busca usuario en DB
+    const userResult = await pool.query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    }
+    const userId = userResult.rows[0].id;
+
+    // Genera token único (simple ejemplo, usa mejor uuid en producción)
+    const token = Math.random().toString(36).substr(2, 24);
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    // Guarda el token en la base
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+      [userId, token, expires]
+    );
+
+    // Arma el link de recuperación (ajusta la URL según tu frontend)
+    const resetLink = `${process.env.FRONTEND_URL || 'https://tusistema.rionegro.gov.ar'}/reset-password?token=${token}`;
+
+    // Envía los datos al webhook de n8n
+    await axios.post(process.env.N8N_WEBHOOK_URL, {
+      email,
+      resetLink,
+      nombre: email // Puedes buscar el nombre si lo tienes en la DB
+    });
+
+    return res.json({ success: true, message: "Solicitud enviada. Revisa tu email." });
+  } catch (err) {
+    console.error("Error en password reset:", err);
+    return res.status(500).json({ success: false, message: "Error interno" });
   }
 });
 
