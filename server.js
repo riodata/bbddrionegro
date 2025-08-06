@@ -1,36 +1,50 @@
-// server.js
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
 const path = require('path');
-const axios = require('axios'); // Agrega axios para enviar la petición al webhook de n8n
+const axios = require('axios');
 const auth = require('./auth');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
+const fs = require('fs'); // Importa fs para leer el archivo
 require('dotenv').config();
 
 // Validar variables de entorno para PostgreSQL
-if (!process.env.DATABASE_URL && 
-    (!process.env.DB_HOST || !process.env.DB_NAME || !process.env.DB_USER || !process.env.DB_PASSWORD)) {
-  console.error('❌ Error: Se requiere DATABASE_URL o las variables DB_HOST, DB_NAME, DB_USER, DB_PASSWORD');
-  console.error('Verifica tu archivo .env');
+if (!process.env.PGHOST || !process.env.PGUSER || !process.env.PGDATABASE || !process.env.PGPASSWORD || !process.env.CA_PATH) {
+  console.error('❌ Error: Faltan variables de conexión a PostgreSQL en el entorno.');
+  process.exit(1);
+}
+
+// Lee el certificado CA desde el archivo (usando la variable CA_PATH)
+let caCert;
+try {
+  caCert = fs.readFileSync(process.env.CA_PATH, 'utf8');
+} catch (e) {
+  console.error('❌ Error al leer el archivo CA:', e);
   process.exit(1);
 }
 
 const pool = new Pool({
   host: process.env.PGHOST,
-  port: process.env.PGPORT,
+  port: process.env.PGPORT || 5432,
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
   ssl: {
     rejectUnauthorized: true,
-    ca: fs.readFileSync(process.env.CA_PATH).toString()
+    ca: caCert
   }
 });
 
-module.exports = pool;
+// Puedes probar la conexión inicial así:
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ Error al probar conexión inicial:', err.stack || err);
+    process.exit(1);
+  }
+  console.log('✅ Conexión a PostgreSQL OK');
+  release();
+});
 
 const app = express();
 const PORT = process.env.PORT || 8000;
