@@ -553,6 +553,20 @@
                 </form>
                 <div id="reset-status"></div>
             </div>
+
+            <!-- RESET PASSWORD SCREEN -->
+            <div id="reset-password-screen" class="screen">
+                <h2>Cambiar contraseña</h2>
+                <form id="reset-password-form" onsubmit="submitNewPassword(event)">
+                    <input type="hidden" id="resetToken">
+                    <div class="form-group">
+                        <label for="newPassword">Nueva contraseña</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <button type="submit" class="btn">Restablecer contraseña</button>
+                </form>
+                <div id="reset-password-status" style="margin-top:16px;"></div>
+            </div>
             
             <!-- MAIN MENU SCREEN -->
             <div id="main-menu" class="screen active">
