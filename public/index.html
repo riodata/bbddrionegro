@@ -553,20 +553,6 @@
                 </form>
                 <div id="reset-status"></div>
             </div>
-
-            <!-- RESET PASSWORD SCREEN -->
-            <div id="reset-password-screen" class="screen">
-                <h2>Cambiar contraseña</h2>
-                <form id="reset-password-form" onsubmit="submitNewPassword(event)">
-                    <input type="hidden" id="resetToken">
-                    <div class="form-group">
-                        <label for="newPassword">Nueva contraseña</label>
-                        <input type="password" id="newPassword" required>
-                    </div>
-                    <button type="submit" class="btn">Restablecer contraseña</button>
-                </form>
-                <div id="reset-password-status" style="margin-top:16px;"></div>
-            </div>
             
             <!-- MAIN MENU SCREEN -->
             <div id="main-menu" class="screen active">
@@ -593,6 +579,20 @@
                 <div id="table-selection-content" class="tables-grid">
                     <!-- Las tablas se cargarán dinámicamente aquí -->
                 </div>
+            </div>
+
+            <!-- RESET PASSWORD SCREEN -->
+            <div id="reset-password-screen" class="screen">
+                <h2>Cambiar contraseña</h2>
+                <form id="reset-password-form" onsubmit="submitNewPassword(event)">
+                    <input type="hidden" id="resetToken">
+                    <div class="form-group">
+                        <label for="newPassword">Nueva contraseña</label>
+                        <input type="password" id="newPassword" required>
+                    </div>
+                    <button type="submit" class="btn">Restablecer contraseña</button>
+                </form>
+                <div id="reset-password-status" style="margin-top:16px;"></div>
             </div>
 
             <!-- CRUD OPERATIONS SCREEN -->
@@ -716,6 +716,12 @@
         // Mostrar solo login al inicio
         document.addEventListener('DOMContentLoaded', function() {
             showScreen('login-screen');
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('token');
+            if (token) {
+                showScreen('reset-password-screen');
+                document.getElementById('resetToken').value = token;
+            }
         });
 
         function showScreen(screenId) {
@@ -781,6 +787,30 @@
                 statusDiv.innerText = 'Error al enviar la solicitud. Intenta más tarde.';
             }
         }
+
+        async function submitNewPassword(event) {
+        event.preventDefault();
+        const token = document.getElementById('resetToken').value;
+        const password = document.getElementById('newPassword').value;
+        const statusDiv = document.getElementById('reset-password-status');
+        statusDiv.innerText = 'Procesando...';
+        try {
+            const res = await fetch('/api/password-reset/confirm', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, password })
+            });
+            const data = await res.json();
+            if (data.success) {
+                statusDiv.innerText = '¡Contraseña actualizada! Ya puedes ingresar.';
+                setTimeout(() => { window.location.href = '/'; }, 3000);
+            } else {
+                statusDiv.innerText = data.message || 'Error al actualizar contraseña.';
+            }
+        } catch(e) {
+            statusDiv.innerText = 'Error de conexión.';
+        }
+    }
 
         // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
         
