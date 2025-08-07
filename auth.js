@@ -4,9 +4,16 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
 
+// Configuración del pool usando las mismas variables que server.js
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  host: process.env.PGHOST,
+  port: process.env.PGPORT || 5432,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE,
+  ssl: {
+    rejectUnauthorized: false  // Para SSL sin certificado local
+  }
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
@@ -23,6 +30,7 @@ exports.login = async function(req, res) {
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '12h' });
     res.json({ success: true, token, user: { id: user.id, email: user.email, nombre: user.nombre } });
   } catch (err) {
+    console.error('Error en login:', err);
     res.status(500).json({ success: false, message: "Error interno." });
   }
 };
@@ -38,6 +46,7 @@ exports.register = async function(req, res) {
     );
     res.json({ success: true, user: result.rows[0] });
   } catch (err) {
+    console.error('Error en register:', err);
     if (err.code === '23505') return res.status(409).json({ success: false, message: "Ya existe un usuario con ese email." });
     res.status(500).json({ success: false, message: "Error interno." });
   }
@@ -77,6 +86,7 @@ exports.passwordResetConfirm = async function(req, res) {
     await pool.query('UPDATE password_reset_tokens SET usado = true WHERE id = $1', [record.id]);
     res.json({ success: true, message: "Contraseña actualizada correctamente." });
   } catch (err) {
+    console.error('Error en password reset confirm:', err);
     res.status(500).json({ success: false, message: "Error interno." });
   }
 };
