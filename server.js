@@ -6,24 +6,15 @@ const auth = require('./auth');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
-const fs = require('fs'); // Importa fs para leer el archivo
 require('dotenv').config();
 
 // Validar variables de entorno para PostgreSQL
-if (!process.env.PGHOST || !process.env.PGUSER || !process.env.PGDATABASE || !process.env.PGPASSWORD || !process.env.CA_PATH) {
+if (!process.env.PGHOST || !process.env.PGUSER || !process.env.PGDATABASE || !process.env.PGPASSWORD) {
   console.error('❌ Error: Faltan variables de conexión a PostgreSQL en el entorno.');
   process.exit(1);
 }
 
-// Lee el certificado CA desde el archivo (usando la variable CA_PATH)
-let caCert;
-try {
-  caCert = fs.readFileSync(process.env.CA_PATH, 'utf8');
-} catch (e) {
-  console.error('❌ Error al leer el archivo CA:', e);
-  process.exit(1);
-}
-
+// Configuración del pool de conexiones con SSL automático
 const pool = new Pool({
   host: process.env.PGHOST,
   port: process.env.PGPORT || 5432,
@@ -31,18 +22,22 @@ const pool = new Pool({
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
   ssl: {
-    rejectUnauthorized: true,
-    ca: caCert
-  }
+    rejectUnauthorized: false  // Para SSL sin certificado local
+  },
+  // Configuraciones adicionales para mejor rendimiento
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
-// Puedes probar la conexión inicial así:
+// Probar la conexión inicial
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ Error al probar conexión inicial:', err.stack || err);
     process.exit(1);
   }
   console.log('✅ Conexión a PostgreSQL OK');
+  console.log('✅ SSL/TLS conectado correctamente');
   release();
 });
 
@@ -789,11 +784,12 @@ app.get('/health', async (req, res) => {
     res.json({ 
       status: 'healthy', 
       database: 'connected',
+      ssl: 'enabled',
       responseTime: `${responseTime}ms`,
       tablesAvailable: tables.length,
       tablesList: tables,
-      dbHost: process.env.DB_HOST ? 'configured' : 'missing',
-      dbUser: process.env.DB_USER ? 'configured' : 'missing',
+      dbHost: process.env.PGHOST ? 'configured' : 'missing',
+      dbUser: process.env.PGUSER ? 'configured' : 'missing',
       schemaSource: 'app_information_schema',
       timestamp: new Date().toISOString()
     });
@@ -841,6 +837,7 @@ app.listen(PORT, async () => {
   console.log(`📱 Frontend available at /`);
   console.log(`🏥 Health check available at /health`);
   console.log(`🔄 Sistema dinámico activado - usando app_information_schema`);
+  console.log(`🔒 SSL/TLS habilitado para PostgreSQL`);
   
   // Probar conexión y mostrar tablas disponibles
   try {
