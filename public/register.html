@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Usuario - Sistema Rio Data</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .register-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .register-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .register-header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .register-header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group.required label::after {
+            content: " *";
+            color: #e74c3c;
+        }
+
+        .password-requirements {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .password-requirements h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .password-requirements ul {
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .password-requirements li {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 5px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .password-requirements li::before {
+            content: "•";
+            color: #667eea;
+            position: absolute;
+            left: 0;
+        }
+
+        .register-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .register-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .register-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .login-link {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+        }
+
+        .login-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .password-match {
+            font-size: 12px;
+            margin-top: 5px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+
+        .password-match.match {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .password-match.no-match {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 600px) {
+            .register-container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+
+            .register-header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <div class="register-header">
+            <h1>Registro de Usuario</h1>
+            <p>Sistema de Gestión - Rio Data</p>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <form id="registerForm">
+            <div class="form-group required">
+                <label for="nombre_apellido">Nombre y Apellido</label>
+                <input type="text" id="nombre_apellido" name="nombre_apellido" required>
+            </div>
+
+            <div class="form-group">
+                <label for="telefono">Teléfono</label>
+                <input type="tel" id="telefono" name="telefono" placeholder="+54 9 11 1234-5678">
+            </div>
+
+            <div class="form-group required">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+
+            <div class="password-requirements">
+                <h4>Requisitos de la contraseña:</h4>
+                <ul>
+                    <li>Mínimo 8 caracteres</li>
+                    <li>Se recomienda incluir letras mayúsculas y minúsculas</li>
+                    <li>Se recomienda incluir números y símbolos</li>
+                </ul>
+            </div>
+
+            <div class="form-group required">
+                <label for="password">Contraseña</label>
+                <input type="password" id="password" name="password" required minlength="8">
+            </div>
+
+            <div class="form-group required">
+                <label for="confirmPassword">Confirmar Contraseña</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" required minlength="8">
+                <div id="passwordMatch" class="password-match" style="display: none;"></div>
+            </div>
+
+            <button type="submit" class="register-btn" id="registerBtn">
+                Registrar Usuario
+            </button>
+        </form>
+
+        <div class="login-link">
+            <p>¿Ya tienes una cuenta? <a href="login.html">Iniciar Sesión</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        const form = document.getElementById('registerForm');
+        const alertContainer = document.getElementById('alert-container');
+        const registerBtn = document.getElementById('registerBtn');
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+        const passwordMatchDiv = document.getElementById('passwordMatch');
+
+        // Función para mostrar alertas
+        function showAlert(message, type = 'error') {
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type}">
+                    ${message}
+                </div>
+            `;
+            
+            // Scroll al top para mostrar la alerta
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // Auto-ocultar después de 5 segundos si es success
+            if (type === 'success') {
+                setTimeout(() => {
+                    alertContainer.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        // Función para validar coincidencia de contraseñas
+        function checkPasswordMatch() {
+            const password = passwordInput.value;
+            const confirmPassword = confirmPasswordInput.value;
+
+            if (confirmPassword === '') {
+                passwordMatchDiv.style.display = 'none';
+                return;
+            }
+
+            passwordMatchDiv.style.display = 'block';
+
+            if (password === confirmPassword) {
+                passwordMatchDiv.className = 'password-match match';
+                passwordMatchDiv.textContent = '✓ Las contraseñas coinciden';
+            } else {
+                passwordMatchDiv.className = 'password-match no-match';
+                passwordMatchDiv.textContent = '✗ Las contraseñas no coinciden';
+            }
+        }
+
+        // Event listeners para validación de contraseñas
+        passwordInput.addEventListener('input', checkPasswordMatch);
+        confirmPasswordInput.addEventListener('input', checkPasswordMatch);
+
+        // Función para validar email
+        function validateEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        // Manejar envío del formulario
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Limpiar alertas previas
+            alertContainer.innerHTML = '';
+
+            // Obtener datos del formulario
+            const formData = new FormData(form);
+            const data = {
+                nombre_apellido: formData.get('nombre_apellido').trim(),
+                telefono: formData.get('telefono').trim(),
+                email: formData.get('email').trim().toLowerCase(),
+                password: formData.get('password'),
+                confirmPassword: formData.get('confirmPassword')
+            };
+
+            // Validaciones del lado del cliente
+            if (!data.nombre_apellido) {
+                showAlert('El nombre y apellido son requeridos.');
+                return;
+            }
+
+            if (!validateEmail(data.email)) {
+                showAlert('Por favor ingresa un email válido.');
+                return;
+            }
+
+            if (data.password.length < 8) {
+                showAlert('La contraseña debe tener al menos 8 caracteres.');
+                return;
+            }
+
+            if (data.password !== data.confirmPassword) {
+                showAlert('Las contraseñas no coinciden.');
+                return;
+            }
+
+            // Mostrar loading
+            registerBtn.disabled = true;
+            registerBtn.innerHTML = '<span class="loading"></span>Registrando...';
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(
+                        'Usuario registrado exitosamente. Serás redirigido al login en unos segundos...',
+                        'success'
+                    );
+                    
+                    // Limpiar formulario
+                    form.reset();
+                    passwordMatchDiv.style.display = 'none';
+                    
+                    // Redirigir al login después de 3 segundos
+                    setTimeout(() => {
+                        window.location.href = 'login.html';
+                    }, 3000);
+                } else {
+                    showAlert(result.message || 'Error al registrar usuario.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Error de conexión. Por favor intenta nuevamente.');
+            } finally {
+                // Restaurar botón
+                registerBtn.disabled = false;
+                registerBtn.innerHTML = 'Registrar Usuario';
+            }
+        });
+
+        // Validación en tiempo real del formulario
+        const inputs = form.querySelectorAll('input[required]');
+        inputs.forEach(input => {
+            input.addEventListener('blur', () => {
+                if (input.value.trim() === '') {
+                    input.style.borderColor = '#e74c3c';
+                } else {
+                    input.style.borderColor = '#ddd';
+                }
+            });
+
+            input.addEventListener('input', () => {
+                if (input.style.borderColor === 'rgb(231, 76, 60)') {
+                    input.style.borderColor = '#ddd';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
