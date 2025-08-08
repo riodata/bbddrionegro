@@ -831,6 +831,195 @@ app.use((error, req, res, next) => {
   });
 });
 
+// ========== ENDPOINTS ADICIONALES PARA GESTIÓN DE USUARIOS ==========
+
+// Endpoint para obtener información del usuario actual
+app.get('/api/user/profile', auth.requireAuth, async (req, res) => {
+  try {
+    const userResult = await pool.query(`
+      SELECT 
+        id, 
+        nombre_apellido, 
+        telefono, 
+        email, 
+        rol, 
+        fecha_creacion, 
+        fecha_ultimo_acceso, 
+        fecha_vencimiento, 
+        activo 
+      FROM users 
+      WHERE id = $1
+    `, [req.user.id]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    const user = userResult.rows[0];
+    
+    res.json({
+      success: true,
+      user: user
+    });
+  } catch (error) {
+    console.error('Error obteniendo perfil:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para listar todos los usuarios (solo admin)
+app.get('/api/admin/users', auth.requireAuth, auth.requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        id, 
+        nombre_apellido, 
+        telefono, 
+        email, 
+        rol, 
+        fecha_creacion, 
+        fecha_ultimo_acceso, 
+        fecha_vencimiento, 
+        activo 
+      FROM users 
+      ORDER BY fecha_creacion DESC
+    `);
+
+    res.json({
+      success: true,
+      users: result.rows,
+      total: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error obteniendo usuarios:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para activar/desactivar usuario (solo admin)
+app.put('/api/admin/users/:userId/toggle-status', auth.requireAuth, auth.requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const result = await pool.query(`
+      UPDATE users 
+      SET activo = NOT activo 
+      WHERE id = $1 
+      RETURNING id, nombre_apellido, email, activo
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Usuario ${result.rows[0].activo ? 'activado' : 'desactivado'} exitosamente`,
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error cambiando estado del usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para cambiar rol de usuario (solo admin)
+app.put('/api/admin/users/:userId/role', auth.requireAuth, auth.requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rol } = req.body;
+
+    if (!['admin', 'empleado'].includes(rol)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rol inválido'
+      });
+    }
+
+    const result = await pool.query(`
+      UPDATE users 
+      SET rol = $1 
+      WHERE id = $2 
+      RETURNING id, nombre_apellido, email, rol
+    `, [rol, userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuario no encontrado'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Rol actualizado a ${rol} exitosamente`,
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Error cambiando rol del usuario:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para limpiar usuarios vencidos manualmente (solo admin)
+app.post('/api/admin/clean-expired-users', auth.requireAuth, auth.requireAdmin, async (req, res) => {
+  try {
+    const cleanedCount = await auth.cleanExpiredUsers();
+    
+    res.json({
+      success: true,
+      message: `Se procesaron ${cleanedCount} usuarios vencidos`,
+      cleanedCount: cleanedCount
+    });
+  } catch (error) {
+    console.error('Error limpiando usuarios vencidos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Programar limpieza automática de usuarios vencidos cada 24 horas
+setInterval(async () => {
+  try {
+    const cleanedCount = await auth.cleanExpiredUsers();
+    if (cleanedCount > 0) {
+      console.log(`🔄 Limpieza automática completada: ${cleanedCount} usuarios desactivados`);
+    }
+  } catch (error) {
+    console.error('Error en limpieza automática:', error);
+  }
+}, 24 * 60 * 60 * 1000); // 24 horas
+
+// Ruta para servir el registro
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+// Ruta para servir el login
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
 // Iniciar servidor con validación de conexión
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
