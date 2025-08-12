@@ -44,7 +44,15 @@ pool.connect((err, client, release) => {
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// ENDPOINTS de autenticación
+// ⚠️ IMPORTANTE: Middlewares DEBEN ir ANTES que las rutas
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Servir archivos estáticos del frontend
+app.use(express.static(path.join(__dirname, 'public')));
+
+// AHORA SÍ: ENDPOINTS de autenticación (después de los middlewares)
 app.post('/api/login', auth.login);
 app.post('/api/register', auth.register);
 app.post('/api/logout', auth.logout);
