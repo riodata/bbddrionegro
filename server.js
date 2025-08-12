@@ -225,14 +225,6 @@ async function getTableFields(tableName) {
   }
 }
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// Servir archivos estáticos del frontend
-app.use(express.static(path.join(__dirname, 'public')));
-
 // Función auxiliar para logging
 const logOperation = (operation, data) => {
   console.log(`🔄 ${operation}:`, JSON.stringify(data, null, 2));
