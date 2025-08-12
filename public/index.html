@@ -32,6 +32,7 @@
             color: white;
             padding: 30px;
             text-align: center;
+            position: relative;
         }
 
         .header h1 {
@@ -42,6 +43,29 @@
         .header p {
             font-size: 1.1rem;
             opacity: 0.9;
+        }
+
+        .user-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-align: right;
+            font-size: 0.9rem;
+        }
+
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: background 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
         }
 
         /* Breadcrumb Navigation */
@@ -85,6 +109,26 @@
 
         .screen.active {
             display: block;
+        }
+
+        /* Login Screen Styles */
+        .login-screen {
+            max-width: 400px;
+            margin: 60px auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+            padding: 40px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-header h2 {
+            color: #333;
+            margin-bottom: 10px;
         }
 
         /* Main Menu Styles */
@@ -271,6 +315,16 @@
             box-shadow: 0 5px 15px rgba(74, 144, 226, 0.3);
         }
 
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
         .btn-back {
             background: linear-gradient(135deg, #6c757d, #495057);
         }
@@ -289,6 +343,10 @@
 
         .btn-clear {
             background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d, #495057);
         }
 
         /* Form styles */
@@ -344,7 +402,47 @@
             border: 1px solid #bee5eb;
         }
 
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .alert-info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+
         .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
             text-align: center;
             padding: 40px;
             color: #6c757d;
@@ -468,26 +566,21 @@
             margin-right: 0;
             margin-bottom: 0;
         }
-        
-        #login-screen,
-        #password-reset-modal {
-            max-width: 400px;
-            margin: 60px auto;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 4px 24px #0002;
-            padding: 32px;
-            display: none;
+
+        .links {
+            text-align: center;
+            margin-top: 20px;
         }
-        #login-screen.active,
-        #password-reset-modal.active {
-            display: block;
-        }
-        #login-status,
-        #reset-status {
-            margin-top: 16px;
+
+        .links a {
+            color: #4a90e2;
+            text-decoration: none;
             font-weight: 500;
-            color: #e74c3c;
+            margin: 0 10px;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
         }
 
         @media (max-width: 768px) {
@@ -502,12 +595,27 @@
             .search-row {
                 flex-direction: column;
             }
+
+            .login-screen {
+                margin: 20px auto;
+                padding: 30px 20px;
+            }
+
+            .user-info {
+                position: static;
+                text-align: center;
+                margin-top: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
+            <div id="user-info" class="user-info" style="display: none;">
+                <div id="user-details"></div>
+                <button onclick="logout()" class="logout-btn">Cerrar Sesión</button>
+            </div>
             <h1>Gobierno de la Provincia Río Negro</h1>
             <p>🗄️ Sistema de gestión de bases de datos</p>
         </div>
@@ -523,45 +631,63 @@
             <div id="status-message"></div>
 
             <!-- LOGIN SCREEN -->
-            <div id="login-screen" class="active screen">
-                <h2 style="margin-bottom:16px;">Iniciar sesión</h2>
-                <form id="login-form">
-                    <div class="form-group">
-                        <label for="login-email">Email</label>
-                        <input type="email" id="login-email" required>
+            <div id="login-screen" class="screen active">
+                <div class="login-screen">
+                    <div class="login-header">
+                        <h2>Iniciar Sesión</h2>
+                        <p>Sistema de Gestión - Rio Data</p>
                     </div>
-                    <div class="form-group">
-                        <label for="login-password">Contraseña</label>
-                        <input type="password" id="login-password" required>
+
+                    <div id="login-alert"></div>
+
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="login-email">Email</label>
+                            <input type="email" id="login-email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Contraseña</label>
+                            <input type="password" id="login-password" required>
+                        </div>
+                        <button type="submit" class="btn btn-full" id="login-btn">Ingresar</button>
+                    </form>
+
+                    <div class="links">
+                        <a href="register.html">Registrarse</a>
+                        <span>|</span>
+                        <a href="#" onclick="showPasswordReset()">¿Olvidaste tu contraseña?</a>
                     </div>
-                    <button type="submit" class="btn">Ingresar</button>
-                </form>
-                <div id="login-status"></div>
-                <button type="button" onclick="showPasswordReset()" class="btn btn-clear" style="margin-top:16px;">¿Olvidaste tu contraseña?</button>
+                </div>
             </div>
 
             <!-- RECUPERACIÓN DE CONTRASEÑA -->
             <div id="password-reset-modal" class="screen">
-                <h2>Recuperar Contraseña</h2>
-                <form id="reset-form" onsubmit="submitPasswordReset(event)">
-                    <div class="form-group">
-                        <label for="resetEmail">Email</label>
-                        <input type="email" id="resetEmail" required placeholder="Ingresa tu email">
-                    </div>
-                    <button type="submit" class="btn">Enviar</button>
-                    <button type="button" onclick="closePasswordReset()" class="btn btn-clear" style="margin-top:8px;">Cerrar</button>
-                </form>
-                <div id="reset-status"></div>
+                <div class="login-screen">
+                    <h2>Recuperar Contraseña</h2>
+                    <div id="reset-alert"></div>
+                    <form id="reset-form">
+                        <div class="form-group">
+                            <label for="resetEmail">Email</label>
+                            <input type="email" id="resetEmail" required placeholder="Ingresa tu email">
+                        </div>
+                        <button type="submit" class="btn btn-full">Enviar</button>
+                        <button type="button" onclick="closePasswordReset()" class="btn btn-secondary btn-full">Cancelar</button>
+                    </form>
+                </div>
             </div>
             
             <!-- MAIN MENU SCREEN -->
-            <div id="main-menu" class="screen active">
+            <div id="main-menu" class="screen">
                 <div class="main-menu">
                     <h2>Sistema de Gestión</h2>
                     <p>Elige el sistema en el que quieres operar</p>
                     
                     <div class="category-grid" id="categories-container">
-                        <!-- Cooperativas Category -->
+                        <div class="category-card">
+                            <span class="icon">🔄</span>
+                            <h3>Cargando...</h3>
+                            <p>Obteniendo categorías disponibles</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -569,30 +695,36 @@
             <!-- CATEGORY TABLES SCREEN -->
             <div id="table-selection" class="screen">
                 <div class="table-selection-header">              
-                    <button class="back-btn" onclick="showMainMenu()">
-                        <i class="fas fa-arrow-left"></i> Volver al menú principal
+                    <button class="btn btn-back" onclick="showMainMenu()">
+                        ← Volver al menú principal
                     </button>
                     <h2 id="category-title">Seleccionar Tabla</h2>
                     <p id="category-description">Elige la tabla con la que quieres trabajar</p>
                 </div>
                 
-                <div id="table-selection-content" class="tables-grid">
+                <div id="table-selection-content" class="table-grid">
                     <!-- Las tablas se cargarán dinámicamente aquí -->
                 </div>
             </div>
 
             <!-- RESET PASSWORD SCREEN -->
             <div id="reset-password-screen" class="screen">
-                <h2>Cambiar contraseña</h2>
-                <form id="reset-password-form" onsubmit="submitNewPassword(event)">
-                    <input type="hidden" id="resetToken">
-                    <div class="form-group">
-                        <label for="newPassword">Nueva contraseña</label>
-                        <input type="password" id="newPassword" required>
-                    </div>
-                    <button type="submit" class="btn">Restablecer contraseña</button>
-                </form>
-                <div id="reset-password-status" style="margin-top:16px;"></div>
+                <div class="login-screen">
+                    <h2>Cambiar contraseña</h2>
+                    <div id="reset-password-alert"></div>
+                    <form id="reset-password-form">
+                        <input type="hidden" id="resetToken">
+                        <div class="form-group">
+                            <label for="newPassword">Nueva contraseña</label>
+                            <input type="password" id="newPassword" required minlength="8">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmNewPassword">Confirmar nueva contraseña</label>
+                            <input type="password" id="confirmNewPassword" required minlength="8">
+                        </div>
+                        <button type="submit" class="btn btn-full">Restablecer contraseña</button>
+                    </form>
+                </div>
             </div>
 
             <!-- CRUD OPERATIONS SCREEN -->
@@ -703,6 +835,8 @@
 
     <script>
         const API_BASE = window.location.origin;
+        let currentUser = null;
+        let authToken = null;
 
         // Variables globales para sistema dinámico
         let currentTable = null;
@@ -713,9 +847,12 @@
         let currentDeletingRow = null;
         let dynamicTables = [];
 
-        // Mostrar solo login al inicio
+        // Inicialización
         document.addEventListener('DOMContentLoaded', function() {
-            showScreen('login-screen');
+            checkAuth();
+            setupEventListeners();
+            
+            // Verificar si hay token en URL para reset de contraseña
             const params = new URLSearchParams(window.location.search);
             const token = params.get('token');
             if (token) {
@@ -724,102 +861,273 @@
             }
         });
 
+        function setupEventListeners() {
+            // Login form
+            document.getElementById('login-form').addEventListener('submit', handleLogin);
+            
+            // Password reset form
+            document.getElementById('reset-form').addEventListener('submit', handlePasswordReset);
+            
+            // New password form
+            document.getElementById('reset-password-form').addEventListener('submit', handleNewPassword);
+            
+            // Create form
+            document.getElementById('createForm').addEventListener('submit', handleCreateForm);
+            
+            // Update form
+            document.getElementById('updateForm').addEventListener('submit', handleUpdateForm);
+        }
+
+        // Verificar autenticación
+        function checkAuth() {
+            authToken = localStorage.getItem('authToken');
+            const userStr = localStorage.getItem('user');
+            
+            if (authToken && userStr) {
+                try {
+                    currentUser = JSON.parse(userStr);
+                    showMainApp();
+                } catch (e) {
+                    console.error('Error parsing user data:', e);
+                    logout();
+                }
+            } else {
+                showScreen('login-screen');
+            }
+        }
+
+        // Mostrar aplicación principal
+        function showMainApp() {
+            showUserInfo();
+            showScreen('main-menu');
+            loadDynamicCategories();
+        }
+
+        // Mostrar información del usuario
+        function showUserInfo() {
+            if (currentUser) {
+                const userInfo = document.getElementById('user-info');
+                const userDetails = document.getElementById('user-details');
+                
+                userDetails.innerHTML = `
+                    <div>👤 ${currentUser.nombre_apellido}</div>
+                    <div>📧 ${currentUser.email}</div>
+                    <div>🎭 ${currentUser.rol}</div>
+                `;
+                
+                userInfo.style.display = 'block';
+            }
+        }
+
+        // Mostrar pantalla específica
         function showScreen(screenId) {
             document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
         }
 
-        // LOGIN
-        document.getElementById('login-form').addEventListener('submit', async function(e) {
+        // Mostrar alerta
+        function showAlert(containerId, message, type = 'error') {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+        }
+
+        // Limpiar alerta
+        function clearAlert(containerId) {
+            document.getElementById(containerId).innerHTML = '';
+        }
+
+        // Manejar login
+        async function handleLogin(e) {
             e.preventDefault();
-            const email = document.getElementById('login-email').value;
+            
+            const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
-            const statusDiv = document.getElementById('login-status');
-            statusDiv.innerText = 'Verificando...';
+            const loginBtn = document.getElementById('login-btn');
+            
+            if (!email || !password) {
+                showAlert('login-alert', 'Por favor completa todos los campos.');
+                return;
+            }
+
+            clearAlert('login-alert');
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="loading"></span>Verificando...';
+
             try {
-                const res = await fetch('/api/login', {
+                const response = await fetch('/api/login', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ email, password })
                 });
-                const data = await res.json();
-                if (data.success) {
-                    statusDiv.innerText = '';
-                    showScreen('main-menu');
-                    // Si usas JWT, guarda el token aquí: localStorage.setItem('token', data.token)
-                    // Carga datos del sistema
-                    if (typeof loadDynamicCategories === 'function') loadDynamicCategories();
-                } else {
-                    statusDiv.innerText = data.message || 'Credenciales inválidas';
-                }
-            } catch(e) {
-                statusDiv.innerText = 'Error de conexión';
-            }
-        });
 
-        // RECUPERACIÓN DE CONTRASEÑA
+                const result = await response.json();
+
+                if (result.success) {
+                    // Guardar datos de autenticación
+                    authToken = result.token;
+                    currentUser = result.user;
+                    
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('user', JSON.stringify(currentUser));
+                    
+                    showAlert('login-alert', 'Inicio de sesión exitoso. Redirigiendo...', 'success');
+                    
+                    setTimeout(() => {
+                        showMainApp();
+                    }, 1500);
+                } else {
+                    showAlert('login-alert', result.message || 'Error al iniciar sesión.');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showAlert('login-alert', 'Error de conexión. Por favor intenta nuevamente.');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = 'Ingresar';
+            }
+        }
+
+        // Cerrar sesión
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            authToken = null;
+            currentUser = null;
+            
+            document.getElementById('user-info').style.display = 'none';
+            document.getElementById('login-email').value = '';
+            document.getElementById('login-password').value = '';
+            clearAlert('login-alert');
+            
+            showScreen('login-screen');
+        }
+
+        // Mostrar recuperación de contraseña
         function showPasswordReset() {
             showScreen('password-reset-modal');
         }
+
+        // Cerrar recuperación de contraseña
         function closePasswordReset() {
             showScreen('login-screen');
-            document.getElementById('reset-status').innerText = '';
+            clearAlert('reset-alert');
             document.getElementById('resetEmail').value = '';
         }
-        async function submitPasswordReset(event) {
-            event.preventDefault();
-            const email = document.getElementById('resetEmail').value;
-            const statusDiv = document.getElementById('reset-status');
+
+        // Manejar solicitud de recuperación de contraseña
+        async function handlePasswordReset(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('resetEmail').value.trim();
+            
             if (!email) {
-                statusDiv.innerText = 'Debes ingresar un email válido.';
+                showAlert('reset-alert', 'Debes ingresar un email válido.');
                 return;
             }
-            statusDiv.innerText = 'Enviando solicitud...';
+
+            clearAlert('reset-alert');
+
             try {
-                const res = await fetch('/api/password-reset/request', {
+                const response = await fetch('/api/password-reset/request', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ email })
                 });
-                const data = await res.json();
-                statusDiv.innerText = data.message;
-            } catch(e) {
-                statusDiv.innerText = 'Error al enviar la solicitud. Intenta más tarde.';
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('reset-alert', result.message, 'success');
+                } else {
+                    showAlert('reset-alert', result.message);
+                }
+            } catch (error) {
+                console.error('Password reset error:', error);
+                showAlert('reset-alert', 'Error al enviar la solicitud. Intenta más tarde.');
             }
         }
 
-        async function submitNewPassword(event) {
-        event.preventDefault();
-        const token = document.getElementById('resetToken').value;
-        const password = document.getElementById('newPassword').value;
-        const statusDiv = document.getElementById('reset-password-status');
-        statusDiv.innerText = 'Procesando...';
-        try {
-            const res = await fetch('/api/password-reset/confirm', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, password })
-            });
-            const data = await res.json();
-            if (data.success) {
-                statusDiv.innerText = '¡Contraseña actualizada! Ya puedes ingresar.';
-                setTimeout(() => { showScreen('login-screen'); }, 3000);
-            } else {
-                statusDiv.innerText = data.message || 'Error al actualizar contraseña.';
+        // Manejar cambio de contraseña
+        async function handleNewPassword(e) {
+            e.preventDefault();
+            
+            const token = document.getElementById('resetToken').value;
+            const password = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmNewPassword').value;
+            
+            if (!password || !confirmPassword) {
+                showAlert('reset-password-alert', 'Completa todos los campos.');
+                return;
             }
-        } catch(e) {
-            statusDiv.innerText = 'Error de conexión.';
-        }
-    }
 
-        // ========== FUNCIONES DE CARGA DINÁMICA CON CATEGORÍAS ==========
-        
-        // Cargar todas las categorías disponibles dinámicamente
+            if (password !== confirmPassword) {
+                showAlert('reset-password-alert', 'Las contraseñas no coinciden.');
+                return;
+            }
+
+            if (password.length < 8) {
+                showAlert('reset-password-alert', 'La contraseña debe tener al menos 8 caracteres.');
+                return;
+            }
+
+            clearAlert('reset-password-alert');
+
+            try {
+                const response = await fetch('/api/password-reset/confirm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ token, password, confirmPassword })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('reset-password-alert', '¡Contraseña actualizada! Ya puedes ingresar.', 'success');
+                    setTimeout(() => {
+                        showScreen('login-screen');
+                        clearAlert('reset-password-alert');
+                    }, 3000);
+                } else {
+                    showAlert('reset-password-alert', result.message || 'Error al actualizar contraseña.');
+                }
+            } catch (error) {
+                console.error('New password error:', error);
+                showAlert('reset-password-alert', 'Error de conexión.');
+            }
+        }
+
+        // Función auxiliar para hacer peticiones autenticadas
+        async function authenticatedFetch(url, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`,
+                    ...options.headers
+                }
+            };
+
+            const response = await fetch(url, { ...options, ...defaultOptions });
+            
+            if (response.status === 401) {
+                logout();
+                throw new Error('Sesión expirada');
+            }
+
+            return response;
+        }
+
+        // Cargar categorías dinámicamente
         async function loadDynamicCategories() {
             try {
                 showStatus('Cargando categorías disponibles...', 'info');
                 
-                const response = await fetch(`${API_BASE}/api/categories`);
+                const response = await authenticatedFetch(`${API_BASE}/api/categories`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -829,15 +1137,26 @@
                     throw new Error(result.message);
                 }
             } catch (error) {
-                console.error('Error loading dynamic categories:', error);
+                console.error('Error loading categories:', error);
                 showStatus('Error al cargar categorías: ' + error.message, 'error');
             }
         }
-        
-        // Mostrar categorías dinámicamente en el menú principal
+
+        // Mostrar categorías
         function displayDynamicCategories(categories) {
             const container = document.getElementById('categories-container');
             container.innerHTML = '';
+            
+            if (categories.length === 0) {
+                container.innerHTML = `
+                    <div class="category-card">
+                        <span class="icon">📋</span>
+                        <h3>Sin categorías</h3>
+                        <p>No hay categorías disponibles</p>
+                    </div>
+                `;
+                return;
+            }
             
             categories.forEach(category => {
                 const card = document.createElement('div');
@@ -853,13 +1172,13 @@
                 container.appendChild(card);
             });
         }
-        
+
         // Seleccionar categoría y mostrar sus tablas
         async function selectCategory(categoryName) {
             try {
                 showStatus('Cargando tablas de la categoría...', 'info');
                 
-                const response = await fetch(`${API_BASE}/api/categories/${categoryName}/tables`);
+                const response = await authenticatedFetch(`${API_BASE}/api/categories/${categoryName}/tables`);
                 const result = await response.json();
                 
                 if (result.success) {
@@ -870,7 +1189,7 @@
                     const categoryDisplay = result.tables.length > 0 ? 
                         result.tables[0].displayName.split(' - ')[0] : categoryName;
                     updateBreadcrumb([
-                        { text: 'Inicio', onclick: 'goToMainMenu()' },
+                        { text: 'Inicio', onclick: 'showMainMenu()' },
                         { text: categoryDisplay, active: true }
                     ]);
                     
@@ -883,7 +1202,7 @@
                 showStatus('Error al cargar tablas de la categoría: ' + error.message, 'error');
             }
         }
-        
+
         // Mostrar tablas de una categoría
         function displayCategoryTables(tables, categoryName) {
             const container = document.getElementById('table-selection-content');
@@ -910,113 +1229,6 @@
             });
         }
 
-        
-        // Mostrar tablas de una categoría
-        function displayCategoryTables(tables, categoryName) {
-            const container = document.getElementById('table-selection-content');
-            const titleElement = document.getElementById('category-title');
-            const descriptionElement = document.getElementById('category-description');
-            
-            // Actualizar títulos
-            titleElement.textContent = `Tablas - ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)}`;
-            descriptionElement.textContent = 'Selecciona la tabla con la que quieres trabajar';
-            
-            container.innerHTML = '';
-            
-            tables.forEach(table => {
-                const card = document.createElement('div');
-                card.className = 'table-card';
-                card.onclick = () => selectDynamicTable(table.id);
-                
-                card.innerHTML = `
-                    <h4>${table.displayName}</h4>
-                    <p>${table.description}</p>
-                `;
-                
-                container.appendChild(card);
-            });
-        }
-        
-        // Inicializar la aplicación cargando categorías
-        document.addEventListener('DOMContentLoaded', function() {
-            loadDynamicCategories();
-            
-            // Resto del código de inicialización existente...
-            document.getElementById('createForm').addEventListener('submit', async function(e) {
-                // ... código existente
-            });
-        });
-        
-        // Cargar todas las tablas disponibles dinámicamente
-        async function loadDynamicTables() {
-            try {
-                showStatus('Cargando tablas disponibles...', 'info');
-                
-                const response = await fetch(`${API_BASE}/api/tables`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    dynamicTables = result.tables;
-                    displayDynamicTables(result.tables);
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error('Error loading dynamic tables:', error);
-                showStatus('Error al cargar tablas: ' + error.message, 'error');
-            }
-        }
-        
-        // Mostrar tablas dinámicamente en el menú principal
-        function displayDynamicTables(tables) {
-            const container = document.getElementById('categories-container');
-            container.innerHTML = '';
-            
-            tables.forEach(table => {
-                const card = document.createElement('div');
-                card.className = 'category-card';
-                card.onclick = () => selectDynamicTable(table.id);
-                
-                // Asignar íconos basados en el nombre de la tabla
-                let icon = '📊'; // ícono por defecto
-                if (table.name.toLowerCase().includes('cooperativa')) icon = '🏢';
-                if (table.name.toLowerCase().includes('mutual')) icon = '🤝';
-                if (table.name.toLowerCase().includes('financ')) icon = '💰';
-                if (table.name.toLowerCase().includes('capacit')) icon = '📚';
-                if (table.name.toLowerCase().includes('asesoria')) icon = '📋';
-                
-                card.innerHTML = `
-                    <span class="icon">${icon}</span>
-                    <h3>${table.displayName}</h3>
-                    <p>${table.description}</p>
-                `;
-                
-                container.appendChild(card);
-            });
-        }
-        
-        // Cargar esquema de tabla específica
-        async function loadTableSchema(tableName) {
-            try {
-                showStatus('Cargando estructura de tabla...', 'info');
-                
-                const response = await fetch(`${API_BASE}/api/tables/${tableName}/schema`);
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentTableSchema = result.schema;
-                    setupDynamicCrudInterface();
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error('Error loading table schema:', error);
-                showStatus('Error al cargar esquema: ' + error.message, 'error');
-            }
-        }
-        
         // Seleccionar tabla dinámica
         async function selectDynamicTable(tableName) {
             try {
@@ -1031,7 +1243,7 @@
                 // Actualizar breadcrumb
                 const tableDisplay = currentTableSchema ? currentTableSchema.displayName : tableName;
                 updateBreadcrumb([
-                    { text: 'Inicio', onclick: 'goToMainMenu()' },
+                    { text: 'Inicio', onclick: 'showMainMenu()' },
                     { text: tableDisplay, active: true }
                 ]);
                 
@@ -1041,16 +1253,26 @@
             }
         }
 
-        // Función para volver al menú de selección de tablas
-        function showTableSelection() {
-            showScreen('table-selection');
-            updateBreadcrumb([
-                { text: 'Inicio', onclick: 'goToMainMenu()' },
-                { text: 'Seleccionar Tabla', active: true }
-            ]);
+        // Cargar esquema de tabla específica
+        async function loadTableSchema(tableName) {
+            try {
+                showStatus('Cargando estructura de tabla...', 'info');
+                
+                const response = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/schema`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentTableSchema = result.schema;
+                    setupDynamicCrudInterface();
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error loading table schema:', error);
+                showStatus('Error al cargar esquema: ' + error.message, 'error');
+            }
         }
-
-        // ========== CONFIGURACIÓN DINÁMICA DE INTERFAZ ==========
 
         // Configurar interfaz CRUD dinámicamente
         function setupDynamicCrudInterface() {
@@ -1069,7 +1291,7 @@
             // Mostrar pestaña de crear por defecto
             showTab('create');
         }
-        
+
         // Generar formulario de creación dinámicamente
         function setupDynamicCreateForm() {
             if (!currentTableSchema || !currentTableSchema.columns) return;
@@ -1086,6 +1308,11 @@
                 const required = column.is_nullable === 'NO' ? 'required' : '';
                 const isPrimaryKey = column.column_name === currentTableSchema.primaryKey;
                 
+                // Skip auto-generated primary keys
+                if (isPrimaryKey && (column.data_type.includes('serial') || column.column_default?.includes('nextval'))) {
+                    return;
+                }
+                
                 // Crear label con información adicional
                 let labelText = column.column_name;
                 if (isPrimaryKey) labelText += ' (Clave Primaria)';
@@ -1100,28 +1327,8 @@
                 
                 fieldsContainer.appendChild(fieldDiv);
             });
-            
-            // ¡AGREGAR ESTA LÍNEA!
-            populateEnumDropdowns();
         }
 
-        // Poblar dropdowns de enums después de crear el formulario
-        async function populateEnumDropdowns() {
-            try {
-                // Buscar todos los selects que son campos enum
-                const selects = document.querySelectorAll('select[id]');
-                
-                for (const select of selects) {
-                    const enumType = dropdownManager.isEnumField(select.id);
-                    if (enumType) {
-                        await dropdownManager.populateDropdown(select, enumType);
-                    }
-                }
-            } catch (error) {
-                console.error('Error poblando dropdowns:', error);
-            }
-        }
-        
         // Crear elemento de input apropiado
         function createInputElement(column, inputType, required) {
             const commonAttributes = `
@@ -1130,32 +1337,7 @@
                 ${column.character_maximum_length ? `maxlength="${column.character_maximum_length}"` : ''}
             `;
             
-            // Verificar si es un campo enum
-            const enumType = dropdownManager.isEnumField(column.column_name);
-            
-            // Verificar si es un campo booleano/radio
-            const isBooleanField = dropdownManager.isBooleanField(column.column_name);
-            
-            if (enumType) {
-                // Crear select para campos enum
-                return `<select id="${column.column_name}" ${commonAttributes}>
-                    <option value="">Cargando opciones...</option>
-                </select>`;
-            } else if (isBooleanField) {
-                // Crear radio buttons para campos booleanos
-                return `
-                    <div class="radio-group">
-                        <label class="radio-option">
-                            <input type="radio" id="${column.column_name}_si" ${commonAttributes} value="Sí" ${required ? 'required' : ''}>
-                            <span class="radio-label">Sí</span>
-                        </label>
-                        <label class="radio-option">
-                            <input type="radio" id="${column.column_name}_no" ${commonAttributes} value="No" ${required ? 'required' : ''}>
-                            <span class="radio-label">No</span>
-                        </label>
-                    </div>
-                `;
-            } else if (inputType === 'textarea') {
+            if (inputType === 'textarea') {
                 return `<textarea id="${column.column_name}" ${commonAttributes} rows="3"></textarea>`;
             } else if (inputType === 'select') {
                 return `<select id="${column.column_name}" ${commonAttributes}>
@@ -1165,7 +1347,7 @@
                 return `<input type="${inputType}" id="${column.column_name}" ${commonAttributes}>`;
             }
         }
-        
+
         // Mapear tipos de PostgreSQL a tipos de input HTML
         function getInputTypeFromDataType(dataType, columnName) {
             const lowerDataType = dataType.toLowerCase();
@@ -1220,7 +1402,7 @@
             
             return 'text'; // Por defecto
         }
-        
+
         // Cargar campos para búsqueda global
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) return;
@@ -1242,14 +1424,12 @@
             }
         }
 
-        // ========== FUNCIONES AUXILIARES DINÁMICAS ==========
-
         // Obtener URL de API para operaciones CRUD
         function getDynamicApiUrl(operation) {
             return `${API_BASE}/api/tables/${currentTable}/${operation}`;
         }
 
-        // ========== NAVIGATION SYSTEM ==========
+        // Navigation functions
         function updateBreadcrumb(items) {
             const breadcrumbContent = document.getElementById('breadcrumb-content');
             breadcrumbContent.innerHTML = items.map((item, index) => 
@@ -1259,14 +1439,7 @@
             ).join('<span class="breadcrumb-separator">›</span>');
         }
 
-        function showScreen(screenId) {
-            document.querySelectorAll('.screen').forEach(screen => {
-                screen.classList.remove('active');
-            });
-            document.getElementById(screenId).classList.add('active');
-        }
-
-        function goToMainMenu() {
+        function showMainMenu() {
             currentTable = null;
             currentTableSchema = null;
             showScreen('main-menu');
@@ -1276,42 +1449,74 @@
             clearStatus();
         }
 
-        // ========== CRUD OPERATIONS ==========
+        // Manejar formulario de creación
+        async function handleCreateForm(e) {
+            e.preventDefault();
 
-        // Create form handler
-        document.addEventListener('DOMContentLoaded', function() {
-            document.getElementById('createForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
 
-                const formData = new FormData(this);
-                const data = Object.fromEntries(formData.entries());
+            try {
+                showStatus('Creando registro...', 'info');
+                
+                const response = await authenticatedFetch(getDynamicApiUrl('create'), {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                });
 
-                try {
-                    showStatus('Creando registro...', 'info');
-                    
-                    const response = await fetch(getDynamicApiUrl('create'), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data),
-                    });
-
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showCreateSuccess();
-                    } else {
-                        showStatus('Error al crear el registro: ' + result.message, 'error');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                const result = await response.json();
+                
+                if (result.success) {
+                    showCreateSuccess();
+                } else {
+                    showStatus('Error al crear el registro: ' + result.message, 'error');
                 }
-            });
-        });
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('Error al enviar el formulario: ' + error.message, 'error');
+            }
+        }
 
-        // ========== TAB MANAGEMENT ==========
+        // Manejar formulario de actualización
+        async function handleUpdateForm(e) {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const primaryKeyValue = data[primaryKey];
+
+            try {
+                showStatus('Actualizando registro...', 'info');
+                
+                const response = await authenticatedFetch(getDynamicApiUrl('update'), {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        searchCriteria: { 
+                            field: primaryKey,  
+                            value: primaryKeyValue 
+                        },
+                        updateData: data
+                    }),
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('Registro actualizado correctamente', 'success');
+                    cancelUpdate();
+                    showTab('search');
+                } else {
+                    showStatus('Error al actualizar el registro: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('Error al actualizar el registro: ' + error.message, 'error');
+            }
+        }
+
+        // TAB MANAGEMENT
         function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -1347,8 +1552,7 @@
             }
         }
 
-        // ========== GLOBAL SEARCH ==========
-        // Actualizar la función de búsqueda global
+        // GLOBAL SEARCH
         async function performGlobalSearch() {
             const searchText = document.getElementById('globalSearchText').value.trim();
             const searchField = document.getElementById('globalSearchField').value;
@@ -1361,8 +1565,8 @@
             try {
                 showStatus('Buscando...', 'info');
                 
-                const url = `${API_BASE}/api/tables/${currentTable}/search?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
-                const response = await fetch(url);
+                const url = `${getDynamicApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                const response = await authenticatedFetch(url);
                 const result = await response.json();
         
                 if (result.success) {
@@ -1377,7 +1581,7 @@
                 showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
             }
         }
-        
+
         function clearGlobalSearch() {
             document.getElementById('globalSearchText').value = '';
             document.getElementById('globalSearchField').value = '';
@@ -1436,10 +1640,9 @@
         async function loadAllRecords() {
             try {
                 showStatus('Cargando registros...', 'info');
-                document.getElementById('search-records-container').innerHTML = '<div class="loading">Cargando registros...</div>';
+                document.getElementById('search-records-container').innerHTML = '<div class="loading-text">Cargando registros...</div>';
                 
-                // Usar la nueva función dinámica
-                const response = await fetch(getDynamicApiUrl('read'));
+                const response = await authenticatedFetch(getDynamicApiUrl('read'));
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1461,8 +1664,7 @@
             try {
                 showStatus('Cargando registros...', 'info');
                 
-                // Usar la nueva función dinámica
-                const response = await fetch(getDynamicApiUrl('read'));
+                const response = await authenticatedFetch(getDynamicApiUrl('read'));
                 const result = await response.json();
                 
                 if (result.success) {
@@ -1478,7 +1680,12 @@
             }
         }
 
-        // -------- UPDATE FUNCTIONS --------
+        function refreshFields() {
+            loadDynamicFieldsForGlobalSearch();
+            showStatus('Campos actualizados', 'info');
+        }
+
+        // UPDATE FUNCTIONS
         function editRecord(primaryKeyValue) {
             console.log('Editando registro con clave primaria:', primaryKeyValue);
             
@@ -1503,12 +1710,6 @@
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
             const primaryKeyValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey;
-            
-            // Crear campo oculto para la clave primaria
-            const updatePrimaryKeyField = document.getElementById(`update-${primaryKey}`);
-            if (updatePrimaryKeyField) {
-                updatePrimaryKeyField.value = primaryKeyValue;
-            }
             
             const fieldsContainer = document.getElementById('update-fields');
             fieldsContainer.innerHTML = '';
@@ -1538,20 +1739,6 @@
                     `;
                     fieldsContainer.innerHTML += fieldHtml;
                 });
-            } else {
-                // Fallback si no hay esquema
-                Object.entries(record).forEach(([key, value]) => {
-                    if (key.startsWith('_') && key !== '_primaryKey') return;
-                    
-                    const fieldId = `update-${key.replace(/\s+/g, '_')}`;
-                    const fieldHtml = `
-                        <div class="form-group">
-                            <label for="${fieldId}">${key}:</label>
-                            <input type="text" id="${fieldId}" name="${key}" value="${value || ''}">
-                        </div>
-                    `;
-                    fieldsContainer.innerHTML += fieldHtml;
-                });
             }
         }
 
@@ -1577,7 +1764,7 @@
                 return `<input type="${inputType}" ${commonAttributes} value="${value || ''}">`;
             }
         }
-
+        
         function cancelUpdate() {
             document.getElementById('update-form-container').style.display = 'none';
             document.getElementById('update-records-container').style.display = 'block';
@@ -1585,7 +1772,7 @@
             showTab('search');
         }
 
-        // -------- DELETE FUNCTIONS --------
+        // DELETE FUNCTIONS
         function deleteRecord(primaryKeyValue) {
             console.log('Eliminando registro con clave primaria:', primaryKeyValue);
             
@@ -1626,7 +1813,7 @@
                         <p>¿Estás seguro que deseas eliminar este registro? Esta acción no se puede deshacer.</p>
                     </div>
                     
-                    <div class="confirmation-buttons">
+                    <div class="confirmation-buttons" style="margin-top: 20px;">
                         <button class="btn btn-danger" onclick="confirmDelete('${primaryKeyValue}')">Sí, eliminar</button>
                         <button class="btn btn-clear" onclick="cancelDelete()">Cancelar</button>
                     </div>
@@ -1640,9 +1827,8 @@
                 
                 const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
                 
-                const response = await fetch(getDynamicApiUrl('delete'), {
+                const response = await authenticatedFetch(getDynamicApiUrl('delete'), {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         searchCriteria: { 
                             field: primaryKey,  
@@ -1687,8 +1873,7 @@
             showStatus('Eliminación cancelada', 'info');
         }
 
-        // -------- UTILITY FUNCTIONS --------
-        // Funciones auxiliares que faltaban
+        // UTILITY FUNCTIONS
         function showStatus(message, type) {
             const statusDiv = document.getElementById('status-message');
             statusDiv.innerHTML = `<div class="status-message ${type}">${message}</div>`;
@@ -1708,6 +1893,16 @@
         function showCreateForm() {
             document.getElementById('create-form-container').style.display = 'block';
             document.getElementById('create-success-container').style.display = 'none';
+        }
+
+        function createAnotherRecord() {
+            showCreateForm();
+            document.getElementById('createForm').reset();
+        }
+
+        function viewAllRecords() {
+            showTab('search');
+            loadAllRecords();
         }
         
         function displaySearchResults(records) {
@@ -1768,44 +1963,186 @@
                 return recordDiv.outerHTML;
             }).join('');
         }
-        
-        // Cambiar la inicialización para usar categorías
-        document.addEventListener('DOMContentLoaded', function() {
-            // Cargar categorías en lugar de tablas
-            loadDynamicCategories();
-            
-            // Resto del código de inicialización...
-            document.getElementById('createForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-        
-                const formData = new FormData(this);
-                const data = Object.fromEntries(formData.entries());
-        
+
+        // DROPDOWN MANAGER (simulación básica)
+        const dropdownManager = {
+            isEnumField: function(fieldName) {
+                // Lista de campos que son enum en tu sistema
+                const enumFields = {
+                    'tipo': 'tipo',
+                    'subtipo': 'subtipo',
+                    'tipo_asamblea': 'tipo_asamblea',
+                    'tipo_financiamiento': 'tipo_financiamiento',
+                    'autoridades': 'autoridades',
+                    'departamento': 'departamento',
+                    'localidad': 'localidad'
+                };
+                return enumFields[fieldName] || null;
+            },
+
+            isBooleanField: function(fieldName) {
+                // Lista de campos que deben ser radio buttons
+                const booleanFields = [
+                    'activo',
+                    'estado',
+                    'habilitado',
+                    'verificado',
+                    'aprobado'
+                ];
+                return booleanFields.includes(fieldName.toLowerCase());
+            },
+
+            populateDropdown: async function(selectElement, enumType) {
                 try {
-                    showStatus('Creando registro...', 'info');
-                    
-                    const response = await fetch(getDynamicApiUrl('create'), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data),
-                    });
-        
+                    const response = await authenticatedFetch(`${API_BASE}/api/enum-options/${enumType}`);
                     const result = await response.json();
                     
                     if (result.success) {
-                        showCreateSuccess();
-                    } else {
-                        showStatus('Error al crear el registro: ' + result.message, 'error');
+                        selectElement.innerHTML = '<option value="">Seleccionar...</option>';
+                        result.data.forEach(value => {
+                            selectElement.innerHTML += `<option value="${value}">${value}</option>`;
+                        });
                     }
                 } catch (error) {
-                    console.error('Error:', error);
-                    showStatus('Error al enviar el formulario: ' + error.message, 'error');
+                    console.error(`Error cargando opciones para ${enumType}:`, error);
+                }
+            }
+        };
+
+        // Poblar dropdowns de enums después de crear el formulario
+        async function populateEnumDropdowns() {
+            try {
+                // Buscar todos los selects que son campos enum
+                const selects = document.querySelectorAll('select[id]');
+                
+                for (const select of selects) {
+                    const enumType = dropdownManager.isEnumField(select.id);
+                    if (enumType) {
+                        await dropdownManager.populateDropdown(select, enumType);
+                    }
+                }
+            } catch (error) {
+                console.error('Error poblando dropdowns:', error);
+            }
+        }
+
+        // KEYBOARD SHORTCUTS
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + Enter para enviar formularios
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab) {
+                    const form = activeTab.querySelector('form');
+                    if (form) {
+                        form.dispatchEvent(new Event('submit', { cancelable: true }));
+                    }
+                }
+            }
+            
+            // Escape para cancelar operaciones
+            if (e.key === 'Escape') {
+                if (currentEditingRow) {
+                    cancelUpdate();
+                } else if (currentDeletingRow) {
+                    cancelDelete();
+                } else if (document.getElementById('password-reset-modal').classList.contains('active')) {
+                    closePasswordReset();
+                }
+            }
+        });
+
+        // AUTO-SAVE DRAFT (opcional)
+        function saveDraft(formId) {
+            const form = document.getElementById(formId);
+            if (form) {
+                const formData = new FormData(form);
+                const data = Object.fromEntries(formData.entries());
+                localStorage.setItem(`draft_${formId}_${currentTable}`, JSON.stringify(data));
+            }
+        }
+
+        function loadDraft(formId) {
+            const draftData = localStorage.getItem(`draft_${formId}_${currentTable}`);
+            if (draftData) {
+                try {
+                    const data = JSON.parse(draftData);
+                    const form = document.getElementById(formId);
+                    if (form) {
+                        Object.keys(data).forEach(key => {
+                            const field = form.querySelector(`[name="${key}"]`);
+                            if (field) {
+                                if (field.type === 'checkbox') {
+                                    field.checked = data[key];
+                                } else {
+                                    field.value = data[key];
+                                }
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error loading draft:', error);
+                }
+            }
+        }
+
+        function clearDraft(formId) {
+            localStorage.removeItem(`draft_${formId}_${currentTable}`);
+        }
+
+        // VALIDATION HELPERS
+        function validateForm(formElement) {
+            const requiredFields = formElement.querySelectorAll('[required]');
+            let isValid = true;
+            let firstInvalidField = null;
+
+            requiredFields.forEach(field => {
+                if (!field.value.trim()) {
+                    field.style.borderColor = '#e74c3c';
+                    isValid = false;
+                    if (!firstInvalidField) {
+                        firstInvalidField = field;
+                    }
+                } else {
+                    field.style.borderColor = '#e9ecef';
                 }
             });
+
+            if (!isValid && firstInvalidField) {
+                firstInvalidField.focus();
+                showStatus('Por favor completa todos los campos requeridos', 'error');
+            }
+
+            return isValid;
+        }
+
+        // Add validation to forms
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add real-time validation
+            document.addEventListener('blur', function(e) {
+                if (e.target.hasAttribute('required')) {
+                    if (!e.target.value.trim()) {
+                        e.target.style.borderColor = '#e74c3c';
+                    } else {
+                        e.target.style.borderColor = '#e9ecef';
+                    }
+                }
+            }, true);
         });
+
+        // ERROR REPORTING
+        window.addEventListener('error', function(e) {
+            console.error('JavaScript Error:', e.error);
+            showStatus('Se produjo un error inesperado. Por favor recarga la página.', 'error');
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled Promise Rejection:', e.reason);
+            showStatus('Error de conexión. Verifica tu conexión a internet.', 'error');
+        });
+
+        // FINAL INITIALIZATION
+        console.log('🚀 Sistema de gestión cargado correctamente');
+        console.log('📋 Funciones disponibles: login, registro, CRUD, búsqueda');
     </script>
-    <script src="js/dropdown-utils.js"></script>
 </body>
-</html>      
+</html>
