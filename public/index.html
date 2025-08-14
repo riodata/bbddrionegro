@@ -1102,60 +1102,49 @@
             }
         }
 
-        // Actualizar la función authenticatedFetch en index.html
+        // Función authenticatedFetch corregida
         async function authenticatedFetch(url, options = {}) {
-            const token = localStorage.getItem('authToken');
-            
-            if (!token) {
-                console.error('❌ No hay token de autenticación');
-                showStatusMessage('Sesión expirada. Redirigiendo al login...', 'error');
-                setTimeout(() => logout(), 2000);
-                throw new Error('Token de autenticación requerido');
-            }
-            
-            const defaultHeaders = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
-            };
-            
-            const mergedOptions = {
-                ...options,
-                headers: {
-                    ...defaultHeaders,
-                    ...options.headers
-                }
-            };
+            const token = localStorage.getItem('token');
             
             console.log('📡 Enviando request a:', url);
-            console.log('🎟️ Con token:', token.substring(0, 20) + '...');
+            console.log('🎟️ Con token:', token ? token.substring(0, 20) + '...' : 'No token');
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
             
             try {
-                const response = await fetch(url, mergedOptions);
+                const response = await fetch(url, {
+                    ...options,
+                    headers
+                });
                 
                 console.log('📨 Respuesta status:', response.status);
                 
-                // Si el token ha expirado o es inválido
-                if (response.status === 401) {
-                    console.error('❌ Token expirado o inválido');
-                    showStatusMessage('Sesión expirada. Redirigiendo al login...', 'error');
-                    setTimeout(() => logout(), 2000);
-                    throw new Error('Sesión expirada');
-                }
-                
+                // Verificar si la respuesta es exitosa
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('❌ Error HTTP:', response.status, errorText);
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                const data = await response.json();
                 console.log('✅ Respuesta recibida exitosamente');
-                return data;
+                
+                // Retornar el Response object para que .json() funcione
+                return response;
                 
             } catch (error) {
                 console.error('❌ Error en authenticatedFetch:', error);
+                
+                // Si el token ha expirado, redirigir al login
+                if (error.message.includes('401') || error.message.includes('403')) {
+                    localStorage.removeItem('token');
+                    showLoginForm();
+                }
+                
                 throw error;
             }
         }
