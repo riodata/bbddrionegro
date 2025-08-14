@@ -1573,6 +1573,169 @@
                 showStatus('Error al cargar los datos de la entidad', 'error');
             }
         }
+
+        // Funciones de validación para campos específicos
+        
+        // Validar DNI (7-8 dígitos, solo números)
+        function validateDNI(value) {
+            if (!value) return { valid: true, message: '' };
+            
+            const cleanValue = value.toString().replace(/[^\d]/g, '');
+            
+            if (cleanValue.length < 7 || cleanValue.length > 8) {
+                return { 
+                    valid: false, 
+                    message: 'Ingresa un DNI válido (7-8 dígitos)' 
+                };
+            }
+            
+            if (!/^\d+$/.test(cleanValue)) {
+                return { 
+                    valid: false, 
+                    message: 'Solo números, sin puntos' 
+                };
+            }
+            
+            return { valid: true, message: '', value: cleanValue };
+        }
+        
+        // Formatear y validar CUIT (XX-XXXXXXXX-X)
+        function validateAndFormatCUIT(value) {
+            if (!value) return { valid: true, message: '', value: '' };
+            
+            // Limpiar entrada (solo números)
+            const cleanValue = value.toString().replace(/[^\d]/g, '');
+            
+            if (cleanValue.length !== 11) {
+                return { 
+                    valid: false, 
+                    message: 'El CUIT debe tener 11 dígitos' 
+                };
+            }
+            
+            // Formatear como XX-XXXXXXXX-X
+            const formattedCUIT = `${cleanValue.substring(0, 2)}-${cleanValue.substring(2, 10)}-${cleanValue.substring(10, 11)}`;
+            
+            return { 
+                valid: true, 
+                message: '', 
+                value: formattedCUIT 
+            };
+        }
+        
+        // Validar y formatear coordenadas (latitud/longitud)
+        function validateCoordinate(value, isLatitude = true) {
+            if (!value) return { valid: true, message: '', value: '' };
+            
+            let cleanValue = value.toString().trim();
+            
+            // Reemplazar coma por punto si es necesario
+            cleanValue = cleanValue.replace(',', '.');
+            
+            // Verificar que es un número válido
+            if (isNaN(cleanValue) || cleanValue === '') {
+                return { 
+                    valid: false, 
+                    message: 'Debe ser un número válido' 
+                };
+            }
+            
+            const numValue = parseFloat(cleanValue);
+            
+            // Validar rangos (latitud: -90 a 90, longitud: -180 a 180)
+            if (isLatitude && (numValue < -90 || numValue > 90)) {
+                return { 
+                    valid: false, 
+                    message: 'La latitud debe estar entre -90 y 90' 
+                };
+            }
+            
+            if (!isLatitude && (numValue < -180 || numValue > 180)) {
+                return { 
+                    valid: false, 
+                    message: 'La longitud debe estar entre -180 y 180' 
+                };
+            }
+            
+            // Formatear con 5 decimales
+            const formattedValue = numValue.toFixed(5);
+            
+            return { 
+                valid: true, 
+                message: '', 
+                value: formattedValue 
+            };
+        }
+        
+        // Función para mostrar mensaje de error en un campo
+        function showFieldError(fieldName, message) {
+            const field = document.getElementById(fieldName);
+            if (!field) return;
+            
+            // Remover error anterior si existe
+            const existingError = field.parentElement.querySelector('.field-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            if (message) {
+                // Agregar nuevo mensaje de error
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'field-error';
+                errorDiv.style.cssText = 'color: #dc3545; font-size: 0.875rem; margin-top: 5px;';
+                errorDiv.textContent = message;
+                field.parentElement.appendChild(errorDiv);
+                
+                // Resaltar campo con error
+                field.style.borderColor = '#dc3545';
+            } else {
+                // Limpiar estilo de error
+                field.style.borderColor = '';
+            }
+        }
+        
+        // Función para validar campo en tiempo real
+        function validateField(fieldName, value) {
+            const lowerFieldName = fieldName.toLowerCase();
+            
+            if (lowerFieldName.includes('dni')) {
+                const result = validateDNI(value);
+                showFieldError(fieldName, result.valid ? '' : result.message);
+                if (result.valid && result.value !== undefined) {
+                    document.getElementById(fieldName).value = result.value;
+                }
+                return result.valid;
+            }
+            
+            if (lowerFieldName.includes('cuit')) {
+                const result = validateAndFormatCUIT(value);
+                showFieldError(fieldName, result.valid ? '' : result.message);
+                if (result.valid && result.value) {
+                    document.getElementById(fieldName).value = result.value;
+                }
+                return result.valid;
+            }
+            
+            if (lowerFieldName.includes('latitud')) {
+                const result = validateCoordinate(value, true);
+                showFieldError(fieldName, result.valid ? '' : result.message);
+                if (result.valid && result.value) {
+                    document.getElementById(fieldName).value = result.value;
+                }
+                return result.valid;
+            }
+            
+            if (lowerFieldName.includes('longitud')) {
+                const result = validateCoordinate(value, false);
+                showFieldError(fieldName, result.valid ? '' : result.message);
+                if (result.valid && result.value) {
+                    document.getElementById(fieldName).value = result.value;
+                }
+                return result.valid;
+            }
+            
+            return true;
+        }
         
         // Generar formulario de creación dinámicamente
         function setupDynamicCreateForm() {
@@ -1642,13 +1805,70 @@
             
             // Para campos user-defined (enums), crear dropdown
             if (data_type === 'USER-DEFINED' || data_type.toLowerCase().includes('enum')) {
-                // Código existente para enums...
                 return `<select name="${column_name}" id="${column_name}" ${required}>
                     <option value="">Seleccionar...</option>
                     <!-- Opciones de enum se cargarán dinámicamente -->
                 </select>`;
             }
+
+            // Campos especiales con validación
+            if (lowerFieldName.includes('dni')) {
+                return `<input 
+                    type="text" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    maxlength="8"
+                    pattern="[0-9]{7,8}"
+                    title="DNI: 7-8 dígitos, solo números"
+                    onblur="validateField('${column_name}', this.value)"
+                    oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                >`;
+            }
             
+            if (lowerFieldName.includes('cuit')) {
+                return `<input 
+                    type="text" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    maxlength="13"
+                    placeholder="XX-XXXXXXXX-X"
+                    title="CUIT: 11 dígitos en formato XX-XXXXXXXX-X"
+                    onblur="validateField('${column_name}', this.value)"
+                >`;
+            }
+            
+            if (lowerFieldName.includes('latitud')) {
+                return `<input 
+                    type="number" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    step="0.00001"
+                    min="-90"
+                    max="90"
+                    placeholder="-XX.XXXXX"
+                    title="Latitud: entre -90 y 90 grados"
+                    onblur="validateField('${column_name}', this.value)"
+                >`;
+            }
+            
+            if (lowerFieldName.includes('longitud')) {
+                return `<input 
+                    type="number" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    step="0.00001"
+                    min="-180"
+                    max="180"
+                    placeholder="-XXX.XXXXX"
+                    title="Longitud: entre -180 y 180 grados"
+                    onblur="validateField('${column_name}', this.value)"
+                >`;
+            }
+                    
             // Resto de tipos de campo (código existente)
             switch (inputType) {
                 case 'number':
@@ -1782,7 +2002,21 @@
             e.preventDefault();
 
             const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
+            const data = {};
+            let hasErrors = false;
+            
+            // Validar cada campo antes de enviar
+            for (let [key, value] of formData.entries()) {
+                if (!validateField(key, value)) {
+                    hasErrors = true;
+                }
+                data[key] = value;
+            }
+            
+            if (hasErrors) {
+                showStatus('Por favor corrige los errores en el formulario', 'error');
+                return;
+            }
 
             try {
                 showStatus('Creando registro...', 'info');
@@ -1810,7 +2044,21 @@
             e.preventDefault();
 
             const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
+            const data = {};
+            let hasErrors = false;
+            
+            // Validar cada campo antes de enviar
+            for (let [key, value] of formData.entries()) {
+                if (!validateField(key, value)) {
+                    hasErrors = true;
+                }
+                data[key] = value;
+            }
+            
+            if (hasErrors) {
+                showStatus('Por favor corrige los errores en el formulario', 'error');
+                return;
+            }
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
             const primaryKeyValue = data[primaryKey];
