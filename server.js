@@ -75,6 +75,75 @@ app.get('/api/protected', auth.requireAuth, (req, res) => {
   res.json({ success: true, user: req.user, message: "Acceso autorizado." });
 });
 
+app.post('/api/refresh-token', auth.requireAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // Verificar que el usuario sigue activo
+        const userResult = await pool.query(
+            'SELECT id, email, nombre_apellido, rol, activo FROM users WHERE id = $1',
+            [userId]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario no encontrado'
+            });
+        }
+
+        const user = userResult.rows[0];
+
+        if (!user.activo) {
+            return res.status(401).json({
+                success: false,
+                message: 'Usuario inactivo'
+            });
+        }
+
+        // Verificar y actualizar estado activo
+        const isActive = await checkAndUpdateActiveStatus(user.id);
+        
+        if (!isActive) {
+            return res.status(401).json({
+                success: false,
+                message: 'Usuario inactivo. Contacte al administrador.'
+            });
+        }
+
+        // Generar nuevo token JWT
+        const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+        const newToken = jwt.sign(
+            { 
+                id: user.id, 
+                email: user.email, 
+                rol: user.rol,
+                nombre_apellido: user.nombre_apellido
+            }, 
+            JWT_SECRET, 
+            { expiresIn: '12h' }
+        );
+
+        // Actualizar fecha de último acceso
+        await updateLastAccess(user.id);
+
+        console.log('🔄 Token renovado para:', user.email);
+
+        res.json({
+            success: true,
+            token: newToken,
+            message: 'Token renovado exitosamente'
+        });
+
+    } catch (error) {
+        console.error('Error renovando token:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error interno del servidor'
+        });
+    }
+});
+
 // ========== FUNCIONES PARA METADATOS DINÁMICOS CON CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
