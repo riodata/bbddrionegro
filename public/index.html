@@ -1582,7 +1582,7 @@
             return 'text'; // Por defecto
         }
 
-        // Cargar campos para búsqueda global con nombres exactos
+        // Cargar campos para búsqueda global SIN mostrar el tipo
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) {
                 console.log('⚠️ No hay esquema de tabla disponible para cargar campos');
@@ -1595,9 +1595,9 @@
                     select.innerHTML = '<option value="">Selecciona un campo...</option>';
                     
                     currentTableSchema.columns.forEach(column => {
-                        // USAR EL NOMBRE EXACTO SIN MODIFICACIONES
+                        // SOLO MOSTRAR EL NOMBRE DE LA COLUMNA, SIN EL TIPO
                         const displayName = column.column_name;
-                        select.innerHTML += `<option value="${column.column_name}">${displayName} (${column.data_type})</option>`;
+                        select.innerHTML += `<option value="${column.column_name}">${displayName}</option>`;
                     });
                     
                     console.log('✅ Campos cargados:', currentTableSchema.columns.map(c => c.column_name));
