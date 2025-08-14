@@ -900,7 +900,7 @@
         function showMainApp() {
             showUserInfo();
             showScreen('main-menu');
-            loadDynamicCategories();
+            loadDynamicCategories(); // Esta línea debe estar presente
         }
 
         // Mostrar información del usuario
@@ -1102,54 +1102,57 @@
             }
         }
 
-        // Función authenticatedFetch corregida
+        // Función para realizar peticiones autenticadas
         async function authenticatedFetch(url, options = {}) {
-            const token = localStorage.getItem('token');
-            
-            console.log('📡 Enviando request a:', url);
-            console.log('🎟️ Con token:', token ? token.substring(0, 20) + '...' : 'No token');
-            
-            const headers = {
-                'Content-Type': 'application/json',
-                ...options.headers
-            };
-            
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-            }
-            
             try {
-                const response = await fetch(url, {
-                    ...options,
-                    headers
-                });
+                const token = localStorage.getItem('authToken');
                 
-                console.log('📨 Respuesta status:', response.status);
-                
-                // Verificar si la respuesta es exitosa
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                if (!token) {
+                    throw new Error('No hay token de autenticación');
                 }
+        
+                const defaultOptions = {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                };
+        
+                // Combinar opciones
+                const finalOptions = {
+                    ...defaultOptions,
+                    ...options,
+                    headers: {
+                        ...defaultOptions.headers,
+                        ...(options.headers || {})
+                    }
+                };
+        
+                console.log('🔐 Enviando petición autenticada a:', url);
+                console.log('📋 Headers:', finalOptions.headers);
+        
+                const response = await fetch(url, finalOptions);
                 
-                console.log('✅ Respuesta recibida exitosamente');
-                
-                // Retornar el Response object para que .json() funcione
+                // Si el token expiró o es inválido
+                if (response.status === 401) {
+                    console.log('❌ Token inválido o expirado');
+                    logout();
+                    throw new Error('Sesión expirada. Por favor inicia sesión nuevamente.');
+                }
+        
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Error ${response.status}: ${errorText}`);
+                }
+        
                 return response;
-                
             } catch (error) {
                 console.error('❌ Error en authenticatedFetch:', error);
-                
-                // Si el token ha expirado, redirigir al login
-                if (error.message.includes('401') || error.message.includes('403')) {
-                    localStorage.removeItem('token');
-                    showLoginForm();
-                }
-                
                 throw error;
             }
         }
 
-               // Función corregida para cargar categorías dinámicamente
+        // Función corregida para cargar categorías dinámicamente
         async function loadDynamicCategories() {
             try {
                 showStatus('Cargando categorías...', 'info');
@@ -1165,33 +1168,12 @@
                         </div>
                     `;
                 }
-                
+        
                 const response = await authenticatedFetch(`${API_BASE}/api/categories`);
-                
-                // Verificar si la respuesta es válida
-                if (!response || typeof response.json !== 'function') {
-                    console.log('📨 Respuesta directa (no es Response object):', response);
-                    
-                    // Si authenticatedFetch ya devuelve JSON parseado
-                    if (response && response.success !== undefined) {
-                        const result = response;
-                        if (result.success && result.data) {
-                            displayDynamicCategories(result.data);
-                            clearStatus();
-                            return;
-                        } else {
-                            throw new Error(result.message || 'No se pudieron cargar las categorías');
-                        }
-                    } else {
-                        throw new Error('Respuesta inválida del servidor');
-                    }
-                }
-                
-                // Si es un Response object válido
                 const result = await response.json();
                 
-                if (result.success && result.data) {
-                    displayDynamicCategories(result.data);
+                if (result.success && result.categories) {
+                    displayDynamicCategories(result.categories);
                     clearStatus();
                 } else {
                     throw new Error(result.message || 'No se pudieron cargar las categorías');
@@ -1217,6 +1199,7 @@
                 }
             }
         }
+        
         // Mostrar categorías
         function displayDynamicCategories(categories) {
             const container = document.getElementById('categories-container');
