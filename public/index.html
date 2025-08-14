@@ -1471,6 +1471,26 @@
             showTab('create');
         }
 
+        // Función para formatear fecha y hora
+        function formatDateTime(dateString) {
+            if (!dateString) return '';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString('es-AR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (error) {
+                return dateString;
+            }
+        }
+
+        // Lista de campos que no deben mostrarse en formularios
+        const hiddenFormFields = ['id', 'created_at', 'updated_at'];
+        
         // Generar formulario de creación dinámicamente
         function setupDynamicCreateForm() {
             if (!currentTableSchema || !currentTableSchema.columns) return;
@@ -1479,6 +1499,10 @@
             fieldsContainer.innerHTML = '';
             
             currentTableSchema.columns.forEach(column => {
+                const { column_name, data_type, is_nullable, is_primary_key } = column;
+                if (hiddenFormFields.includes(column_name)) {
+                    return;
+                }
                 const fieldDiv = document.createElement('div');
                 fieldDiv.className = 'form-group';
                 
@@ -1902,6 +1926,10 @@
             // Usar esquema dinámico para crear campos
             if (currentTableSchema && currentTableSchema.columns) {
                 currentTableSchema.columns.forEach(column => {
+                    const { column_name, data_type, is_nullable, is_primary_key } = column;
+                    if (hiddenFormFields.includes(column_name)) {
+                        return;
+                    }
                     const fieldName = column.column_name;
                     const value = record[fieldName] || '';
                     const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
@@ -2091,62 +2119,60 @@
         }
         
         function displaySearchResults(records) {
-            const activeTab = document.querySelector('.tab-content.active').id;
-            let container;
-            
-            switch(activeTab) {
-                case 'search':
-                    container = document.getElementById('search-records-container');
-                    break;
-                case 'update':
-                    container = document.getElementById('update-records-container');
-                    break;
-                case 'delete':
-                    container = document.getElementById('delete-records');
-                    break;
-                default:
-                    return;
-            }
-            
-            if (records.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <span class="icon">🔍</span>
-                        <h3>No se encontraron registros</h3>
-                        <p>No hay registros que coincidan con los criterios de búsqueda</p>
-                    </div>
-                `;
+            const container = document.getElementById('search-records-container');
+            container.innerHTML = '';
+        
+            if (!records || records.length === 0) {
+                container.innerHTML = '<div class="empty-state"><span class="icon">🔍</span><h3>No hay resultados</h3><p>No se encontraron registros que coincidan con la búsqueda</p></div>';
                 return;
             }
-            
-            container.innerHTML = records.map(record => {
-                const recordDiv = document.createElement('div');
-                recordDiv.className = 'record';
+        
+            records.forEach((record, index) => {
+                const recordElement = document.createElement('div');
+                recordElement.className = 'record';
                 
-                // Crear contenido del registro
-                let recordContent = '<div class="record-header">';
-                recordContent += `<div class="record-title">ID: ${record._primaryKey}</div>`;
-                recordContent += '<div class="record-buttons">';
+                // Extraer campos de metadatos
+                const id = record.id || record._primaryKey || '';
+                const createdAt = record.created_at || '';
+                const updatedAt = record.updated_at || '';
                 
-                if (activeTab === 'update') {
-                    recordContent += `<button class="btn btn-warning" onclick="editRecord('${record._primaryKey}')">✏️ Editar</button>`;
+                // Formatear fechas si existen
+                let metadataText = '';
+                if (createdAt || updatedAt) {
+                    const createdText = createdAt ? `Creado: ${formatDateTime(createdAt)}` : '';
+                    const updatedText = updatedAt ? `Última modificación: ${formatDateTime(updatedAt)}` : '';
+                    metadataText = [createdText, updatedText].filter(Boolean).join('; ');
                 }
-                if (activeTab === 'delete') {
-                    recordContent += `<button class="btn btn-danger" onclick="deleteRecord('${record._primaryKey}')">🗑️ Eliminar</button>`;
-                }
-                
-                recordContent += '</div></div>';
-                
-                // Agregar campos del registro
-                Object.keys(record).forEach(key => {
-                    if (!key.startsWith('_')) {
-                        recordContent += `<div><strong>${key}:</strong> ${record[key] || 'N/A'}</div>`;
-                    }
-                });
-                
-                recordDiv.innerHTML = recordContent;
-                return recordDiv.outerHTML;
-            }).join('');
+        
+                // Crear contenido del registro excluyendo campos ocultos
+                const recordContent = Object.entries(record)
+                    .filter(([key]) => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(key))
+                    .map(([key, value]) => {
+                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
+                    })
+                    .join('<br>');
+        
+                recordElement.innerHTML = `
+                    <div class="record-header">
+                        <div>
+                            <div class="record-title">ID: ${id}</div>
+                            ${metadataText ? `<div style="font-size: 0.85em; color: #6c757d; margin-top: 4px;">${metadataText}</div>` : ''}
+                        </div>
+                        <div class="record-buttons">
+                            <!-- Botones se agregarán según el contexto -->
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        ${recordContent}
+                    </div>
+                `;
+        
+                container.appendChild(recordElement);
+            });
+        
+            // Actualizar records globales para otras operaciones
+            currentRecords = records;
         }
 
         // DROPDOWN MANAGER (simulación básica)
