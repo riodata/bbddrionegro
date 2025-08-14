@@ -235,13 +235,13 @@ async function getTableSchema(tableName) {
       throw new Error(`No se encontraron columnas para la tabla '${tableName}'`);
     }
 
-    // Encontrar la clave primaria
+    // Encontrar la clave primaria - USAR EL NOMBRE EXACTO
     const primaryKeyColumn = columns.find(col => col.is_primary_key === true);
     const primaryKey = primaryKeyColumn ? primaryKeyColumn.column_name : columns[0].column_name;
 
     // Convertir el formato para mantener compatibilidad con el frontend
     const formattedColumns = columns.map(col => ({
-      column_name: col.column_name,
+      column_name: col.column_name, // USAR NOMBRE EXACTO SIN MODIFICAR
       data_type: col.data_type,
       is_nullable: col.is_nullable ? 'YES' : 'NO',
       column_default: col.column_default,
@@ -256,7 +256,7 @@ async function getTableSchema(tableName) {
     return {
       tableName,
       columns: formattedColumns,
-      primaryKey: primaryKey,
+      primaryKey: primaryKey, // NOMBRE EXACTO DE LA CLAVE PRIMARIA
       displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     };
   } catch (error) {
@@ -564,7 +564,6 @@ app.post('/api/password-reset/request', async (req, res) => {
 });
 
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
-
 // CREATE - Crear nuevo registro
 app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => {
   try {
@@ -578,13 +577,14 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
     
     logOperation('CREATE REQUEST', { tableName, data });
 
-    // Construir query de inserción
+    // Construir query de inserción CON COMILLAS DOBLES
     const columns = Object.keys(data);
     const values = Object.values(data);
     const placeholders = values.map((_, index) => `$${index + 1}`);
+    const quotedColumns = columns.map(col => `"${col}"`).join(', ');
     
     const insertQuery = `
-      INSERT INTO ${tableName} (${columns.join(', ')})
+      INSERT INTO "${tableName}" (${quotedColumns})
       VALUES (${placeholders.join(', ')})
       RETURNING *
     `;
@@ -618,11 +618,12 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
     // Validar tabla
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
-    const primaryKey = tableSchema.primaryKey;
+    const primaryKey = tableSchema.primaryKey; // USAR NOMBRE EXACTO
     
-    logOperation('READ REQUEST', { tableName });
+    logOperation('READ REQUEST', { tableName, primaryKey });
 
-    const query = `SELECT * FROM ${tableName} ORDER BY ${primaryKey} ASC`;
+    // USAR COMILLAS DOBLES PARA PRESERVAR CASE SENSITIVITY
+    const query = `SELECT * FROM "${tableName}" ORDER BY "${primaryKey}" ASC`;
     const result = await pool.query(query);
 
     // Mapear datos para mantener compatibilidad con el frontend
@@ -666,8 +667,8 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
 
         // Validar que el campo de búsqueda existe en la tabla
         if (searchField) {
-            const fieldExists = tableSchema.columns.some(col => 
-                col.column_name.toLowerCase() === searchField.toLowerCase()
+            const fieldExists = tableSchema.columns.find(col => 
+                col.column_name === searchField // BÚSQUEDA EXACTA
             );
             
             if (!fieldExists) {
@@ -679,21 +680,17 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
             }
         }
 
-        let query = `SELECT * FROM ${tableName}`;
+        let query = `SELECT * FROM "${tableName}"`; // USAR COMILLAS DOBLES
         let queryParams = [];
 
         // Aplicar filtro si existe
         if (searchText && searchField) {
-            // Usar el nombre exacto del campo como aparece en la base de datos
-            const exactFieldName = tableSchema.columns.find(col => 
-                col.column_name.toLowerCase() === searchField.toLowerCase()
-            ).column_name;
-            
-            query += ` WHERE ${exactFieldName} ILIKE $1`;
+            // USAR EL NOMBRE EXACTO DEL CAMPO CON COMILLAS DOBLES
+            query += ` WHERE "${searchField}" ILIKE $1`;
             queryParams.push(`%${searchText}%`);
         }
 
-        query += ` ORDER BY ${primaryKey} ASC`;
+        query += ` ORDER BY "${primaryKey}" ASC`; // USAR COMILLAS DOBLES
 
         const result = await pool.query(query, queryParams);
 
@@ -724,6 +721,7 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
         });
     }
 });
+
 app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
@@ -777,15 +775,15 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
-    // Construir query de actualización
+    // Construir query de actualización CON COMILLAS DOBLES
     const updateColumns = Object.keys(cleanUpdateData);
     const updateValues = Object.values(cleanUpdateData);
-    const setClause = updateColumns.map((col, index) => `${col} = $${index + 1}`).join(', ');
+    const setClause = updateColumns.map((col, index) => `"${col}" = $${index + 1}`).join(', ');
     
     const updateQuery = `
-      UPDATE ${tableName} 
+      UPDATE "${tableName}" 
       SET ${setClause}
-      WHERE ${searchCriteria.field} = $${updateValues.length + 1}
+      WHERE "${searchCriteria.field}" = $${updateValues.length + 1}
       RETURNING *
     `;
 
@@ -839,8 +837,8 @@ app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) =
     }
 
     const deleteQuery = `
-      DELETE FROM ${tableName} 
-      WHERE ${searchCriteria.field} = $1
+      DELETE FROM "${tableName}" 
+      WHERE "${searchCriteria.field}" = $1
       RETURNING *
     `;
 
