@@ -878,6 +878,24 @@
             document.getElementById('updateForm').addEventListener('submit', handleUpdateForm);
         }
 
+           // Función para mostrar mensajes de estado
+        function showStatus(message, type = 'info') {
+            const statusElement = document.getElementById('status-message');
+            if (statusElement) {
+                const alertClass = type === 'error' ? 'error' : 
+                                 type === 'success' ? 'success' : 'info';
+                statusElement.innerHTML = `<div class="status-message ${alertClass}">${message}</div>`;
+            }
+            console.log(`📢 Status (${type}): ${message}`);
+        }
+    
+        // Función para limpiar mensajes de estado
+        function clearStatus() {
+            const statusElement = document.getElementById('status-message');
+            if (statusElement) {
+                statusElement.innerHTML = '';
+            }
+        }
         // Verificar autenticación
         function checkAuth() {
             authToken = localStorage.getItem('authToken');
