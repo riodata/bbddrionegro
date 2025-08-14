@@ -360,29 +360,29 @@ app.get('/api/enum-options/:enumName', async (req, res) => {
 // ========== ENDPOINTS PARA CATEGORÍAS ==========
 
 // Obtener todas las categorías disponibles
-app.get('/api/categories', async (req, res) => {
-  try {
-    const categories = await getCategories();
-    
-    res.json({
-      success: true,
-      categories: categories.map(cat => ({
-        id: cat.category_name,
-        name: cat.category_name,
-        displayName: cat.category_display_name,
-        description: cat.category_description,
-        icon: cat.category_icon || '📊'
-      })),
-      total: categories.length
-    });
-  } catch (error) {
-    console.error('Error obteniendo categorías:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener las categorías disponibles',
-      error: error.message
-    });
-  }
+app.get('/api/categories', auth.requireAuth, async (req, res) => {
+    try {
+        const categories = await getCategories();
+        
+        res.json({
+            success: true,
+            categories: categories.map(cat => ({
+                id: cat.category_name,
+                name: cat.category_name,
+                displayName: cat.category_display_name,
+                description: cat.category_description,
+                icon: cat.category_icon || '📊'
+            })),
+            total: categories.length
+        });
+    } catch (error) {
+        console.error('Error obteniendo categorías:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al obtener las categorías disponibles',
+            error: error.message
+        });
+    }
 });
 
 // Obtener tablas de una categoría específica
@@ -421,7 +421,7 @@ app.get('/api/categories/:categoryName/tables', async (req, res) => {
 });
 
 // Obtener esquema de una tabla específica
-app.get('/api/tables/:tableName/schema', async (req, res) => {
+app.get('/api/tables/:tableName/schema', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     
@@ -635,7 +635,7 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/tables/:tableName/fields', async (req, res) => {
+app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     
