@@ -306,45 +306,116 @@ async function getTableFields(tableName) {
   }
 }
 
-// Función auxiliar para construir condiciones de búsqueda según el tipo de dato
+// Función auxiliar mejorada para construir condiciones de búsqueda según el tipo de dato
 function buildSearchCondition(fieldName, searchText, dataType) {
     const lowerDataType = dataType.toLowerCase();
     
+    console.log(`🔍 Construyendo búsqueda para campo: ${fieldName}, tipo: ${dataType}, texto: ${searchText}`);
+    
+    // Números (enteros, decimales, etc.)
     if (lowerDataType.includes('int') || lowerDataType.includes('numeric') || 
         lowerDataType.includes('decimal') || lowerDataType.includes('float') || 
-        lowerDataType.includes('double') || lowerDataType.includes('bigint')) {
+        lowerDataType.includes('double') || lowerDataType.includes('bigint') ||
+        lowerDataType.includes('real') || lowerDataType.includes('money')) {
         
-        // Para números
         if (isNaN(searchText)) {
-            // Si no es un número, buscar como texto
+            console.log(`📊 Número buscado como texto: ${searchText}`);
             return {
                 condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
                 value: `%${searchText}%`
             };
         } else {
-            // Si es un número, búsqueda exacta
+            console.log(`📊 Búsqueda numérica exacta: ${searchText}`);
             return {
                 condition: `"${fieldName}" = $1`,
                 value: parseFloat(searchText)
             };
         }
-    } else if (lowerDataType.includes('bool')) {
-        // Para booleanos
-        const boolValue = ['true', '1', 'sí', 'si', 'yes', 't'].includes(searchText.toLowerCase());
+    }
+    
+    // Booleanos
+    else if (lowerDataType.includes('bool')) {
+        const boolValue = ['true', '1', 'sí', 'si', 'yes', 't', 'verdadero'].includes(searchText.toLowerCase());
+        console.log(`✅ Búsqueda booleana: ${searchText} -> ${boolValue}`);
         return {
             condition: `"${fieldName}" = $1`,
             value: boolValue
         };
-    } else if (lowerDataType.includes('date') || lowerDataType.includes('timestamp')) {
-        // Para fechas
+    }
+    
+    // Fechas y timestamps
+    else if (lowerDataType.includes('date') || lowerDataType.includes('timestamp') || 
+             lowerDataType.includes('time')) {
+        console.log(`📅 Búsqueda de fecha como texto: ${searchText}`);
         return {
             condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
-    } else {
-        // Para texto
+    }
+    
+    // Tipos USER-DEFINED (ENUMs, tipos personalizados)
+    else if (lowerDataType.includes('user-defined') || lowerDataType === 'user_defined' ||
+             lowerDataType.includes('enum')) {
+        console.log(`🏷️ Tipo USER-DEFINED detectado: ${dataType}`);
+        return {
+            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            value: `%${searchText}%`
+        };
+    }
+    
+    // Tipos de texto nativos
+    else if (lowerDataType.includes('text') || lowerDataType.includes('varchar') || 
+             lowerDataType.includes('char') || lowerDataType.includes('character') ||
+             lowerDataType.includes('string') || lowerDataType.includes('name') ||
+             lowerDataType.includes('citext')) {
+        console.log(`📝 Texto nativo: ${dataType}`);
         return {
             condition: `"${fieldName}" ILIKE $1`,
+            value: `%${searchText}%`
+        };
+    }
+    
+    // Arrays
+    else if (lowerDataType.includes('array') || lowerDataType.includes('[]')) {
+        console.log(`📋 Array detectado: ${dataType}`);
+        return {
+            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            value: `%${searchText}%`
+        };
+    }
+    
+    // UUID
+    else if (lowerDataType.includes('uuid')) {
+        console.log(`🆔 UUID detectado: ${dataType}`);
+        if (searchText.length === 36 && searchText.includes('-')) {
+            // Búsqueda exacta si parece un UUID completo
+            return {
+                condition: `"${fieldName}" = $1`,
+                value: searchText
+            };
+        } else {
+            // Búsqueda parcial
+            return {
+                condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+                value: `%${searchText}%`
+            };
+        }
+    }
+    
+    // JSON/JSONB
+    else if (lowerDataType.includes('json')) {
+        console.log(`📄 JSON detectado: ${dataType}`);
+        return {
+            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            value: `%${searchText}%`
+        };
+    }
+    
+    // Cualquier otro tipo desconocido - usar conversión segura
+    else {
+        console.log(`❓ Tipo desconocido, usando conversión segura: ${dataType}`);
+        return {
+            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -696,7 +767,7 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   }
 });
 
-// SEARCH - Versión simplificada usando la función auxiliar
+// SEARCH - Búsqueda simple usando la función auxiliar mejorada
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
     try {
         const { tableName } = req.params;
@@ -727,6 +798,10 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
         }
 
         query += ` ORDER BY "${primaryKey}" ASC`;
+        
+        console.log(`📋 Query final: ${query}`);
+        console.log(`📋 Parámetros: ${JSON.stringify(queryParams)}`);
+
         const result = await pool.query(query, queryParams);
 
         const mappedData = result.rows.map((record, index) => ({
@@ -734,6 +809,8 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
             ...record,
             _rowIndex: index + 1
         }));
+
+        logOperation('SEARCH SUCCESS', `${mappedData.length} registros encontrados`);
 
         res.json({
             success: true,
