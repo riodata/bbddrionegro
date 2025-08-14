@@ -584,57 +584,77 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
 
 // SEARCH - Búsqueda simple
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
-  try {
-    const { tableName } = req.params;
-    const { searchText, searchField } = req.query;
-    
-    // Validar tabla
-    await validateTableAccess(tableName);
-    const tableSchema = await getTableSchema(tableName);
-    const primaryKey = tableSchema.primaryKey;
-    
-    logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
+    try {
+        const { tableName } = req.params;
+        const { searchText, searchField } = req.query;
+        
+        // Validar tabla
+        await validateTableAccess(tableName);
+        const tableSchema = await getTableSchema(tableName);
+        const primaryKey = tableSchema.primaryKey;
+        
+        logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
 
-    let query = `SELECT * FROM ${tableName}`;
-    let queryParams = [];
+        // Validar que el campo de búsqueda existe en la tabla
+        if (searchField) {
+            const fieldExists = tableSchema.columns.some(col => 
+                col.column_name.toLowerCase() === searchField.toLowerCase()
+            );
+            
+            if (!fieldExists) {
+                const availableFields = tableSchema.columns.map(col => col.column_name).join(', ');
+                return res.status(400).json({
+                    success: false,
+                    message: `El campo '${searchField}' no existe en la tabla '${tableName}'. Campos disponibles: ${availableFields}`
+                });
+            }
+        }
 
-    // Aplicar filtro si existe
-    if (searchText && searchField) {
-      query += ` WHERE ${searchField} ILIKE $1`;
-      queryParams.push(`%${searchText}%`);
+        let query = `SELECT * FROM ${tableName}`;
+        let queryParams = [];
+
+        // Aplicar filtro si existe
+        if (searchText && searchField) {
+            // Usar el nombre exacto del campo como aparece en la base de datos
+            const exactFieldName = tableSchema.columns.find(col => 
+                col.column_name.toLowerCase() === searchField.toLowerCase()
+            ).column_name;
+            
+            query += ` WHERE ${exactFieldName} ILIKE $1`;
+            queryParams.push(`%${searchText}%`);
+        }
+
+        query += ` ORDER BY ${primaryKey} ASC`;
+
+        const result = await pool.query(query, queryParams);
+
+        // Mapear datos para mantener compatibilidad
+        const mappedData = result.rows.map((record, index) => ({
+            _primaryKey: record[primaryKey],
+            ...record,
+            _rowIndex: index + 1
+        }));
+
+        logOperation('SEARCH SUCCESS', `${mappedData.length} registros encontrados`);
+
+        res.json({
+            success: true,
+            data: mappedData,
+            total: mappedData.length,
+            searchText: searchText || null,
+            searchField: searchField || null,
+            primaryKey: primaryKey,
+            availableFields: tableSchema.columns.map(col => col.column_name)
+        });
+    } catch (error) {
+        console.error('❌ Error inesperado en SEARCH:', error);
+        const errorInfo = handlePostgresError(error, 'búsqueda de registros');
+        res.status(errorInfo.status).json({
+            success: false,
+            message: errorInfo.message
+        });
     }
-
-    query += ` ORDER BY ${primaryKey} ASC`;
-
-    const result = await pool.query(query, queryParams);
-
-    // Mapear datos para mantener compatibilidad
-    const mappedData = result.rows.map((record, index) => ({
-      _primaryKey: record[primaryKey],
-      ...record,
-      _rowIndex: index + 1
-    }));
-
-    logOperation('SEARCH SUCCESS', `${mappedData.length} registros encontrados`);
-
-    res.json({
-      success: true,
-      data: mappedData,
-      total: mappedData.length,
-      searchText: searchText || null,
-      searchField: searchField || null,
-      primaryKey: primaryKey
-    });
-  } catch (error) {
-    console.error('❌ Error inesperado en SEARCH:', error);
-    const errorInfo = handlePostgresError(error, 'búsqueda de registros');
-    res.status(errorInfo.status).json({
-      success: false,
-      message: errorInfo.message
-    });
-  }
 });
-
 app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
