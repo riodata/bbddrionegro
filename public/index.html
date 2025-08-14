@@ -1102,43 +1102,61 @@
             }
         }
 
-        // Función auxiliar para hacer peticiones autenticadas
+        // Actualizar la función authenticatedFetch en index.html
         async function authenticatedFetch(url, options = {}) {
-            const defaultOptions = {
+            const token = localStorage.getItem('authToken');
+            
+            if (!token) {
+                console.error('❌ No hay token de autenticación');
+                showStatusMessage('Sesión expirada. Redirigiendo al login...', 'error');
+                setTimeout(() => logout(), 2000);
+                throw new Error('Token de autenticación requerido');
+            }
+            
+            const defaultHeaders = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            };
+            
+            const mergedOptions = {
+                ...options,
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`,
+                    ...defaultHeaders,
                     ...options.headers
                 }
             };
-
-            const response = await fetch(url, { ...options, ...defaultOptions });
             
-            if (response.status === 401) {
-                logout();
-                throw new Error('Sesión expirada');
-            }
-
-            return response;
-        }
-
-        // Cargar categorías dinámicamente
-        async function loadDynamicCategories() {
+            console.log('📡 Enviando request a:', url);
+            console.log('🎟️ Con token:', token.substring(0, 20) + '...');
+            
             try {
-                showStatus('Cargando categorías disponibles...', 'info');
+                const response = await fetch(url, mergedOptions);
                 
-                const response = await authenticatedFetch(`${API_BASE}/api/categories`);
-                const result = await response.json();
+                console.log('📨 Respuesta status:', response.status);
                 
-                if (result.success) {
-                    displayDynamicCategories(result.categories);
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
+                // Si el token ha expirado o es inválido
+                if (response.status === 401) {
+                    console.error('❌ Token expirado o inválido');
+                    showStatusMessage('Sesión expirada. Redirigiendo al login...', 'error');
+                    setTimeout(() => logout(), 2000);
+                    throw new Error('Sesión expirada');
                 }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Error HTTP:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('✅ Respuesta recibida exitosamente');
+                return data;
+                
             } catch (error) {
-                console.error('Error loading categories:', error);
-                showStatus('Error al cargar categorías: ' + error.message, 'error');
+                console.error('❌ Error en authenticatedFetch:', error);
+                throw error;
             }
         }
 
