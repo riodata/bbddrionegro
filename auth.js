@@ -108,6 +108,8 @@ exports.login = async function(req, res) {
       { expiresIn: '12h' }
     );
 
+    console.log('✅ Login exitoso para:', user.email);
+
     res.json({ 
       success: true, 
       token, 
@@ -239,37 +241,83 @@ exports.logout = function(req, res) {
   });
 };
 
+// 🔧 MIDDLEWARE DE AUTENTICACIÓN CORREGIDO
 exports.requireAuth = function(req, res, next) {
-  const header = req.headers['authorization'];
+  // Intentar obtener el token de diferentes formas
+  let token = null;
   
-  if (!header) {
+  // 1. Desde el header Authorization (con mayúscula)
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+  if (authHeader) {
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7); // Remover "Bearer "
+    } else {
+      token = authHeader; // Por si viene sin "Bearer "
+    }
+  }
+  
+  // 2. Desde el query parameter (fallback)
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+  
+  // 3. Desde el body (fallback)
+  if (!token && req.body.token) {
+    token = req.body.token;
+  }
+  
+  console.log('🔐 Verificando token de autenticación...');
+  console.log('📋 Headers recibidos:', {
+    authorization: req.headers['authorization'],
+    Authorization: req.headers['Authorization'],
+    'content-type': req.headers['content-type']
+  });
+  console.log('🎟️ Token encontrado:', token ? 'SÍ' : 'NO');
+  
+  if (!token) {
+    console.error('❌ No se encontró token de autenticación');
     return res.status(401).json({ 
       success: false, 
       message: "Token de autenticación requerido." 
     });
   }
-
-  const token = header.replace('Bearer ', '');
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    console.log('✅ Token válido para usuario:', decoded.email);
     req.user = decoded;
     next();
   } catch (err) {
-    res.status(401).json({ 
-      success: false, 
-      message: "Token inválido o expirado." 
-    });
+    console.error('❌ Error verificando token:', err.message);
+    
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Token expirado. Por favor inicia sesión nuevamente." 
+      });
+    } else if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Token inválido." 
+      });
+    } else {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Error de autenticación." 
+      });
+    }
   }
 };
 
 exports.requireAdmin = function(req, res, next) {
   if (!req.user || req.user.rol !== 'admin') {
+    console.log('❌ Acceso denegado - No es admin:', req.user?.email);
     return res.status(403).json({ 
       success: false, 
       message: "Se requieren permisos de administrador." 
     });
   }
+  console.log('✅ Acceso admin concedido a:', req.user.email);
   next();
 };
 
@@ -372,4 +420,13 @@ exports.cleanExpiredUsers = async function() {
     console.error('Error limpiando usuarios vencidos:', error);
     return 0;
   }
+};
+
+// 🆕 Función de debugging para verificar autenticación
+exports.debugAuth = function(req, res, next) {
+  console.log('🔍 DEBUG AUTH - Headers:', req.headers);
+  console.log('🔍 DEBUG AUTH - Method:', req.method);
+  console.log('🔍 DEBUG AUTH - URL:', req.url);
+  console.log('🔍 DEBUG AUTH - Body:', req.body);
+  next();
 };
