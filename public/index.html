@@ -1160,6 +1160,30 @@
             }
         }
 
+        // Cargar categorías dinámicas
+        async function loadDynamicCategories() {
+            console.log('🔄 Cargando categorías dinámicas...');
+            
+            try {
+                const response = await authenticatedFetch('/api/categories');
+                console.log('📡 Respuesta categorías:', response);
+                
+                if (response.success) {
+                    const categories = response.categories || [];
+                    console.log('📊 Categorías encontradas:', categories);
+                    displayDynamicCategories(categories);
+                } else {
+                    console.error('❌ Error en respuesta categorías:', response);
+                    showStatus('Error cargando categorías: ' + (response.message || 'Error desconocido'), 'error');
+                    displayCategoriesError();
+                }
+            } catch (error) {
+                console.error('❌ Error cargando categorías:', error);
+                showStatus('Error de conexión al cargar categorías', 'error');
+                displayCategoriesError();
+            }
+        }
+
         // Mostrar categorías
         function displayDynamicCategories(categories) {
             const container = document.getElementById('categories-container');
@@ -1900,6 +1924,23 @@
         function clearStatus() {
             const statusDiv = document.getElementById('status-message');
             statusDiv.innerHTML = '';
+        }
+
+        // Alias for showStatus for compatibility
+        function showStatusMessage(message, type) {
+            showStatus(message, type);
+        }
+
+        // Mostrar error al cargar categorías
+        function displayCategoriesError() {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = `
+                <div class="category-card">
+                    <span class="icon">⚠️</span>
+                    <h3>Error de conexión</h3>
+                    <p>No se pudieron cargar las categorías. Intenta recargar la página.</p>
+                </div>
+            `;
         }
         
         function showCreateSuccess() {
