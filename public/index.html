@@ -1160,6 +1160,49 @@
             }
         }
 
+                // Función para cargar categorías dinámicamente
+        async function loadDynamicCategories() {
+            try {
+                showStatus('Cargando categorías...', 'info');
+                
+                // Mostrar estado de carga en el contenedor
+                const container = document.getElementById('categories-container');
+                container.innerHTML = `
+                    <div class="category-card">
+                        <span class="icon">🔄</span>
+                        <h3>Cargando...</h3>
+                        <p>Obteniendo categorías disponibles</p>
+                    </div>
+                `;
+                
+                const response = await authenticatedFetch(`${API_BASE}/api/categories`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    displayDynamicCategories(result.data);
+                    clearStatus();
+                } else {
+                    throw new Error(result.message || 'No se pudieron cargar las categorías');
+                }
+            } catch (error) {
+                console.error('Error loading dynamic categories:', error);
+                showStatus('Error al cargar categorías: ' + error.message, 'error');
+                
+                // Mostrar error en el contenedor de categorías
+                const container = document.getElementById('categories-container');
+                container.innerHTML = `
+                    <div class="category-card">
+                        <span class="icon">⚠️</span>
+                        <h3>Error al cargar</h3>
+                        <p>No se pudieron cargar las categorías. ${error.message}</p>
+                        <button class="btn" onclick="loadDynamicCategories()" style="margin-top: 10px;">
+                            🔄 Reintentar
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
         // Mostrar categorías
         function displayDynamicCategories(categories) {
             const container = document.getElementById('categories-container');
