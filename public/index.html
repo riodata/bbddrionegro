@@ -1582,7 +1582,7 @@
             return 'text'; // Por defecto
         }
 
-        // Cargar campos para búsqueda global con validación
+        // Cargar campos para búsqueda global con nombres exactos
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) {
                 console.log('⚠️ No hay esquema de tabla disponible para cargar campos');
@@ -1595,8 +1595,8 @@
                     select.innerHTML = '<option value="">Selecciona un campo...</option>';
                     
                     currentTableSchema.columns.forEach(column => {
-                        const displayName = column.column_name.charAt(0).toUpperCase() + 
-                                          column.column_name.slice(1).replace(/_/g, ' ');
+                        // USAR EL NOMBRE EXACTO SIN MODIFICACIONES
+                        const displayName = column.column_name;
                         select.innerHTML += `<option value="${column.column_name}">${displayName} (${column.data_type})</option>`;
                     });
                     
@@ -1608,6 +1608,7 @@
                 showStatus('Error al cargar campos para búsqueda', 'error');
             }
         }
+        
         // Obtener URL de API para operaciones CRUD
         function getDynamicApiUrl(operation) {
             return `${API_BASE}/api/tables/${currentTable}/${operation}`;
