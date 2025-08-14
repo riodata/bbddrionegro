@@ -52,6 +52,18 @@ app.use(express.urlencoded({ extended: true }));
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Middleware de debugging para autenticación
+app.use('/api', (req, res, next) => {
+  console.log(`🌐 ${req.method} ${req.url}`);
+  console.log('📋 Headers:', {
+    authorization: req.headers['authorization'],
+    Authorization: req.headers['Authorization'],
+    'content-type': req.headers['content-type'],
+    'user-agent': req.headers['user-agent']?.substring(0, 50) + '...'
+  });
+  next();
+});
+
 // AHORA SÍ: ENDPOINTS de autenticación (después de los middlewares)
 app.post('/api/login', auth.login);
 app.post('/api/register', auth.register);
