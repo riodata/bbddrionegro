@@ -504,6 +504,40 @@ async function getAllEnumOptions() {
   }
 }
 
+async function getForeignKeyData(tableName, foreignTable, foreignColumn, displayColumn = 'nombre') {
+  try {
+    // Construir query para obtener datos ordenados alfabéticamente
+    const query = `
+      SELECT "${foreignColumn}", "${displayColumn}"
+      FROM "${foreignTable}" 
+      WHERE "${displayColumn}" IS NOT NULL 
+      ORDER BY "${displayColumn}" ASC
+    `;
+    
+    const result = await pool.query(query);
+    return result.rows.map(row => ({
+      value: row[foreignColumn],
+      display: row[displayColumn],
+      text: row[displayColumn]
+    }));
+  } catch (error) {
+    console.error(`Error obteniendo datos de foreign key para ${tableName}.${foreignTable}:`, error);
+    return [];
+  }
+}
+
+// Obtener datos completos de una entidad por su clave primaria
+async function getEntityData(tableName, primaryKey, primaryValue) {
+  try {
+    const query = `SELECT * FROM "${tableName}" WHERE "${primaryKey}" = $1`;
+    const result = await pool.query(query, [primaryValue]);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error(`Error obteniendo datos de entidad ${tableName}:`, error);
+    return null;
+  }
+}
+
 // Endpoint para obtener opciones de dropdowns
 app.get('/api/enum-options', async (req, res) => {
   try {
@@ -536,6 +570,83 @@ app.get('/api/enum-options/:enumName', async (req, res) => {
     res.status(500).json({
       success: false,
       error: `Error obteniendo opciones para ${req.params.enumName}`,
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para obtener datos de foreign keys
+app.get('/api/tables/:tableName/foreign-key-data', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    await validateTableAccess(tableName);
+    
+    const schema = await getTableSchema(tableName);
+    const foreignKeyData = {};
+    
+    // Procesar cada columna que sea foreign key
+    for (const column of schema.columns) {
+      if (column.is_foreign_key && column.foreign_table) {
+        const foreignTable = column.foreign_table;
+        const foreignColumn = column.foreign_column || 'id';
+        
+        // Determinar el campo de display basado en la tabla
+        let displayColumn = 'nombre';
+        if (foreignTable.includes('cooperativas') || foreignTable.includes('mutuales')) {
+          displayColumn = 'nombre';
+        }
+        
+        const data = await getForeignKeyData(tableName, foreignTable, foreignColumn, displayColumn);
+        foreignKeyData[column.column_name] = {
+          foreignTable,
+          foreignColumn,
+          displayColumn,
+          data
+        };
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: foreignKeyData
+    });
+  } catch (error) {
+    console.error('Error obteniendo datos de foreign keys:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error obteniendo datos de foreign keys',
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para obtener datos completos de una entidad
+app.get('/api/tables/:tableName/entity/:primaryValue', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName, primaryValue } = req.params;
+    await validateTableAccess(tableName);
+    
+    const schema = await getTableSchema(tableName);
+    const primaryKey = schema.primaryKey;
+    
+    const entityData = await getEntityData(tableName, primaryKey, primaryValue);
+    
+    if (!entityData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Entidad no encontrada'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: entityData
+    });
+  } catch (error) {
+    console.error('Error obteniendo datos de entidad:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error obteniendo datos de entidad',
       details: error.message
     });
   }
