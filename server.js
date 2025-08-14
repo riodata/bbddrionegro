@@ -306,6 +306,50 @@ async function getTableFields(tableName) {
   }
 }
 
+// Función auxiliar para construir condiciones de búsqueda según el tipo de dato
+function buildSearchCondition(fieldName, searchText, dataType) {
+    const lowerDataType = dataType.toLowerCase();
+    
+    if (lowerDataType.includes('int') || lowerDataType.includes('numeric') || 
+        lowerDataType.includes('decimal') || lowerDataType.includes('float') || 
+        lowerDataType.includes('double') || lowerDataType.includes('bigint')) {
+        
+        // Para números
+        if (isNaN(searchText)) {
+            // Si no es un número, buscar como texto
+            return {
+                condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+                value: `%${searchText}%`
+            };
+        } else {
+            // Si es un número, búsqueda exacta
+            return {
+                condition: `"${fieldName}" = $1`,
+                value: parseFloat(searchText)
+            };
+        }
+    } else if (lowerDataType.includes('bool')) {
+        // Para booleanos
+        const boolValue = ['true', '1', 'sí', 'si', 'yes', 't'].includes(searchText.toLowerCase());
+        return {
+            condition: `"${fieldName}" = $1`,
+            value: boolValue
+        };
+    } else if (lowerDataType.includes('date') || lowerDataType.includes('timestamp')) {
+        // Para fechas
+        return {
+            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            value: `%${searchText}%`
+        };
+    } else {
+        // Para texto
+        return {
+            condition: `"${fieldName}" ILIKE $1`,
+            value: `%${searchText}%`
+        };
+    }
+}
+
 // Función auxiliar para logging
 const logOperation = (operation, data) => {
   console.log(`🔄 ${operation}:`, JSON.stringify(data, null, 2));
@@ -652,56 +696,44 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   }
 });
 
-// SEARCH - Búsqueda simple
+// SEARCH - Versión simplificada usando la función auxiliar
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
     try {
         const { tableName } = req.params;
         const { searchText, searchField } = req.query;
         
-        // Validar tabla
         await validateTableAccess(tableName);
         const tableSchema = await getTableSchema(tableName);
         const primaryKey = tableSchema.primaryKey;
         
         logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
 
-        // Validar que el campo de búsqueda existe en la tabla
-        if (searchField) {
-            const fieldExists = tableSchema.columns.find(col => 
-                col.column_name === searchField // BÚSQUEDA EXACTA
-            );
-            
-            if (!fieldExists) {
-                const availableFields = tableSchema.columns.map(col => col.column_name).join(', ');
-                return res.status(400).json({
-                    success: false,
-                    message: `El campo '${searchField}' no existe en la tabla '${tableName}'. Campos disponibles: ${availableFields}`
-                });
-            }
-        }
-
-        let query = `SELECT * FROM "${tableName}"`; // USAR COMILLAS DOBLES
+        let query = `SELECT * FROM "${tableName}"`;
         let queryParams = [];
 
-        // Aplicar filtro si existe
         if (searchText && searchField) {
-            // USAR EL NOMBRE EXACTO DEL CAMPO CON COMILLAS DOBLES
-            query += ` WHERE "${searchField}" ILIKE $1`;
-            queryParams.push(`%${searchText}%`);
+            const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
+            
+            if (!fieldInfo) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El campo '${searchField}' no existe en la tabla`
+                });
+            }
+
+            const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+            query += ` WHERE ${searchCondition.condition}`;
+            queryParams.push(searchCondition.value);
         }
 
-        query += ` ORDER BY "${primaryKey}" ASC`; // USAR COMILLAS DOBLES
-
+        query += ` ORDER BY "${primaryKey}" ASC`;
         const result = await pool.query(query, queryParams);
 
-        // Mapear datos para mantener compatibilidad
         const mappedData = result.rows.map((record, index) => ({
             _primaryKey: record[primaryKey],
             ...record,
             _rowIndex: index + 1
         }));
-
-        logOperation('SEARCH SUCCESS', `${mappedData.length} registros encontrados`);
 
         res.json({
             success: true,
