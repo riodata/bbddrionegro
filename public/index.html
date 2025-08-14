@@ -896,24 +896,59 @@
                 statusElement.innerHTML = '';
             }
         }
-        // Verificar autenticación
+        
+        // Verificar autenticación mejorada
         function checkAuth() {
             authToken = localStorage.getItem('authToken');
             const userStr = localStorage.getItem('user');
             
+            console.log('🔍 Verificando autenticación...');
+            console.log('📊 Token existe:', !!authToken);
+            console.log('👤 Usuario guardado:', !!userStr);
+            
             if (authToken && userStr) {
                 try {
                     currentUser = JSON.parse(userStr);
-                    showMainApp();
+                    
+                    // Verificar si el token no ha expirado
+                    const tokenPayload = parseJwtPayload(authToken);
+                    const now = Math.floor(Date.now() / 1000);
+                    
+                    if (tokenPayload && tokenPayload.exp && tokenPayload.exp > now) {
+                        console.log('✅ Token válido, mostrando aplicación');
+                        showMainApp();
+                        return;
+                    } else {
+                        console.log('⏰ Token expirado');
+                        logout();
+                        return;
+                    }
                 } catch (e) {
-                    console.error('Error parsing user data:', e);
+                    console.error('❌ Error procesando datos de usuario:', e);
                     logout();
+                    return;
                 }
-            } else {
-                showScreen('login-screen');
+            }
+            
+            console.log('🚪 Mostrando pantalla de login');
+            showScreen('login-screen');
+        }
+        
+        // Función para decodificar el payload del JWT
+        function parseJwtPayload(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                return JSON.parse(jsonPayload);
+            } catch (error) {
+                console.error('Error decodificando JWT:', error);
+                return null;
             }
         }
-
+        
         // Mostrar aplicación principal
         function showMainApp() {
             showUserInfo();
@@ -1120,13 +1155,26 @@
             }
         }
 
-        // Función para realizar peticiones autenticadas
+        // Función mejorada para peticiones autenticadas
         async function authenticatedFetch(url, options = {}) {
             try {
+                // Siempre obtener el token más reciente del localStorage
                 const token = localStorage.getItem('authToken');
                 
                 if (!token) {
+                    console.log('❌ No hay token disponible');
+                    logout();
                     throw new Error('No hay token de autenticación');
+                }
+        
+                // Verificar si el token no ha expirado antes de usarlo
+                const tokenPayload = parseJwtPayload(token);
+                const now = Math.floor(Date.now() / 1000);
+                
+                if (tokenPayload && tokenPayload.exp && tokenPayload.exp <= now) {
+                    console.log('⏰ Token expirado antes de la petición');
+                    logout();
+                    throw new Error('Token expirado. Por favor inicia sesión nuevamente.');
                 }
         
                 const defaultOptions = {
@@ -1147,20 +1195,29 @@
                 };
         
                 console.log('🔐 Enviando petición autenticada a:', url);
-                console.log('📋 Headers:', finalOptions.headers);
-        
+                
                 const response = await fetch(url, finalOptions);
                 
-                // Si el token expiró o es inválido
+                // Manejar diferentes códigos de error
                 if (response.status === 401) {
-                    console.log('❌ Token inválido o expirado');
+                    console.log('❌ Token rechazado por el servidor');
                     logout();
                     throw new Error('Sesión expirada. Por favor inicia sesión nuevamente.');
                 }
         
+                if (response.status === 403) {
+                    throw new Error('No tienes permisos para realizar esta acción.');
+                }
+        
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Error ${response.status}: ${errorText}`);
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(errorText);
+                    } catch {
+                        errorData = { message: errorText };
+                    }
+                    throw new Error(`Error ${response.status}: ${errorData.message || errorText}`);
                 }
         
                 return response;
@@ -1169,6 +1226,52 @@
                 throw error;
             }
         }
+
+        // Función para renovar el token automáticamente
+        async function renewTokenIfNeeded() {
+            const token = localStorage.getItem('authToken');
+            if (!token) return false;
+        
+            const tokenPayload = parseJwtPayload(token);
+            if (!tokenPayload || !tokenPayload.exp) return false;
+        
+            const now = Math.floor(Date.now() / 1000);
+            const timeUntilExpiry = tokenPayload.exp - now;
+        
+            // Si queda menos de 30 minutos, renovar el token
+            if (timeUntilExpiry < 1800) { // 30 minutos = 1800 segundos
+                try {
+                    const response = await fetch('/api/refresh-token', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+        
+                    if (response.ok) {
+                        const result = await response.json();
+                        if (result.success && result.token) {
+                            localStorage.setItem('authToken', result.token);
+                            authToken = result.token;
+                            console.log('✅ Token renovado automáticamente');
+                            return true;
+                        }
+                    }
+                } catch (error) {
+                    console.log('⚠️ No se pudo renovar el token automáticamente');
+                }
+            }
+        
+            return true;
+        }
+        
+        // Verificar el token cada 5 minutos
+        setInterval(async () => {
+            if (currentUser && authToken) {
+                await renewTokenIfNeeded();
+            }
+        }, 5 * 60 * 1000); // 5 minutos
 
         // Función corregida para cargar categorías dinámicamente
         async function loadDynamicCategories() {
@@ -1479,9 +1582,12 @@
             return 'text'; // Por defecto
         }
 
-        // Cargar campos para búsqueda global
+        // Cargar campos para búsqueda global con validación
         async function loadDynamicFieldsForGlobalSearch() {
-            if (!currentTableSchema || !currentTableSchema.columns) return;
+            if (!currentTableSchema || !currentTableSchema.columns) {
+                console.log('⚠️ No hay esquema de tabla disponible para cargar campos');
+                return;
+            }
             
             try {
                 const select = document.getElementById('globalSearchField');
@@ -1489,9 +1595,12 @@
                     select.innerHTML = '<option value="">Selecciona un campo...</option>';
                     
                     currentTableSchema.columns.forEach(column => {
-                        select.innerHTML += `<option value="${column.column_name}">${column.column_name} (${column.data_type})</option>`;
+                        const displayName = column.column_name.charAt(0).toUpperCase() + 
+                                          column.column_name.slice(1).replace(/_/g, ' ');
+                        select.innerHTML += `<option value="${column.column_name}">${displayName} (${column.data_type})</option>`;
                     });
                     
+                    console.log('✅ Campos cargados:', currentTableSchema.columns.map(c => c.column_name));
                     availableFields = currentTableSchema.columns.map(col => col.column_name);
                 }
             } catch (error) {
@@ -1499,7 +1608,6 @@
                 showStatus('Error al cargar campos para búsqueda', 'error');
             }
         }
-
         // Obtener URL de API para operaciones CRUD
         function getDynamicApiUrl(operation) {
             return `${API_BASE}/api/tables/${currentTable}/${operation}`;
