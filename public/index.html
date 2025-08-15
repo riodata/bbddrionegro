@@ -98,6 +98,47 @@
             color: #adb5bd;
         }
 
+        .breadcrumb {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        
+        .breadcrumb-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .btn-home {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .btn-home:hover {
+            background: linear-gradient(135deg, #218838, #1ec2a2);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        }
+        
+        .btn-home:active {
+            transform: translateY(0);
+        }
+
         /* Main content */
         .content {
             padding: 30px;
@@ -625,6 +666,11 @@
             <span id="breadcrumb-content">
                 <span class="breadcrumb-item active">Inicio</span>
             </span>
+            <div class="breadcrumb-actions">
+                <button id="home-button" class="btn-home" onclick="goToHome()" style="display: none;">
+                    🏠 Volver al inicio
+                </button>
+            </div>
         </div>
 
         <div class="content">
@@ -848,11 +894,21 @@
         let dynamicTables = [];
         let foreignKeyData = {};
         let selectedEntityData = {};
+        let currentCategory = null;
+        let currentCategoryDisplayName = null;
+        let hasUnsavedChanges = false;
+        let originalFormData = {};
+        let currentEditingEntityName = '';
 
         // Inicialización
         document.addEventListener('DOMContentLoaded', function() {
             checkAuth();
             setupEventListeners();
+
+            const homeButton = document.getElementById('home-button');
+            if (homeButton) {
+                homeButton.style.display = 'none';
+            }
             
             // Verificar si hay token en URL para reset de contraseña
             const params = new URLSearchParams(window.location.search);
@@ -861,6 +917,15 @@
                 showScreen('reset-password-screen');
                 document.getElementById('resetToken').value = token;
             }
+
+            window.addEventListener('beforeunload', function (e) {
+                if (hasUnsavedChanges || hasFormChanged('updateForm') || hasCreateFormData()) {
+                    const message = 'Hay cambios sin guardar. ¿Estás seguro de que quieres salir?';
+                    e.preventDefault();
+                    e.returnValue = message;
+                    return message;
+                }
+            });
         });
 
         function setupEventListeners() {
@@ -1389,10 +1454,16 @@
             const container = document.getElementById('table-selection-content');
             const titleElement = document.getElementById('category-title');
             const descriptionElement = document.getElementById('category-description');
-            
+            showScreen('table-selection');
             // Actualizar títulos
             titleElement.textContent = `Tablas - ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)}`;
             descriptionElement.textContent = 'Selecciona la tabla con la que quieres trabajar';
+
+            // Actualizar breadcrumb
+            updateBreadcrumb([
+                { text: 'Inicio', onclick: 'showMainMenu()' },
+                { text: categoryName.charAt(0).toUpperCase() + categoryName.slice(1), active: true }
+            ]);
             
             container.innerHTML = '';
             
@@ -1462,16 +1533,22 @@
             // Actualizar títulos
             document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${currentTableSchema.displayName}`;
             document.getElementById('search-title').textContent = `Buscar Registros - ${currentTableSchema.displayName}`;
-            
-            // Configurar formulario de creación
-            setupDynamicCreateForm();
-            
-            // Configurar búsqueda global
-            loadDynamicFieldsForGlobalSearch();
-            
-            // Mostrar pestaña de crear por defecto
-            showTab('create');
-        }
+
+                updateBreadcrumb([
+                    { text: 'Inicio', onclick: 'showMainMenu()' },
+                    { text: 'Tablas', onclick: 'showTableSelection()' }, // Ajustar si tienes función específica
+                    { text: currentTableSchema.displayName, active: true }
+                ]);
+                
+                // Configurar formulario de creación
+                setupDynamicCreateForm();
+                
+                // Configurar búsqueda global
+                loadDynamicFieldsForGlobalSearch();
+                
+                // Mostrar pestaña de crear por defecto
+                showTab('create');
+            }
 
         // Función para formatear fecha y hora
         function formatDateTime(dateString) {
@@ -1736,6 +1813,107 @@
             
             return true;
         }
+
+        // Función para marcar que hay cambios sin guardar
+        function markAsChanged() {
+            hasUnsavedChanges = true;
+        }
+        
+        // Función para limpiar estado de cambios
+        function clearUnsavedChanges() {
+            hasUnsavedChanges = false;
+            originalFormData = {};
+            currentEditingEntityName = '';
+        }
+        
+        // Función para capturar datos originales del formulario
+        function captureOriginalFormData(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return;
+            
+            originalFormData = {};
+            const formData = new FormData(form);
+            for (let [key, value] of formData.entries()) {
+                originalFormData[key] = value;
+            }
+            hasUnsavedChanges = false;
+        }
+        
+        // Función para detectar si hay cambios en el formulario
+        function hasFormChanged(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return false;
+            
+            const currentFormData = new FormData(form);
+            
+            // Comparar datos actuales con originales
+            for (let [key, value] of currentFormData.entries()) {
+                if (originalFormData[key] !== value) {
+                    return true;
+                }
+            }
+            
+            // Verificar si se eliminaron campos
+            for (let key in originalFormData) {
+                if (!currentFormData.has(key)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+        
+        // Función para obtener el nombre de la entidad que se está editando
+        function getCurrentEntityName() {
+            if (currentEditingEntityName) {
+                return currentEditingEntityName;
+            }
+            
+            // Intentar obtener de campos comunes
+            const nameField = document.querySelector('#updateForm input[name="nombre"], #updateForm input[name="denominacion"], #updateForm input[name="razon_social"]');
+            if (nameField && nameField.value) {
+                return nameField.value;
+            }
+            
+            // Valor por defecto
+            return 'este registro';
+        }
+        
+        // Función para mostrar confirmación de salida
+        function confirmExit(targetFunction, ...args) {
+            if (!hasUnsavedChanges && !hasFormChanged('updateForm')) {
+                // No hay cambios, ejecutar función directamente
+                targetFunction(...args);
+                return;
+            }
+            
+            const entityName = getCurrentEntityName();
+            const message = `Hay cambios sin guardar. ¿Desea guardar los cambios en ${entityName}?`;
+            
+            if (confirm(message)) {
+                // Usuario quiere guardar, intentar guardar primero
+                const updateForm = document.getElementById('updateForm');
+                if (updateForm) {
+                    // Simular submit del formulario
+                    const event = new Event('submit', { bubbles: true, cancelable: true });
+                    updateForm.dispatchEvent(event);
+                    
+                    // Después de un breve delay, ejecutar la función objetivo
+                    setTimeout(() => {
+                        clearUnsavedChanges();
+                        targetFunction(...args);
+                    }, 1000);
+                } else {
+                    // No hay formulario, solo limpiar y continuar
+                    clearUnsavedChanges();
+                    targetFunction(...args);
+                }
+            } else {
+                // Usuario no quiere guardar, descartar cambios y continuar
+                clearUnsavedChanges();
+                targetFunction(...args);
+            }
+        }
         
         // Generar formulario de creación dinámicamente
         function setupDynamicCreateForm() {
@@ -1776,6 +1954,12 @@
                 
                 fieldsContainer.appendChild(fieldDiv);
             });
+            // Configurar listeners de cambios después de crear el formulario
+            setTimeout(() => {
+                setupFormChangeListeners('createForm');
+                // Inicializar como sin cambios
+                hasUnsavedChanges = false;
+            }, 100);
         }
 
         function createInputElement(column, inputType, required) {
@@ -1978,23 +2162,163 @@
         }
 
         // Navigation functions
+        function goToHome() {
+            if (hasUnsavedChanges || hasFormChanged('updateForm') || hasCreateFormData()) {
+                const currentTab = document.querySelector('.tab.active').textContent.trim();
+                let message = '';
+                
+                if (currentTab.includes('Crear')) {
+                    message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
+                } else {
+                    const entityName = getCurrentEntityName();
+                    message = `Hay cambios sin guardar en ${entityName}. ¿Desea guardar los cambios?`;
+                }
+                
+                if (confirm(message)) {
+                    clearUnsavedChanges();
+                    goToHomeForced();
+                }
+                return;
+            }
+            goToHomeForced();
+        }
+
+        function goToHomeForced() {
+            // Limpiar variables globales
+            currentTable = null;
+            currentTableSchema = null;
+            currentRecords = [];
+            availableFields = [];
+            currentEditingRow = null;
+            currentDeletingRow = null;
+            foreignKeyData = {};
+            selectedEntityData = {};
+            
+            // Limpiar formularios
+            const createForm = document.getElementById('createForm');
+            if (createForm) createForm.reset();
+            
+            const updateForm = document.getElementById('updateForm');
+            if (updateForm) updateForm.reset();
+
+            // Limpiar estado de cambios
+            clearUnsavedChanges();
+            // Limpiar mensajes de estado
+            clearStatus();
+            
+            // Ocultar búsqueda global
+            const globalSearch = document.getElementById('global-search');
+            if (globalSearch) globalSearch.style.display = 'none';
+            
+            // Mostrar menú principal
+            showMainMenu();
+            
+            // Actualizar breadcrumb
+            updateBreadcrumb([{ text: 'Inicio', active: true }]);
+        }
+        
+        // Función para actualizar breadcrumb
         function updateBreadcrumb(items) {
             const breadcrumbContent = document.getElementById('breadcrumb-content');
-            breadcrumbContent.innerHTML = items.map((item, index) => 
-                `<span class="breadcrumb-item ${item.active ? 'active' : ''}" 
-                      ${item.onclick ? `onclick="${item.onclick}"` : ''} 
-                      ${item.onclick ? 'style="cursor: pointer;"' : ''}>${item.text}</span>`
-            ).join('<span class="breadcrumb-separator">›</span>');
+            const homeButton = document.getElementById('home-button');
+            
+            if (!breadcrumbContent) return;
+            
+            let breadcrumbHtml = '';
+            
+            items.forEach((item, index) => {
+                if (index > 0) {
+                    breadcrumbHtml += '<span class="breadcrumb-separator">></span>';
+                }
+                
+                if (item.active) {
+                    breadcrumbHtml += `<span class="breadcrumb-item active">${item.text}</span>`;
+                } else {
+                    breadcrumbHtml += `<span class="breadcrumb-item" onclick="${item.onclick || ''}">${item.text}</span>`;
+                }
+            });
+            
+            breadcrumbContent.innerHTML = breadcrumbHtml;
+            
+            // Mostrar/ocultar botón de inicio
+            if (homeButton) {
+                homeButton.style.display = items.length > 1 ? 'block' : 'none';
+            }
         }
 
         function showMainMenu() {
+            if (hasUnsavedChanges || hasFormChanged('updateForm') || hasCreateFormData()) {
+                const currentTab = document.querySelector('.tab.active').textContent.trim();
+                let message = '';
+                
+                if (currentTab.includes('Crear')) {
+                    message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
+                } else {
+                    const entityName = getCurrentEntityName();
+                    message = `Hay cambios sin guardar en ${entityName}. ¿Desea descartar los cambios?`;
+                }
+                
+                if (confirm(message)) {
+                    clearUnsavedChanges();
+                    showMainMenuForced();
+                }
+                return;
+            }
+            showMainMenuForced();
+        }
+
+        function showMainMenuForced() {
             currentTable = null;
             currentTableSchema = null;
+            clearUnsavedChanges();
             showScreen('main-menu');
+            updateBreadcrumb([{ text: 'Inicio', active: true }]);
+            loadDynamicCategories();
+        }
+
+
+        // Función para volver a la selección de tablas
+        function showTableSelection() {
+            if (hasUnsavedChanges || hasFormChanged('updateForm') || hasCreateFormData()) {
+                const currentTab = document.querySelector('.tab.active').textContent.trim();
+                let message = '';
+                
+                if (currentTab.includes('Crear')) {
+                    message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
+                } else {
+                    const entityName = getCurrentEntityName();
+                    message = `Hay cambios sin guardar en ${entityName}. ¿Desea descartar los cambios?`;
+                }
+                
+                if (confirm(message)) {
+                    clearUnsavedChanges();
+                    showTableSelectionForced();
+                }
+                return;
+            }
+            showTableSelectionForced();
+        }
+        function showTableSelectionForced() {
+            // Mostrar la pantalla de selección de tablas
+            showScreen('table-selection');
+            
+            // Limpiar variables de tabla actual
+            currentTable = null;
+            currentTableSchema = null;
+            currentRecords = [];
+
+            // Limpiar estado de cambios
+            clearUnsavedChanges();
+            
+            // Ocultar búsqueda global
+            const globalSearch = document.getElementById('global-search');
+            if (globalSearch) globalSearch.style.display = 'none';
+            
+            // Actualizar breadcrumb básico (se actualizará cuando se cargue una categoría)
             updateBreadcrumb([
-                { text: 'Inicio', active: true }
+                { text: 'Inicio', onclick: 'showMainMenu()' },
+                { text: 'Seleccionar Tabla', active: true }
             ]);
-            clearStatus();
         }
 
         // Manejar formulario de creación
@@ -2018,7 +2342,12 @@
                 return;
             }
 
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+
             try {
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<span class="loading"></span> Creando...';
                 showStatus('Creando registro...', 'info');
                 
                 const response = await authenticatedFetch(getDynamicApiUrl('create'), {
@@ -2030,19 +2359,28 @@
                 
                 if (result.success) {
                     showCreateSuccess();
-                } else {
+                    showStatus('✅ Registro creado exitosamente', 'success');
+                    // Limpiar estado de cambios al guardar exitosamente
+                    clearUnsavedChanges();
+                    clearStatus();
+                    // Limpiar formulario
+                    e.target.reset();
+            } else {
                     showStatus('Error al crear el registro: ' + result.message, 'error');
                 }
             } catch (error) {
                 console.error('Error:', error);
                 showStatus('Error al enviar el formulario: ' + error.message, 'error');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
             }
         }
 
         // Manejar formulario de actualización
         async function handleUpdateForm(e) {
             e.preventDefault();
-
+            
             const formData = new FormData(e.target);
             const data = {};
             let hasErrors = false;
@@ -2061,37 +2399,88 @@
             }
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
-            const primaryKeyValue = data[primaryKey];
-
+            const primaryKeyField = document.getElementById('update-primary-key');
+            const primaryKeyValue = primaryKeyField ? primaryKeyField.value : null;
+            
+            if (!primaryKeyValue) {
+                showStatus('Error: No se encontró el identificador del registro', 'error');
+                return;
+            }
+            
+            // Limpiar datos internos
+            delete data._rowIndex;
+            delete data._primaryKey;
+            
+            const updateButton = e.target.querySelector('button[type="submit"]');
+            const originalText = updateButton.textContent;
+            
             try {
+                updateButton.disabled = true;
+                updateButton.innerHTML = '<span class="loading"></span> Guardando...';
+                
                 showStatus('Actualizando registro...', 'info');
                 
-                const response = await authenticatedFetch(getDynamicApiUrl('update'), {
+                const response = await fetch(`${API_BASE}/api/tables/${currentTable}/update`, {
                     method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({
-                        searchCriteria: { 
-                            field: primaryKey,  
-                            value: primaryKeyValue 
+                        searchCriteria: {
+                            field: primaryKey,
+                            value: primaryKeyValue
                         },
                         updateData: data
-                    }),
+                    })
                 });
-
+                
                 const result = await response.json();
                 
                 if (result.success) {
-                    showStatus('Registro actualizado correctamente', 'success');
-                    cancelUpdate();
-                    showTab('search');
+                    showStatus('✅ Registro actualizado exitosamente', 'success');
+                    
+                    // Limpiar estado de cambios al guardar exitosamente
+                    clearUnsavedChanges();
+                    
+                    // Actualizar la lista de registros si está visible
+                    if (currentRecords && currentRecords.length > 0) {
+                        // Actualizar el registro en la lista actual
+                        const recordIndex = currentRecords.findIndex(record => {
+                            const recordPrimaryKey = record[primaryKey] || record._primaryKey;
+                            return recordPrimaryKey == primaryKeyValue;
+                        });
+                        
+                        if (recordIndex !== -1) {
+                            currentRecords[recordIndex] = {
+                                ...result.data,
+                                _primaryKey: result.data[primaryKey],
+                                _rowIndex: recordIndex + 1
+                            };
+                            displayUpdateResults(currentRecords);
+                        }
+                    }
+                    
+                    // Ocultar formulario y mostrar lista
+                    setTimeout(() => {
+                        document.getElementById('update-form-container').style.display = 'none';
+                        document.getElementById('update-records-container').style.display = 'block';
+                        clearStatus();
+                    }, 2000);
+                    
                 } else {
-                    showStatus('Error al actualizar el registro: ' + result.message, 'error');
+                    showStatus(`❌ Error: ${result.message}`, 'error');
                 }
+                
             } catch (error) {
-                console.error('Error:', error);
-                showStatus('Error al actualizar el registro: ' + error.message, 'error');
+                console.error('Error actualizando registro:', error);
+                showStatus('❌ Error de conexión al actualizar el registro', 'error');
+            } finally {
+                updateButton.disabled = false;
+                updateButton.textContent = originalText;
             }
         }
-
+        
         // TAB MANAGEMENT
         function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
@@ -2128,6 +2517,11 @@
             }
         }
 
+        function getTabIndex(tabName) {
+            const tabs = { 'create': 1, 'search': 2, 'update': 3, 'delete': 4 };
+            return tabs[tabName] || 1;
+        }
+        
         // GLOBAL SEARCH
         async function performGlobalSearch() {
             const searchText = document.getElementById('globalSearchText').value.trim();
@@ -2287,6 +2681,9 @@
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
             const primaryKeyValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey;
             
+            // Capturar nombre de la entidad que se está editando
+            currentEditingEntityName = record.nombre || record.denominacion || record.razon_social || `ID ${primaryKeyValue}`;
+            
             const fieldsContainer = document.getElementById('update-fields');
             fieldsContainer.innerHTML = '';
             
@@ -2320,8 +2717,30 @@
                     fieldsContainer.innerHTML += fieldHtml;
                 });
             }
+            
+            // Capturar datos originales después de un breve delay
+            setTimeout(() => {
+                captureOriginalFormData('updateForm');
+                setupFormChangeListeners('updateForm');
+            }, 100);
         }
-
+        
+        // Función para configurar listeners de cambios en formulario
+        function setupFormChangeListeners(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return;
+            
+            // Agregar listeners a todos los inputs
+            const inputs = form.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    hasUnsavedChanges = true;
+                });
+                input.addEventListener('change', () => {
+                    hasUnsavedChanges = true;
+                });
+            });
+        }
         function createUpdateInputElement(column, inputType, required, value, isPrimaryKey) {
             const commonAttributes = `
                 id="update-${column.column_name.replace(/\s+/g, '_')}" 
@@ -2346,6 +2765,20 @@
         }
         
         function cancelUpdate() {
+                if (hasUnsavedChanges || hasFormChanged('updateForm')) {
+                const entityName = getCurrentEntityName();
+                const message = `¿Estás seguro de que quieres cancelar? Se perderán los cambios en ${entityName}.`;
+                
+                if (confirm(message)) {
+                    cancelUpdateForced();
+                }
+            } else {
+                cancelUpdateForced();
+            }
+        }
+
+        function cancelUpdateForced() {
+            clearUnsavedChanges();
             document.getElementById('update-form-container').style.display = 'none';
             document.getElementById('update-records-container').style.display = 'block';
             currentEditingRow = null;
@@ -2477,10 +2910,31 @@
 
         function createAnotherRecord() {
             showCreateForm();
-            document.getElementById('createForm').reset();
+            const createForm = document.getElementById('createForm').reset();
+            if (createForm) {
+                createForm.reset();
+            }
+            clearUnsavedChanges();
+            
+            // Reconfigurar listeners
+            setTimeout(() => setupFormChangeListeners('createForm'), 100);
+        }
+
+        function hasCreateFormData() {
+            const form = document.getElementById('createForm');
+            if (!form) return false;
+            
+            const formData = new FormData(form);
+            for (let [key, value] of formData.entries()) {
+                if (value && value.trim() !== '') {
+                    return true;
+                }
+            }
+            return false;
         }
 
         function viewAllRecords() {
+            clearUnsavedChanges();
             showTab('search');
             loadAllRecords();
         }
