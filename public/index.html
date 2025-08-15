@@ -1916,7 +1916,7 @@
         }
         
         // Generar formulario de creación dinámicamente
-        function setupDynamicCreateForm() {
+        async function setupDynamicCreateForm() {
             if (!currentTableSchema || !currentTableSchema.columns) return;
             await loadForeignKeyData();
             const fieldsContainer = document.getElementById('create-fields');
@@ -1964,6 +1964,7 @@
 
         function createInputElement(column, inputType, required) {
             const { column_name, data_type, is_foreign_key, foreign_table } = column;
+            const lowerFieldName = column_name.toLowerCase();
             
             // Si es foreign key y tenemos datos disponibles, crear dropdown
             if (is_foreign_key && foreign_table && foreignKeyData[column_name]) {
@@ -2943,7 +2944,7 @@
 
         function createAnotherRecord() {
             showCreateForm();
-            const createForm = document.getElementById('createForm').reset();
+            const createForm = document.getElementById('createForm');
             if (createForm) {
                 createForm.reset();
             }
@@ -3015,6 +3016,63 @@
                         </div>
                         <div class="record-buttons">
                             <!-- Botones se agregarán según el contexto -->
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        ${recordContent}
+                    </div>
+                `;
+        
+                container.appendChild(recordElement);
+            });
+        
+            // Actualizar records globales para otras operaciones
+            currentRecords = records;
+        }
+
+        function displayUpdateResults(records) {
+            const container = document.getElementById('update-records-container');
+            container.innerHTML = '';
+        
+            if (!records || records.length === 0) {
+                container.innerHTML = '<div class="empty-state"><span class="icon">✏️</span><h3>No hay registros</h3><p>Busca registros para poder editarlos</p></div>';
+                return;
+            }
+        
+            records.forEach((record, index) => {
+                const recordElement = document.createElement('div');
+                recordElement.className = 'record';
+                
+                // Extraer campos de metadatos
+                const id = record.id || record._primaryKey || '';
+                const createdAt = record.created_at || '';
+                const updatedAt = record.updated_at || '';
+                
+                // Formatear fechas si existen
+                let metadataText = '';
+                if (createdAt || updatedAt) {
+                    const createdText = createdAt ? `Creado: ${formatDateTime(createdAt)}` : '';
+                    const updatedText = updatedAt ? `Última modificación: ${formatDateTime(updatedAt)}` : '';
+                    metadataText = [createdText, updatedText].filter(Boolean).join('; ');
+                }
+        
+                // Crear contenido del registro excluyendo campos ocultos
+                const recordContent = Object.entries(record)
+                    .filter(([key]) => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(key))
+                    .map(([key, value]) => {
+                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
+                    })
+                    .join('<br>');
+        
+                recordElement.innerHTML = `
+                    <div class="record-header">
+                        <div>
+                            <div class="record-title">ID: ${id}</div>
+                            ${metadataText ? `<div style="font-size: 0.85em; color: #6c757d; margin-top: 4px;">${metadataText}</div>` : ''}
+                        </div>
+                        <div class="record-buttons">
+                            <button class="btn btn-warning" onclick="editRecord(${index})">✏️ Editar</button>
                         </div>
                     </div>
                     <div style="margin-top: 10px;">
