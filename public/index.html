@@ -2483,9 +2483,34 @@
         
         // TAB MANAGEMENT
         function showTab(tabName) {
+            // Verificar cambios antes de cambiar de pestaña
+            if (tabName !== 'create' && (hasUnsavedChanges || hasFormChanged('createForm') || hasCreateFormData())) {
+                const message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
+                if (!confirm(message)) {
+                    return; // No cambiar de pestaña
+                } else {
+                    // Limpiar formulario y estado
+                    const createForm = document.getElementById('createForm');
+                    if (createForm) createForm.reset();
+                    clearUnsavedChanges();
+                }
+            }
+            
+            if (tabName !== 'update' && (hasUnsavedChanges || hasFormChanged('updateForm'))) {
+                const entityName = getCurrentEntityName();
+                const message = `Hay cambios sin guardar en ${entityName}. ¿Desea descartar los cambios?`;
+                if (!confirm(message)) {
+                    return; // No cambiar de pestaña
+                } else {
+                    clearUnsavedChanges();
+                }
+            }
+            
+            // Limpiar clases activas
             document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             
+            // Activar pestaña seleccionada
             const selectedTab = document.getElementById(tabName);
             const selectedButton = document.querySelector(`.tab[onclick="showTab('${tabName}')"]`);
             
@@ -2496,8 +2521,8 @@
             if (selectedButton) {
                 selectedButton.classList.add('active');
             }
-
-            // Show global search for appropriate tabs
+        
+            // Mostrar búsqueda global para pestañas apropiadas
             const globalSearch = document.getElementById('global-search');
             if (['search', 'update', 'delete'].includes(tabName)) {
                 globalSearch.style.display = 'block';
@@ -2505,15 +2530,23 @@
             } else {
                 globalSearch.style.display = 'none';
             }
-
-            // Reset containers when switching tabs
+        
+            // Resetear contenedores al cambiar pestañas
             if (tabName === 'update') {
                 document.getElementById('update-form-container').style.display = 'none';
                 document.getElementById('update-records-container').style.display = 'block';
             }
-
+        
             if (tabName === 'create') {
+                // Limpiar estado de cambios al entrar a crear
+                clearUnsavedChanges();
                 showCreateForm();
+                
+                // Configurar listeners de cambios después de mostrar el formulario
+                setTimeout(() => {
+                    setupFormChangeListeners('createForm');
+                    hasUnsavedChanges = false;
+                }, 100);
             }
         }
 
