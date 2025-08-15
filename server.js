@@ -75,6 +75,46 @@ app.get('/api/protected', auth.requireAuth, (req, res) => {
   res.json({ success: true, user: req.user, message: "Acceso autorizado." });
 });
 
+// Función para actualizar fecha de último acceso
+async function updateLastAccess(userId) {
+  try {
+    await pool.query(
+      'UPDATE users SET fecha_ultimo_acceso = NOW() WHERE id = $1',
+      [userId]
+    );
+  } catch (error) {
+    console.error('Error actualizando último acceso:', error);
+  }
+}
+
+// Función para verificar y actualizar estado activo
+async function checkAndUpdateActiveStatus(userId) {
+  try {
+    const result = await pool.query(
+      'SELECT activo, fecha_vencimiento FROM users WHERE id = $1',
+      [userId]
+    );
+    
+    if (result.rows.length === 0) return false;
+    
+    const user = result.rows[0];
+    
+    // Si tiene fecha de vencimiento y ya expiró, desactivar
+    if (user.fecha_vencimiento && new Date() > new Date(user.fecha_vencimiento)) {
+      await pool.query(
+        'UPDATE users SET activo = false WHERE id = $1',
+        [userId]
+      );
+      return false;
+    }
+    
+    return user.activo;
+  } catch (error) {
+    console.error('Error verificando estado activo:', error);
+    return false;
+  }
+}
+
 app.post('/api/refresh-token', auth.requireAuth, async (req, res) => {
     try {
         const userId = req.user.id;
@@ -681,7 +721,7 @@ app.get('/api/categories', auth.requireAuth, async (req, res) => {
 });
 
 // Obtener tablas de una categoría específica
-app.get('/api/categories/:categoryName/tables', async (req, res) => {
+app.get('/api/categories/:categoryName/tables', auth.requireAuth, async (req, res) => {
   try {
     const { categoryName } = req.params;
     const tables = await getTablesByCategory(categoryName);
