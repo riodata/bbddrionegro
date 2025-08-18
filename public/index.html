@@ -2881,7 +2881,18 @@
                 
                 if (result.success) {
                     currentRecords = result.data;
-                    displaySearchResults(result.data);
+                    
+                    // Mostrar resultados según la pestaña activa
+                    const activeTab = document.querySelector('.tab-content.active').id;
+                    
+                    if (activeTab === 'search') {
+                        displaySearchResults(result.data);
+                    } else if (activeTab === 'update') {
+                        displayUpdateResults(result.data);
+                    } else if (activeTab === 'delete') {
+                        displayDeleteResults(result.data);
+                    }
+                    
                     showStatus(`${result.total} registros cargados`, 'success');
                 } else {
                     throw new Error(result.message);
@@ -3196,7 +3207,8 @@
                 recordElement.className = 'record';
                 
                 // Extraer campos de metadatos
-                const id = record.id || record._primaryKey || '';
+                const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+                const id = record[primaryKey] || record._primaryKey || '';
                 const createdAt = record.created_at || '';
                 const updatedAt = record.updated_at || '';
                 
@@ -3217,6 +3229,21 @@
                     })
                     .join('<br>');
         
+                // Determinar qué botones mostrar según la pestaña activa
+                const activeTab = document.querySelector('.tab-content.active').id;
+                let buttonHtml = '';
+                
+                if (activeTab === 'search') {
+                    buttonHtml = `
+                        <button class="btn btn-warning" onclick="editRecord('${id}')">✏️ Ver/Editar</button>
+                        <button class="btn btn-danger" onclick="deleteRecord('${id}')">🗑️ Eliminar</button>
+                    `;
+                } else if (activeTab === 'update') {
+                    buttonHtml = `<button class="btn btn-warning" onclick="editRecord('${id}')">✏️ Editar</button>`;
+                } else if (activeTab === 'delete') {
+                    buttonHtml = `<button class="btn btn-danger" onclick="deleteRecord('${id}')">🗑️ Eliminar</button>`;
+                }
+        
                 recordElement.innerHTML = `
                     <div class="record-header">
                         <div>
@@ -3224,7 +3251,7 @@
                             ${metadataText ? `<div style="font-size: 0.85em; color: #6c757d; margin-top: 4px;">${metadataText}</div>` : ''}
                         </div>
                         <div class="record-buttons">
-                            <!-- Botones se agregarán según el contexto -->
+                            ${buttonHtml}
                         </div>
                     </div>
                     <div style="margin-top: 10px;">
@@ -3296,68 +3323,64 @@
             currentRecords = records;
         }
 
-        // DROPDOWN MANAGER (simulación básica)
-        const dropdownManager = {
-            isEnumField: function(fieldName) {
-                // Lista de campos que son enum en tu sistema
-                const enumFields = {
-                    'tipo': 'tipo',
-                    'subtipo': 'subtipo',
-                    'tipo_asamblea': 'tipo_asamblea',
-                    'tipo_financiamiento': 'tipo_financiamiento',
-                    'autoridades': 'autoridades',
-                    'departamento': 'departamento',
-                    'localidad': 'localidad'
-                };
-                return enumFields[fieldName] || null;
-            },
-
-            isBooleanField: function(fieldName) {
-                // Lista de campos que deben ser radio buttons
-                const booleanFields = [
-                    'activo',
-                    'estado',
-                    'habilitado',
-                    'verificado',
-                    'aprobado'
-                ];
-                return booleanFields.includes(fieldName.toLowerCase());
-            },
-
-            populateDropdown: async function(selectElement, enumType) {
-                try {
-                    const response = await authenticatedFetch(`${API_BASE}/api/enum-options/${enumType}`);
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        selectElement.innerHTML = '<option value="">Seleccionar...</option>';
-                        result.data.forEach(value => {
-                            selectElement.innerHTML += `<option value="${value}">${value}</option>`;
-                        });
-                    }
-                } catch (error) {
-                    console.error(`Error cargando opciones para ${enumType}:`, error);
-                }
+        function displayDeleteResults(records) {
+            const container = document.getElementById('delete-records');
+            container.innerHTML = '';
+        
+            if (!records || records.length === 0) {
+                container.innerHTML = '<div class="empty-state"><span class="icon">🗑️</span><h3>No hay registros</h3><p>Busca registros para poder eliminarlos</p></div>';
+                return;
             }
-        };
-
-        // Poblar dropdowns de enums después de crear el formulario
-        async function populateEnumDropdowns() {
-            try {
-                // Buscar todos los selects que son campos enum
-                const selects = document.querySelectorAll('select[id]');
+        
+            records.forEach((record, index) => {
+                const recordElement = document.createElement('div');
+                recordElement.className = 'record';
                 
-                for (const select of selects) {
-                    const enumType = dropdownManager.isEnumField(select.id);
-                    if (enumType) {
-                        await dropdownManager.populateDropdown(select, enumType);
-                    }
+                // Extraer campos de metadatos
+                const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+                const id = record[primaryKey] || record._primaryKey || '';
+                const createdAt = record.created_at || '';
+                const updatedAt = record.updated_at || '';
+                
+                // Formatear fechas si existen
+                let metadataText = '';
+                if (createdAt || updatedAt) {
+                    const createdText = createdAt ? `Creado: ${formatDateTime(createdAt)}` : '';
+                    const updatedText = updatedAt ? `Última modificación: ${formatDateTime(updatedAt)}` : '';
+                    metadataText = [createdText, updatedText].filter(Boolean).join('; ');
                 }
-            } catch (error) {
-                console.error('Error poblando dropdowns:', error);
-            }
+        
+                // Crear contenido del registro excluyendo campos ocultos
+                const recordContent = Object.entries(record)
+                    .filter(([key]) => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(key))
+                    .map(([key, value]) => {
+                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                        return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
+                    })
+                    .join('<br>');
+        
+                recordElement.innerHTML = `
+                    <div class="record-header">
+                        <div>
+                            <div class="record-title">ID: ${id}</div>
+                            ${metadataText ? `<div style="font-size: 0.85em; color: #6c757d; margin-top: 4px;">${metadataText}</div>` : ''}
+                        </div>
+                        <div class="record-buttons">
+                            <button class="btn btn-danger" onclick="deleteRecord('${id}')">🗑️ Eliminar</button>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        ${recordContent}
+                    </div>
+                `;
+        
+                container.appendChild(recordElement);
+            });
+        
+            // Actualizar records globales para otras operaciones
+            currentRecords = records;
         }
-
+        
         // KEYBOARD SHORTCUTS
         document.addEventListener('keydown', function(e) {
             // Ctrl/Cmd + Enter para enviar formularios
