@@ -1800,39 +1800,47 @@
             const selectedValue = selectElement.value;
             const selectedOption = selectElement.options[selectElement.selectedIndex];
             
-            if (!selectedValue) {
+             if (!selectedValue) {
                 selectedEntityData = {};
-                // Limpiar campo matrícula si existe
-                const matriculaField = document.querySelector(`input[name*="matricula"]`);
-                if (matriculaField) {
-                    matriculaField.value = '';
-                }
+                // Limpiar y ocultar matrícula
+                const matriculaField = document.getElementById(matriculaFieldName);
+                const matriculaDisplay = document.getElementById(matriculaFieldName + '_display');
+                const matriculaValue = document.getElementById(matriculaFieldName + '_value');
+                
+                if (matriculaField) matriculaField.value = '';
+                if (matriculaDisplay) matriculaDisplay.style.display = 'none';
+                if (matriculaValue) matriculaValue.textContent = '';
+                
                 return;
             }
             
-            // Para tablas de entidades, manejar matrícula automática
-            if (targetTable.toLowerCase().includes('entidad')) {
+            // Para tablas de entidades (cooperativas y mutuales)
+            if (targetTable === 'entidades_cooperativas' || targetTable === 'entidades_mutuales') {
                 const matricula = selectedOption.getAttribute('data-matricula');
-                const matriculaField = document.querySelector(`input[name*="matricula"]`);
+                const tipo = selectedOption.getAttribute('data-tipo');
+                
+                // Actualizar campo oculto de matrícula
+                const matriculaField = document.getElementById(matriculaFieldName);
+                const matriculaDisplay = document.getElementById(matriculaFieldName + '_display');
+                const matriculaValue = document.getElementById(matriculaFieldName + '_value');
                 
                 if (matriculaField && matricula) {
                     matriculaField.value = matricula;
-                    matriculaField.readOnly = true;
-                    matriculaField.style.backgroundColor = '#f8f9fa';
                     
-                    // Mostrar campo matrícula si estaba oculto
-                    const matriculaContainer = matriculaField.closest('.form-group');
-                    if (matriculaContainer) {
-                        matriculaContainer.style.display = 'block';
+                    // Mostrar matrícula visualmente
+                    if (matriculaDisplay && matriculaValue) {
+                        matriculaValue.textContent = matricula;
+                        matriculaDisplay.style.display = 'block';
                     }
                 }
                 
                 clearStatus();
-                showStatus(`✅ Entidad seleccionada: ${selectedOption.text} (Matrícula: ${matricula})`, 'success');
+                showStatus(`✅ ${tipo === 'cooperativa' ? 'Cooperativa' : 'Mutual'} seleccionada: ${selectedOption.text} (Matrícula: ${matricula})`, 'success');
                 
                 selectedEntityData = {
                     nombre: selectedOption.text,
-                    matricula: matricula
+                    matricula: matricula,
+                    tipo: tipo
                 };
                 
                 return;
@@ -2197,10 +2205,23 @@
             const { column_name, data_type, is_foreign_key, foreign_table } = column;
             const lowerFieldName = column_name.toLowerCase();
             
-            // OCULTAR campo matrícula si hay foreign key a entidades
-            if (lowerFieldName.includes('matricula') && currentTableSchema.columns.some(col => 
-                col.is_foreign_key && col.foreign_table && col.foreign_table.toLowerCase().includes('entidad'))) {
-                return '<input type="hidden" name="' + column_name + '" id="' + column_name + '">';
+            // OCULTAR campos de matrícula cuando hay FK a entidades
+            const matriculaFields = ['matricula', 'matricula nacional'];
+            const isMatriculaField = matriculaFields.some(field => 
+                lowerFieldName.includes(field.toLowerCase())
+            );
+            
+            if (isMatriculaField && currentTableSchema.columns.some(col => 
+                col.is_foreign_key && col.foreign_table && 
+                (col.foreign_table === 'entidades_cooperativas' || col.foreign_table === 'entidades_mutuales'))) {
+                
+                // Campo oculto para matrícula que se llenará automáticamente
+                return `
+                    <input type="hidden" name="${column_name}" id="${column_name}">
+                    <div id="${column_name}_display" class="matricula-display" style="display: none;">
+                        <strong>Matrícula:</strong> <span id="${column_name}_value"></span>
+                    </div>
+                `;
             }
             
             // Si es foreign key y tenemos datos disponibles, crear dropdown
@@ -2208,39 +2229,32 @@
                 const fkData = foreignKeyData[column_name];
                 const options = fkData.data || [];
                 
-                let optionsHtml = '<option value="">Seleccionar...</option>';
+                let optionsHtml = '<option value="">Seleccionar entidad...</option>';
                 options.forEach(option => {
-                    optionsHtml += `<option value="${option.value}" data-matricula="${option.matricula || ''}">${option.display}</option>`;
+                    optionsHtml += `<option value="${option.value}" 
+                        data-matricula="${option.matricula || ''}" 
+                        data-tipo="${option.tipo || ''}">${option.display}</option>`;
                 });
                 
-                // Para entidades, usar onChange especial
-                const onChangeHandler = foreign_table.toLowerCase().includes('entidad') ? 
-                    `handleEntitySelection(this, '${foreign_table}')` : 
-                    `handleEntitySelection(this, '${foreign_table}')`;
+                // Determinar qué campo de matrícula corresponde
+                let matriculaFieldName = '';
+                if (foreign_table === 'entidades_cooperativas') {
+                    matriculaFieldName = currentTableSchema.columns.find(col => 
+                        col.column_name.toLowerCase().includes('matricula') && 
+                        !col.column_name.toLowerCase().includes('nacional')
+                    )?.column_name || 'matricula';
+                } else if (foreign_table === 'entidades_mutuales') {
+                    matriculaFieldName = currentTableSchema.columns.find(col => 
+                        col.column_name.toLowerCase().includes('matricula nacional')
+                    )?.column_name || 'Matricula Nacional';
+                }
                 
                 return `
                     <select 
                         name="${column_name}" 
                         id="${column_name}" 
                         ${required}
-                        onchange="${onChangeHandler}"
-                    >
-                        ${optionsHtml}
-                    </select>
-                `;
-            }
-                
-                let optionsHtml = '<option value="">Seleccionar...</option>';
-                options.forEach(option => {
-                    optionsHtml += `<option value="${option.value}">${option.display}</option>`;
-                });
-                
-                return `
-                    <select 
-                        name="${column_name}" 
-                        id="${column_name}" 
-                        ${required}
-                        onchange="handleEntitySelection(this, '${foreign_table}')"
+                        onchange="handleEntitySelection(this, '${foreign_table}', '${matriculaFieldName}')"
                     >
                         ${optionsHtml}
                     </select>
