@@ -1969,6 +1969,8 @@
                 value: formattedValue 
             };
         }
+
+
         
         // Función para mostrar mensaje de error en un campo
         function showFieldError(fieldName, message) {
@@ -2038,6 +2040,118 @@
             }
             
             return true;
+        }
+
+        // Función para forzar solo números enteros positivos
+        function enforcePositiveInteger(input) {
+            let value = input.value;
+            
+            // Remover cualquier caracter que no sea número
+            value = value.replace(/[^\d]/g, '');
+            
+            // Remover ceros a la izquierda (excepto si es solo "0")
+            value = value.replace(/^0+/, '') || (value === '' ? '' : '0');
+            
+            // Si queda vacío después de limpiar, mantener vacío
+            if (value === '0' && input.min === "1") {
+                value = '';
+            }
+            
+            input.value = value;
+        }
+        
+        // Validar matrícula y verificar duplicados
+        async function validateMatricula(fieldName, value) {
+            if (!value || value.trim() === '') {
+                showFieldError(fieldName, '');
+                return true;
+            }
+            
+            // Validar que sea número entero positivo
+            const numValue = parseInt(value);
+            if (isNaN(numValue) || numValue <= 0 || numValue.toString() !== value.trim()) {
+                showFieldError(fieldName, 'La matrícula debe ser un número entero positivo');
+                return false;
+            }
+            
+            try {
+                // Verificar si ya existe en la base de datos
+                showFieldError(fieldName, 'Verificando matrícula...');
+                
+                const response = await fetch(`${API_BASE}/api/validate-matricula`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        matricula: numValue,
+                        tableName: currentTable,
+                        fieldName: fieldName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.exists) {
+                    showFieldError(fieldName, `Esta matrícula ya está registrada en ${result.entityName || 'el sistema'}`);
+                    return false;
+                } else {
+                    showFieldError(fieldName, '');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Error validando matrícula:', error);
+                showFieldError(fieldName, 'Error verificando matrícula. Intente nuevamente.');
+                return false;
+            }
+        }
+        
+        // Validar legajo y verificar duplicados  
+        async function validateLegajo(fieldName, value) {
+            if (!value || value.trim() === '') {
+                showFieldError(fieldName, '');
+                return true;
+            }
+            
+            // Validar que sea número entero positivo
+            const numValue = parseInt(value);
+            if (isNaN(numValue) || numValue <= 0 || numValue.toString() !== value.trim()) {
+                showFieldError(fieldName, 'El legajo debe ser un número entero positivo');
+                return false;
+            }
+            
+            try {
+                // Verificar si ya existe en la base de datos
+                showFieldError(fieldName, 'Verificando legajo...');
+                
+                const response = await fetch(`${API_BASE}/api/validate-legajo`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        legajo: numValue,
+                        tableName: currentTable,
+                        fieldName: fieldName
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.exists) {
+                    showFieldError(fieldName, `Este legajo ya está registrado para ${result.entityName || 'otra entidad'}`);
+                    return false;
+                } else {
+                    showFieldError(fieldName, '');
+                    return true;
+                }
+            } catch (error) {
+                console.error('Error validando legajo:', error);
+                showFieldError(fieldName, 'Error verificando legajo. Intente nuevamente.');
+                return false;
+            }
         }
 
         // Función para marcar que hay cambios sin guardar
@@ -2312,6 +2426,53 @@
                     placeholder="XX-XXXXXXXX-X"
                     title="CUIT: 11 dígitos en formato XX-XXXXXXXX-X"
                     onblur="validateField('${column_name}', this.value)"
+                >`;
+            }
+
+            // AGREGAR: Validación para matrícula
+            if (lowerFieldName.includes('matricula')) {
+                return `<input 
+                    type="number" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    min="1"
+                    step="1"
+                    title="Matrícula: solo números enteros positivos"
+                    onblur="validateMatricula('${column_name}', this.value)"
+                    oninput="enforcePositiveInteger(this)"
+                    placeholder="Ingrese número de matrícula"
+                >`;
+            }
+            
+            // AGREGAR: Validación para legajo
+            if (lowerFieldName.includes('legajo')) {
+                return `<input 
+                    type="number" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    min="1"
+                    step="1"
+                    title="Legajo: solo números enteros positivos"
+                    onblur="validateLegajo('${column_name}', this.value)"
+                    oninput="enforcePositiveInteger(this)"
+                    placeholder="Ingrese número de legajo"
+                >`;
+            }
+            
+            // AGREGAR: Validación para cantidad de asociados
+            if (lowerFieldName.includes('cantidad') && lowerFieldName.includes('asociados')) {
+                return `<input 
+                    type="number" 
+                    name="${column_name}" 
+                    id="${column_name}" 
+                    ${required}
+                    min="0"
+                    step="1"
+                    title="Cantidad de asociados: solo números enteros positivos"
+                    oninput="enforcePositiveInteger(this)"
+                    placeholder="Cantidad de asociados"
                 >`;
             }
             
