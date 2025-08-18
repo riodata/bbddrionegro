@@ -610,17 +610,6 @@ async function getForeignKeyData(tableName, foreignTable, foreignColumn, display
     return [];
   }
 }
-// Obtener datos completos de una entidad por su clave primaria
-async function getEntityData(tableName, primaryKey, primaryValue) {
-  try {
-    const query = `SELECT * FROM "${tableName}" WHERE "${primaryKey}" = $1`;
-    const result = await pool.query(query, [primaryValue]);
-    return result.rows[0] || null;
-  } catch (error) {
-    console.error(`Error obteniendo datos de entidad ${tableName}:`, error);
-    return null;
-  }
-}
 
 // Endpoint para obtener opciones de dropdowns
 app.get('/api/enum-options', auth.requireAuth, async (req, res) => {
