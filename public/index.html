@@ -1795,42 +1795,63 @@
         }
         
         // Manejar selección de entidad en dropdown
-        // Manejar selección de entidad en dropdown
-        async function handleEntitySelection(selectElement, targetTable) {
+        async function handleEntitySelection(selectElement, targetTable, matriculaFieldName = null) {
             const selectedValue = selectElement.value;
             const selectedOption = selectElement.options[selectElement.selectedIndex];
             
-             if (!selectedValue) {
+            console.log('🔄 handleEntitySelection called:', { selectedValue, targetTable, matriculaFieldName });
+            
+            if (!selectedValue) {
                 selectedEntityData = {};
-                // Limpiar y ocultar matrícula
-                const matriculaField = document.getElementById(matriculaFieldName);
-                const matriculaDisplay = document.getElementById(matriculaFieldName + '_display');
-                const matriculaValue = document.getElementById(matriculaFieldName + '_value');
                 
-                if (matriculaField) matriculaField.value = '';
-                if (matriculaDisplay) matriculaDisplay.style.display = 'none';
-                if (matriculaValue) matriculaValue.textContent = '';
+                // Si no se proporcionó matriculaFieldName, detectarlo automáticamente
+                if (!matriculaFieldName) {
+                    matriculaFieldName = detectMatriculaFieldName(targetTable);
+                }
+                
+                // Limpiar y ocultar matrícula
+                if (matriculaFieldName) {
+                    const matriculaField = document.getElementById(matriculaFieldName);
+                    const matriculaDisplay = document.getElementById(matriculaFieldName + '_display');
+                    const matriculaValue = document.getElementById(matriculaFieldName + '_value');
+                    
+                    if (matriculaField) matriculaField.value = '';
+                    if (matriculaDisplay) matriculaDisplay.style.display = 'none';
+                    if (matriculaValue) matriculaValue.textContent = '';
+                }
                 
                 return;
             }
             
             // Para tablas de entidades (cooperativas y mutuales)
             if (targetTable === 'entidades_cooperativas' || targetTable === 'entidades_mutuales') {
+                
+                // Si no se proporcionó matriculaFieldName, detectarlo automáticamente
+                if (!matriculaFieldName) {
+                    matriculaFieldName = detectMatriculaFieldName(targetTable);
+                }
+                
+                console.log('📋 Matrícula field detectado:', matriculaFieldName);
+                
                 const matricula = selectedOption.getAttribute('data-matricula');
                 const tipo = selectedOption.getAttribute('data-tipo');
                 
                 // Actualizar campo oculto de matrícula
-                const matriculaField = document.getElementById(matriculaFieldName);
-                const matriculaDisplay = document.getElementById(matriculaFieldName + '_display');
-                const matriculaValue = document.getElementById(matriculaFieldName + '_value');
-                
-                if (matriculaField && matricula) {
-                    matriculaField.value = matricula;
+                if (matriculaFieldName) {
+                    const matriculaField = document.getElementById(matriculaFieldName);
+                    const matriculaDisplay = document.getElementById(matriculaFieldName + '_display');
+                    const matriculaValue = document.getElementById(matriculaFieldName + '_value');
                     
-                    // Mostrar matrícula visualmente
-                    if (matriculaDisplay && matriculaValue) {
-                        matriculaValue.textContent = matricula;
-                        matriculaDisplay.style.display = 'block';
+                    if (matriculaField && matricula) {
+                        matriculaField.value = matricula;
+                        
+                        // Mostrar matrícula visualmente
+                        if (matriculaDisplay && matriculaValue) {
+                            matriculaValue.textContent = matricula;
+                            matriculaDisplay.style.display = 'block';
+                        }
+                        
+                        console.log('✅ Matrícula asignada:', matricula, 'al campo:', matriculaFieldName);
                     }
                 }
                 
@@ -1862,6 +1883,15 @@
                     
                     if (result.success && result.data) {
                         selectedEntityData = result.data;
+                        
+                        // Mostrar número de matrícula si existe
+                        const matriculaField = document.querySelector(`input[name*="matricula"], input[name*="numero"]`);
+                        if (matriculaField && result.data.matricula) {
+                            matriculaField.value = result.data.matricula;
+                            matriculaField.readOnly = true;
+                            matriculaField.style.backgroundColor = '#f8f9fa';
+                        }
+                        
                         clearStatus();
                         showStatus(`✅ Entidad cargada: ${result.data.nombre || result.data.denominacion || result.data.razon_social || 'Sin nombre'}`, 'success');
                     } else {
@@ -1875,6 +1905,38 @@
                 showStatus('❌ Error al cargar los datos de la entidad', 'error');
                 selectedEntityData = {};
             }
+        }
+        
+        // Función auxiliar para detectar el nombre del campo matrícula
+        function detectMatriculaFieldName(targetTable) {
+            if (!currentTableSchema || !currentTableSchema.columns) {
+                console.warn('⚠️ No hay esquema de tabla disponible');
+                return null;
+            }
+            
+            console.log('🔍 Detectando campo matrícula para tabla:', targetTable);
+            console.log('📋 Columnas disponibles:', currentTableSchema.columns.map(c => c.column_name));
+            
+            let matriculaField = null;
+            
+            if (targetTable === 'entidades_cooperativas') {
+                // Para cooperativas, buscar campo "matricula" sin "nacional"
+                matriculaField = currentTableSchema.columns.find(col => {
+                    const name = col.column_name.toLowerCase();
+                    return name.includes('matricula') && !name.includes('nacional');
+                });
+            } else if (targetTable === 'entidades_mutuales') {
+                // Para mutuales, buscar campo "matricula nacional"
+                matriculaField = currentTableSchema.columns.find(col => {
+                    const name = col.column_name.toLowerCase();
+                    return name.includes('matricula') && name.includes('nacional');
+                });
+            }
+            
+            const fieldName = matriculaField ? matriculaField.column_name : null;
+            console.log('✅ Campo matrícula detectado:', fieldName);
+            
+            return fieldName;
         }
         
         // Funciones de validación para campos específicos
@@ -2338,7 +2400,6 @@
                 `;
             }
             
-            // Si es foreign key y tenemos datos disponibles, crear dropdown
             if (is_foreign_key && foreign_table && foreignKeyData[column_name]) {
                 const fkData = foreignKeyData[column_name];
                 const options = fkData.data || [];
@@ -2350,25 +2411,17 @@
                         data-tipo="${option.tipo || ''}">${option.display}</option>`;
                 });
                 
-                // Determinar qué campo de matrícula corresponde
-                let matriculaFieldName = '';
-                if (foreign_table === 'entidades_cooperativas') {
-                    matriculaFieldName = currentTableSchema.columns.find(col => 
-                        col.column_name.toLowerCase().includes('matricula') && 
-                        !col.column_name.toLowerCase().includes('nacional')
-                    )?.column_name || 'matricula';
-                } else if (foreign_table === 'entidades_mutuales') {
-                    matriculaFieldName = currentTableSchema.columns.find(col => 
-                        col.column_name.toLowerCase().includes('matricula nacional')
-                    )?.column_name || 'Matricula Nacional';
-                }
+                // Para entidades, usar onChange sin el tercer parámetro (se detectará automáticamente)
+                const onChangeHandler = (foreign_table === 'entidades_cooperativas' || foreign_table === 'entidades_mutuales') ? 
+                    `handleEntitySelection(this, '${foreign_table}')` : 
+                    `handleEntitySelection(this, '${foreign_table}')`;
                 
                 return `
                     <select 
                         name="${column_name}" 
                         id="${column_name}" 
                         ${required}
-                        onchange="handleEntitySelection(this, '${foreign_table}', '${matriculaFieldName}')"
+                        onchange="${onChangeHandler}"
                     >
                         ${optionsHtml}
                     </select>
