@@ -516,7 +516,8 @@ async function getAllEnumOptions() {
       'tipo_asamblea',
       'tipo_financiamiento',
       'autoridades',
-      'departamento',
+      'sino',
+      'estado',
       'localidad'
     ];
 
