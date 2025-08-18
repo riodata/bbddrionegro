@@ -579,7 +579,7 @@ async function getEntityData(tableName, primaryKey, primaryValue) {
 }
 
 // Endpoint para obtener opciones de dropdowns
-app.get('/api/enum-options', async (req, res) => {
+app.get('/api/enum-options', auth.requireAuth, async (req, res) => {
   try {
     const options = await getAllEnumOptions();
     res.json({
@@ -597,7 +597,7 @@ app.get('/api/enum-options', async (req, res) => {
 });
 
 // Endpoint para obtener un enum específico
-app.get('/api/enum-options/:enumName', async (req, res) => {
+app.get('/api/enum-options/:enumName', auth.requireAuth, async (req, res) => {
   try {
     const { enumName } = req.params;
     const values = await getEnumValues(enumName);
