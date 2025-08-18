@@ -2783,15 +2783,32 @@
             let hasErrors = false;
             
             // Validar cada campo antes de enviar
-            for (let [key, value] of formData.entries()) {
-                if (!validateField(key, value)) {
-                    hasErrors = true;
+            let hasErrors = false;
+            const formFields = e.target.querySelectorAll('input, select, textarea');
+            
+            for (const field of formFields) {
+                const fieldName = field.name;
+                const fieldValue = field.value;
+                
+                if (fieldName && fieldValue) {
+                    // Validar campos específicos
+                    if (fieldName.toLowerCase().includes('matricula')) {
+                        const isValid = await validateMatricula(fieldName, fieldValue);
+                        if (!isValid) hasErrors = true;
+                    } else if (fieldName.toLowerCase().includes('legajo')) {
+                        const isValid = await validateLegajo(fieldName, fieldValue);
+                        if (!isValid) hasErrors = true;
+                    } else {
+                        // Validaciones existentes
+                        if (!validateField(fieldName, fieldValue)) {
+                            hasErrors = true;
+                        }
+                    }
                 }
-                data[key] = value;
             }
             
             if (hasErrors) {
-                showStatus('Por favor corrige los errores en el formulario', 'error');
+                showStatus('Por favor corrige los errores en el formulario antes de continuar', 'error');
                 return;
             }
 
