@@ -996,15 +996,16 @@
           isEnumField(columnName) {
             const enumFields = {
               'localidad': 'localidad',
-              'departamento': 'departamento', 
               'autoridad': 'autoridades',
-              'autoridades': 'autoridades',
               'tipo_financ': 'tipo_financiamiento',
               'tipo_financiamiento': 'tipo_financiamiento',
-              'tipo_asamblea': 'tipo_asamblea',
-              'tipoasamb': 'tipo_asamblea',
+              'tipo asamblea': 'tipo_asamblea',
               'tipo': 'tipo',
-              'subtipo': 'subtipo'
+              'subtipo': 'subtipo',
+              'estado':'estado'
+              'renovacion autoridades': 'sino',
+              'renovacion sindicatura': 'sino',
+              
             };
             
             const result = enumFields[columnName.toLowerCase()] || null;
@@ -1018,12 +1019,7 @@
           isBooleanField(columnName) {
             const booleanFields = [
               'regular',
-              'mandato activo',
-              'activo', 
-              'activa',
-              'vigente',
-              'habilitado',
-              'habilitada',
+              'mandato activo'
             ];
             
             const result = booleanFields.includes(columnName.toLowerCase());
