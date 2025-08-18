@@ -862,6 +862,114 @@ app.post('/api/password-reset/request', async (req, res) => {
   }
 });
 
+// Endpoint para validar matrícula única
+app.post('/api/validate-matricula', auth.requireAuth, async (req, res) => {
+  try {
+    const { matricula, tableName, fieldName } = req.body;
+    
+    if (!matricula || !tableName || !fieldName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parámetros requeridos: matricula, tableName, fieldName'
+      });
+    }
+    
+    // Buscar en todas las tablas de entidades
+    const tables = ['entidades_cooperativas', 'entidades_mutuales'];
+    let exists = false;
+    let entityName = '';
+    
+    for (const table of tables) {
+      try {
+        let query;
+        if (table === 'entidades_cooperativas') {
+          query = 'SELECT "Nombre de la Entidad" FROM "entidades_cooperativas" WHERE "Matricula" = $1';
+        } else if (table === 'entidades_mutuales') {
+          query = 'SELECT "Entidad" FROM "entidades_mutuales" WHERE "Matricula Nacional" = $1';
+        }
+        
+        const result = await pool.query(query, [matricula]);
+        
+        if (result.rows.length > 0) {
+          exists = true;
+          entityName = result.rows[0]['Nombre de la Entidad'] || result.rows[0]['Entidad'] || 'Entidad encontrada';
+          break;
+        }
+      } catch (error) {
+        console.log(`Tabla ${table} no accesible o no existe:`, error.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      exists: exists,
+      entityName: entityName
+    });
+    
+  } catch (error) {
+    console.error('Error validando matrícula:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para validar legajo único
+app.post('/api/validate-legajo', auth.requireAuth, async (req, res) => {
+  try {
+    const { legajo, tableName, fieldName } = req.body;
+    
+    if (!legajo || !tableName || !fieldName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Parámetros requeridos: legajo, tableName, fieldName'
+      });
+    }
+    
+    // Buscar en la tabla actual
+    let exists = false;
+    let entityName = '';
+    
+    try {
+      // Obtener esquema para encontrar la columna correcta
+      const schema = await getTableSchema(tableName);
+      const legajoColumn = schema.columns.find(col => 
+        col.column_name.toLowerCase().includes('legajo')
+      );
+      
+      if (legajoColumn) {
+        // Buscar registro con mismo legajo
+        const query = `SELECT * FROM "${tableName}" WHERE "${legajoColumn.column_name}" = $1 LIMIT 1`;
+        const result = await pool.query(query, [legajo]);
+        
+        if (result.rows.length > 0) {
+          exists = true;
+          const record = result.rows[0];
+          // Buscar un campo que pueda identificar la entidad
+          entityName = record.nombre || record.denominacion || record['Nombre de la Entidad'] || 
+                      record.entidad || `ID ${record.id}` || 'entidad existente';
+        }
+      }
+    } catch (error) {
+      console.log(`Error verificando legajo en ${tableName}:`, error.message);
+    }
+    
+    res.json({
+      success: true,
+      exists: exists,
+      entityName: entityName
+    });
+    
+  } catch (error) {
+    console.error('Error validando legajo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 // CREATE - Crear nuevo registro
 app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => {
