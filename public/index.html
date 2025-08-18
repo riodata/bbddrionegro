@@ -1776,18 +1776,53 @@
         }
         
         // Manejar selección de entidad en dropdown
+        // Manejar selección de entidad en dropdown
         async function handleEntitySelection(selectElement, targetTable) {
             const selectedValue = selectElement.value;
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
             
             if (!selectedValue) {
                 selectedEntityData = {};
+                // Limpiar campo matrícula si existe
+                const matriculaField = document.querySelector(`input[name*="matricula"]`);
+                if (matriculaField) {
+                    matriculaField.value = '';
+                }
                 return;
             }
             
+            // Para tablas de entidades, manejar matrícula automática
+            if (targetTable.toLowerCase().includes('entidad')) {
+                const matricula = selectedOption.getAttribute('data-matricula');
+                const matriculaField = document.querySelector(`input[name*="matricula"]`);
+                
+                if (matriculaField && matricula) {
+                    matriculaField.value = matricula;
+                    matriculaField.readOnly = true;
+                    matriculaField.style.backgroundColor = '#f8f9fa';
+                    
+                    // Mostrar campo matrícula si estaba oculto
+                    const matriculaContainer = matriculaField.closest('.form-group');
+                    if (matriculaContainer) {
+                        matriculaContainer.style.display = 'block';
+                    }
+                }
+                
+                clearStatus();
+                showStatus(`✅ Entidad seleccionada: ${selectedOption.text} (Matrícula: ${matricula})`, 'success');
+                
+                selectedEntityData = {
+                    nombre: selectedOption.text,
+                    matricula: matricula
+                };
+                
+                return;
+            }
+            
+            // Lógica existente para otras tablas
             showStatus('Cargando datos de la entidad...', 'info');
             
             try {
-                // Llamar al endpoint para obtener datos de la entidad
                 const response = await fetch(`${API_BASE}/api/tables/${targetTable}/entity/${selectedValue}`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`,
@@ -1800,15 +1835,6 @@
                     
                     if (result.success && result.data) {
                         selectedEntityData = result.data;
-                        
-                        // Mostrar número de matrícula si existe
-                        const matriculaField = document.querySelector(`input[name*="matricula"], input[name*="numero"]`);
-                        if (matriculaField && result.data.matricula) {
-                            matriculaField.value = result.data.matricula;
-                            matriculaField.readOnly = true;
-                            matriculaField.style.backgroundColor = '#f8f9fa';
-                        }
-                        
                         clearStatus();
                         showStatus(`✅ Entidad cargada: ${result.data.nombre || result.data.denominacion || result.data.razon_social || 'Sin nombre'}`, 'success');
                     } else {
@@ -1823,7 +1849,7 @@
                 selectedEntityData = {};
             }
         }
-
+        
         // Funciones de validación para campos específicos
         
         // Validar DNI (7-8 dígitos, solo números)
@@ -2152,10 +2178,38 @@
             const { column_name, data_type, is_foreign_key, foreign_table } = column;
             const lowerFieldName = column_name.toLowerCase();
             
+            // OCULTAR campo matrícula si hay foreign key a entidades
+            if (lowerFieldName.includes('matricula') && currentTableSchema.columns.some(col => 
+                col.is_foreign_key && col.foreign_table && col.foreign_table.toLowerCase().includes('entidad'))) {
+                return '<input type="hidden" name="' + column_name + '" id="' + column_name + '">';
+            }
+            
             // Si es foreign key y tenemos datos disponibles, crear dropdown
             if (is_foreign_key && foreign_table && foreignKeyData[column_name]) {
                 const fkData = foreignKeyData[column_name];
                 const options = fkData.data || [];
+                
+                let optionsHtml = '<option value="">Seleccionar...</option>';
+                options.forEach(option => {
+                    optionsHtml += `<option value="${option.value}" data-matricula="${option.matricula || ''}">${option.display}</option>`;
+                });
+                
+                // Para entidades, usar onChange especial
+                const onChangeHandler = foreign_table.toLowerCase().includes('entidad') ? 
+                    `handleEntitySelection(this, '${foreign_table}')` : 
+                    `handleEntitySelection(this, '${foreign_table}')`;
+                
+                return `
+                    <select 
+                        name="${column_name}" 
+                        id="${column_name}" 
+                        ${required}
+                        onchange="${onChangeHandler}"
+                    >
+                        ${optionsHtml}
+                    </select>
+                `;
+            }
                 
                 let optionsHtml = '<option value="">Seleccionar...</option>';
                 options.forEach(option => {
