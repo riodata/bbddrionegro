@@ -900,6 +900,169 @@
         let originalFormData = {};
         let currentEditingEntityName = '';
 
+        // ========== DROPDOWN MANAGER INTEGRADO ==========
+        
+        // Clase para manejar dropdowns con enums
+        class DropdownManager {
+          constructor(baseUrl = '') {
+            this.baseUrl = baseUrl;
+            this.cache = new Map();
+          }
+        
+          // Obtener token de autenticación
+          getAuthToken() {
+            return localStorage.getItem('authToken');
+          }
+        
+          // Obtener todas las opciones de enums con autenticación
+          async getAllOptions() {
+            if (this.cache.has('all_options')) {
+              return this.cache.get('all_options');
+            }
+        
+            try {
+              const token = this.getAuthToken();
+              if (!token) {
+                throw new Error('No hay token de autenticación');
+              }
+        
+              const response = await fetch(`${this.baseUrl}/api/enum-options`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              const result = await response.json();
+              
+              if (result.success) {
+                this.cache.set('all_options', result.data);
+                console.log('✅ Opciones de enum cargadas:', Object.keys(result.data));
+                return result.data;
+              } else {
+                throw new Error(result.error || 'Error obteniendo opciones');
+              }
+            } catch (error) {
+              console.error('❌ Error obteniendo opciones de enum:', error);
+              throw error;
+            }
+          }
+        
+          // Llenar un dropdown específico con autenticación
+          async populateDropdown(selectElement, enumType) {
+            try {
+              const token = this.getAuthToken();
+              if (!token) {
+                console.warn('⚠️ No hay token de autenticación para dropdown');
+                return;
+              }
+        
+              console.log(`🔄 Poblando dropdown ${enumType}...`);
+        
+              const response = await fetch(`${this.baseUrl}/api/enum-options/${enumType}`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              const result = await response.json();
+              
+              if (result.success && result.data && result.data.length > 0) {
+                // Limpiar opciones existentes
+                selectElement.innerHTML = '<option value="">Seleccionar...</option>';
+        
+                // Agregar nuevas opciones
+                result.data.forEach(option => {
+                  const optionElement = document.createElement('option');
+                  optionElement.value = option;
+                  optionElement.textContent = option;
+                  selectElement.appendChild(optionElement);
+                });
+        
+                console.log(`✅ Dropdown ${enumType} poblado con ${result.data.length} opciones:`, result.data);
+              } else {
+                console.warn(`⚠️ Tipo de enum '${enumType}' no encontrado o sin datos`);
+                selectElement.innerHTML = '<option value="">Sin opciones disponibles</option>';
+              }
+        
+            } catch (error) {
+              console.error(`❌ Error llenando dropdown ${enumType}:`, error);
+              selectElement.innerHTML = '<option value="">Error cargando opciones</option>';
+            }
+          }
+        
+          // Detectar si un campo debería ser un dropdown
+          isEnumField(columnName) {
+            const enumFields = {
+              'localidad': 'localidad',
+              'departamento': 'departamento', 
+              'autoridad': 'autoridades',
+              'autoridades': 'autoridades',
+              'tipo_financ': 'tipo_financiamiento',
+              'tipo_financiamiento': 'tipo_financiamiento',
+              'tipo_asamblea': 'tipo_asamblea',
+              'tipoasamb': 'tipo_asamblea',
+              'tipo': 'tipo',
+              'subtipo': 'subtipo'
+            };
+            
+            const result = enumFields[columnName.toLowerCase()] || null;
+            if (result) {
+              console.log(`🏷️ Campo '${columnName}' detectado como enum tipo '${result}'`);
+            }
+            return result;
+          }
+        
+          // Detectar si un campo debería ser radio buttons
+          isBooleanField(columnName) {
+            const booleanFields = [
+              'regular',
+              'mandato activo',
+              'activo', 
+              'activa',
+              'vigente',
+              'habilitado',
+              'habilitada',
+            ];
+            
+            const result = booleanFields.includes(columnName.toLowerCase());
+            if (result) {
+              console.log(`☑️ Campo '${columnName}' detectado como booleano`);
+            }
+            return result;
+          }
+        
+          // Poblar todos los dropdowns de enum en un formulario
+          async populateAllEnumDropdowns(formElement) {
+            console.log('🔄 Iniciando población de dropdowns de enum...');
+            const selects = formElement.querySelectorAll('select[id]');
+            console.log(`📋 Encontrados ${selects.length} selects en el formulario`);
+            
+            for (const select of selects) {
+              const enumType = this.isEnumField(select.id);
+              if (enumType) {
+                console.log(`🎯 Poblando select '${select.id}' con enum '${enumType}'`);
+                await this.populateDropdown(select, enumType);
+              } else {
+                console.log(`⏭️ Select '${select.id}' no es enum, saltando...`);
+              }
+            }
+            console.log('✅ Finalizada población de dropdowns de enum');
+          }
+        
+          // Limpiar cache
+          clearCache() {
+            this.cache.clear();
+            console.log('🧹 Cache de dropdown manager limpiado');
+          }
+        }
+        
+        // Instancia global del dropdown manager
+        const dropdownManager = new DropdownManager();
+        
+        // ========== FIN DROPDOWN MANAGER ==========
+             
         // Inicialización
         document.addEventListener('DOMContentLoaded', function() {
             checkAuth();
@@ -942,7 +1105,8 @@
             document.getElementById('createForm').addEventListener('submit', handleCreateForm);
             
             // Update form
-            document.getElementById('updateForm').addEventListener('submit', handleUpdateForm);
+            document.getElementById('updateForm').addEventListener('submit', handleUpdateForm);   
+            
         }
 
            // Función para mostrar mensajes de estado
@@ -1221,170 +1385,7 @@
                 showAlert('reset-password-alert', 'Error de conexión.');
             }
         }
-
-        // ========== DROPDOWN MANAGER INTEGRADO ==========
-        
-        // Clase para manejar dropdowns con enums
-        class DropdownManager {
-          constructor(baseUrl = '') {
-            this.baseUrl = baseUrl;
-            this.cache = new Map();
-          }
-        
-          // Obtener token de autenticación
-          getAuthToken() {
-            return localStorage.getItem('authToken');
-          }
-        
-          // Obtener todas las opciones de enums con autenticación
-          async getAllOptions() {
-            if (this.cache.has('all_options')) {
-              return this.cache.get('all_options');
-            }
-        
-            try {
-              const token = this.getAuthToken();
-              if (!token) {
-                throw new Error('No hay token de autenticación');
-              }
-        
-              const response = await fetch(`${this.baseUrl}/api/enum-options`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              
-              const result = await response.json();
-              
-              if (result.success) {
-                this.cache.set('all_options', result.data);
-                console.log('✅ Opciones de enum cargadas:', Object.keys(result.data));
-                return result.data;
-              } else {
-                throw new Error(result.error || 'Error obteniendo opciones');
-              }
-            } catch (error) {
-              console.error('❌ Error obteniendo opciones de enum:', error);
-              throw error;
-            }
-          }
-        
-          // Llenar un dropdown específico con autenticación
-          async populateDropdown(selectElement, enumType) {
-            try {
-              const token = this.getAuthToken();
-              if (!token) {
-                console.warn('⚠️ No hay token de autenticación para dropdown');
-                return;
-              }
-        
-              console.log(`🔄 Poblando dropdown ${enumType}...`);
-        
-              const response = await fetch(`${this.baseUrl}/api/enum-options/${enumType}`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              });
-              
-              const result = await response.json();
-              
-              if (result.success && result.data && result.data.length > 0) {
-                // Limpiar opciones existentes
-                selectElement.innerHTML = '<option value="">Seleccionar...</option>';
-        
-                // Agregar nuevas opciones
-                result.data.forEach(option => {
-                  const optionElement = document.createElement('option');
-                  optionElement.value = option;
-                  optionElement.textContent = option;
-                  selectElement.appendChild(optionElement);
-                });
-        
-                console.log(`✅ Dropdown ${enumType} poblado con ${result.data.length} opciones:`, result.data);
-              } else {
-                console.warn(`⚠️ Tipo de enum '${enumType}' no encontrado o sin datos`);
-                selectElement.innerHTML = '<option value="">Sin opciones disponibles</option>';
-              }
-        
-            } catch (error) {
-              console.error(`❌ Error llenando dropdown ${enumType}:`, error);
-              selectElement.innerHTML = '<option value="">Error cargando opciones</option>';
-            }
-          }
-        
-          // Detectar si un campo debería ser un dropdown
-          isEnumField(columnName) {
-            const enumFields = {
-              'localidad': 'localidad',
-              'departamento': 'departamento', 
-              'autoridad': 'autoridades',
-              'autoridades': 'autoridades',
-              'tipo_financ': 'tipo_financiamiento',
-              'tipo_financiamiento': 'tipo_financiamiento',
-              'tipo_asamblea': 'tipo_asamblea',
-              'tipoasamb': 'tipo_asamblea',
-              'tipo': 'tipo',
-              'subtipo': 'subtipo'
-            };
-            
-            const result = enumFields[columnName.toLowerCase()] || null;
-            if (result) {
-              console.log(`🏷️ Campo '${columnName}' detectado como enum tipo '${result}'`);
-            }
-            return result;
-          }
-        
-          // Detectar si un campo debería ser radio buttons
-          isBooleanField(columnName) {
-            const booleanFields = [
-              'regular',
-              'activo', 
-              'activa',
-              'vigente',
-              'habilitado',
-              'habilitada',
-              'estado'
-            ];
-            
-            const result = booleanFields.includes(columnName.toLowerCase());
-            if (result) {
-              console.log(`☑️ Campo '${columnName}' detectado como booleano`);
-            }
-            return result;
-          }
-        
-          // Poblar todos los dropdowns de enum en un formulario
-          async populateAllEnumDropdowns(formElement) {
-            console.log('🔄 Iniciando población de dropdowns de enum...');
-            const selects = formElement.querySelectorAll('select[id]');
-            console.log(`📋 Encontrados ${selects.length} selects en el formulario`);
-            
-            for (const select of selects) {
-              const enumType = this.isEnumField(select.id);
-              if (enumType) {
-                console.log(`🎯 Poblando select '${select.id}' con enum '${enumType}'`);
-                await this.populateDropdown(select, enumType);
-              } else {
-                console.log(`⏭️ Select '${select.id}' no es enum, saltando...`);
-              }
-            }
-            console.log('✅ Finalizada población de dropdowns de enum');
-          }
-        
-          // Limpiar cache
-          clearCache() {
-            this.cache.clear();
-            console.log('🧹 Cache de dropdown manager limpiado');
-          }
-        }
-        
-        // Instancia global del dropdown manager
-        const dropdownManager = new DropdownManager();
-        
-        // ========== FIN DROPDOWN MANAGER ==========
-        
+   
         // Función mejorada para peticiones autenticadas
         async function authenticatedFetch(url, options = {}) {
             try {
@@ -1790,27 +1791,40 @@
             showStatus('Cargando datos de la entidad...', 'info');
             
             try {
-                const entityData = await loadEntityData(targetTable, selectedValue);
-                
-                if (entityData) {
-                    selectedEntityData = entityData;
-                    
-                    // Mostrar número de matrícula si existe
-                    const matriculaField = document.querySelector(`input[name*="matricula"], input[name*="numero"]`);
-                    if (matriculaField && entityData.matricula) {
-                        matriculaField.value = entityData.matricula;
-                        matriculaField.readOnly = true;
-                        matriculaField.style.backgroundColor = '#f8f9fa';
+                // Llamar al endpoint para obtener datos de la entidad
+                const response = await fetch(`${API_BASE}/api/tables/${targetTable}/entity/${selectedValue}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
                     }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
                     
-                    clearStatus();
-                    showStatus(`Entidad cargada: ${entityData.nombre || 'Sin nombre'}`, 'success');
+                    if (result.success && result.data) {
+                        selectedEntityData = result.data;
+                        
+                        // Mostrar número de matrícula si existe
+                        const matriculaField = document.querySelector(`input[name*="matricula"], input[name*="numero"]`);
+                        if (matriculaField && result.data.matricula) {
+                            matriculaField.value = result.data.matricula;
+                            matriculaField.readOnly = true;
+                            matriculaField.style.backgroundColor = '#f8f9fa';
+                        }
+                        
+                        clearStatus();
+                        showStatus(`✅ Entidad cargada: ${result.data.nombre || result.data.denominacion || result.data.razon_social || 'Sin nombre'}`, 'success');
+                    } else {
+                        showStatus('❌ No se pudieron cargar los datos de la entidad', 'error');
+                    }
                 } else {
-                    showStatus('No se pudieron cargar los datos de la entidad', 'error');
+                    throw new Error(`Error ${response.status}: ${response.statusText}`);
                 }
             } catch (error) {
-                console.error('Error al cargar entidad:', error);
-                showStatus('Error al cargar los datos de la entidad', 'error');
+                console.error('❌ Error al cargar entidad:', error);
+                showStatus('❌ Error al cargar los datos de la entidad', 'error');
+                selectedEntityData = {};
             }
         }
 
@@ -2969,6 +2983,7 @@
                 });
             });
         }
+        
         function createUpdateInputElement(column, inputType, required, value, isPrimaryKey) {
             const commonAttributes = `
                 id="update-${column.column_name.replace(/\s+/g, '_')}" 
