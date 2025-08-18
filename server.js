@@ -547,7 +547,51 @@ async function getAllEnumOptions() {
 
 async function getForeignKeyData(tableName, foreignTable, foreignColumn, displayColumn = 'nombre') {
   try {
-    // Construir query para obtener datos ordenados alfabéticamente
+    console.log(`🔄 Obteniendo FK data para tabla: ${tableName}, foreign: ${foreignTable}`);
+    
+    // Lógica especial para COOPERATIVAS
+    if (foreignTable === 'entidades_cooperativas') {
+      const query = `
+        SELECT "Matricula", "Nombre de la Entidad"
+        FROM "entidades_cooperativas" 
+        WHERE "Nombre de la Entidad" IS NOT NULL 
+        ORDER BY "Nombre de la Entidad" ASC
+      `;
+      
+      const result = await pool.query(query);
+      console.log(`✅ Cooperativas encontradas: ${result.rows.length}`);
+      
+      return result.rows.map(row => ({
+        value: row.Matricula,
+        display: row['Nombre de la Entidad'],
+        text: row['Nombre de la Entidad'],
+        matricula: row.Matricula,
+        tipo: 'cooperativa'
+      }));
+    }
+    
+    // Lógica especial para MUTUALES
+    if (foreignTable === 'entidades_mutuales') {
+      const query = `
+        SELECT "Matricula Nacional", "Entidad"
+        FROM "entidades_mutuales" 
+        WHERE "Entidad" IS NOT NULL 
+        ORDER BY "Entidad" ASC
+      `;
+      
+      const result = await pool.query(query);
+      console.log(`✅ Mutuales encontradas: ${result.rows.length}`);
+      
+      return result.rows.map(row => ({
+        value: row['Matricula Nacional'],
+        display: row.Entidad,
+        text: row.Entidad,
+        matricula: row['Matricula Nacional'],
+        tipo: 'mutual'
+      }));
+    }
+    
+    // Lógica normal para otras tablas
     const query = `
       SELECT "${foreignColumn}", "${displayColumn}"
       FROM "${foreignTable}" 
@@ -566,7 +610,6 @@ async function getForeignKeyData(tableName, foreignTable, foreignColumn, display
     return [];
   }
 }
-
 // Obtener datos completos de una entidad por su clave primaria
 async function getEntityData(tableName, primaryKey, primaryValue) {
   try {
