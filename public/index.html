@@ -2781,9 +2781,6 @@
             const formData = new FormData(e.target);
             const data = {};
             let hasErrors = false;
-            
-            // Validar cada campo antes de enviar
-            let hasErrors = false;
             const formFields = e.target.querySelectorAll('input, select, textarea');
             
             for (const field of formFields) {
