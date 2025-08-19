@@ -611,6 +611,18 @@ async function getForeignKeyData(tableName, foreignTable, foreignColumn, display
   }
 }
 
+// Obtener datos completos de una entidad por su clave primaria
+async function getEntityData(tableName, primaryKey, primaryValue) {
+  try {
+    const query = `SELECT * FROM "${tableName}" WHERE "${primaryKey}" = $1`;
+    const result = await pool.query(query, [primaryValue]);
+    return result.rows[0] || null;
+  } catch (error) {
+    console.error(`Error obteniendo datos de entidad ${tableName}:`, error);
+    return null;
+  }
+}
+
 // Endpoint para obtener opciones de dropdowns
 app.get('/api/enum-options', auth.requireAuth, async (req, res) => {
   try {
@@ -966,6 +978,60 @@ app.post('/api/validate-legajo', auth.requireAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint para obtener cooperativas
+app.get('/api/entidades/cooperativas', auth.requireAuth, async (req, res) => {
+  try {
+    const query = `
+      SELECT "Matricula" as matricula, "Nombre de la Entidad" as nombre
+      FROM "entidades_cooperativas" 
+      WHERE "Nombre de la Entidad" IS NOT NULL 
+      ORDER BY "Nombre de la Entidad" ASC
+    `;
+    
+    const result = await pool.query(query);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      total: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error obteniendo cooperativas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo cooperativas',
+      error: error.message
+    });
+  }
+});
+
+// Endpoint para obtener mutuales
+app.get('/api/entidades/mutuales', auth.requireAuth, async (req, res) => {
+  try {
+    const query = `
+      SELECT "Matricula Nacional" as matricula, "Entidad" as nombre
+      FROM "entidades_mutuales" 
+      WHERE "Entidad" IS NOT NULL 
+      ORDER BY "Entidad" ASC
+    `;
+    
+    const result = await pool.query(query);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      total: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error obteniendo mutuales:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo mutuales',
+      error: error.message
     });
   }
 });
