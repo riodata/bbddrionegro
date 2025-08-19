@@ -1272,6 +1272,34 @@
             }, 3000);
         }
 
+        // Función para formatear nombres de columnas
+        function formatColumnName(columnName) {
+            // Manejar casos especiales
+            const specialCases = {
+                'id': 'ID',
+                'dni': 'DNI',
+                'cuit': 'CUIT',
+                'cuil': 'CUIL',
+                'matricula_nacional': 'Matrícula Nacional',
+                'matricula': 'Matrícula',
+                'telefono': 'Teléfono',
+                'email': 'Correo Electrónico',
+                'created_at': 'Fecha de Creación',
+                'updated_at': 'Última Actualización'
+            };
+            
+            // Si hay un caso especial, usarlo
+            if (specialCases[columnName.toLowerCase()]) {
+                return specialCases[columnName.toLowerCase()];
+            }
+            
+            // Convertir snake_case a formato legible
+            return columnName
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                .join(' ');
+        }
+
         // Manejar login
         async function handleLogin(e) {
             e.preventDefault();
