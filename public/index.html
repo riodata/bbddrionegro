@@ -189,18 +189,6 @@
             font-size: 1.2rem;
         }
 
-        /* Estilos para campos readonly */
-        input[readonly], select[readonly] {
-            background-color: #f0f0f0 !important;
-            cursor: not-allowed;
-        }
-        
-        /* Destacar el selector de entidad */
-        #entity_selector {
-            border: 2px solid #007bff;
-            background-color: #f8f9fa;
-        }
-        
         .category-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1247,59 +1235,6 @@
             document.getElementById(containerId).innerHTML = '';
         }
 
-        // Funciones de utilidad para mensajes
-        function showError(message) {
-            const statusDiv = document.getElementById('status-message');
-            statusDiv.innerHTML = `<div class="alert alert-error">${message}</div>`;
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 5000);
-        }
-        
-        function showSuccess(message) {
-            const statusDiv = document.getElementById('status-message');
-            statusDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 3000);
-        }
-        
-        function showInfo(message) {
-            const statusDiv = document.getElementById('status-message');
-            statusDiv.innerHTML = `<div class="alert alert-info">${message}</div>`;
-            setTimeout(() => {
-                statusDiv.innerHTML = '';
-            }, 3000);
-        }
-
-        // Función para formatear nombres de columnas
-        function formatColumnName(columnName) {
-            // Manejar casos especiales
-            const specialCases = {
-                'id': 'ID',
-                'dni': 'DNI',
-                'cuit': 'CUIT',
-                'cuil': 'CUIL',
-                'matricula_nacional': 'Matrícula Nacional',
-                'matricula': 'Matrícula',
-                'telefono': 'Teléfono',
-                'email': 'Correo Electrónico',
-                'created_at': 'Fecha de Creación',
-                'updated_at': 'Última Actualización'
-            };
-            
-            // Si hay un caso especial, usarlo
-            if (specialCases[columnName.toLowerCase()]) {
-                return specialCases[columnName.toLowerCase()];
-            }
-            
-            // Convertir snake_case a formato legible
-            return columnName
-                .split('_')
-                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                .join(' ');
-        }
-
         // Manejar login
         async function handleLogin(e) {
             e.preventDefault();
@@ -1752,179 +1687,24 @@
         // Cargar esquema de tabla específica
         async function loadTableSchema(tableName) {
             try {
-                const token = localStorage.getItem('authToken');
-                if (!token) {
-                    throw new Error('Token de autenticación requerido.');
-                }
-        
-                const response = await fetch(`/api/tables/${tableName}/schema`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
+                showStatus('Cargando estructura de tabla...', 'info');
                 
+                const response = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/schema`);
                 const result = await response.json();
                 
-                if (!result.success) {
-                    throw new Error(result.message || 'Error al cargar esquema');
+                if (result.success) {
+                    currentTableSchema = result.schema;
+                    setupDynamicCrudInterface();
+                    clearStatus();
+                } else {
+                    throw new Error(result.message);
                 }
-                
-                const schema = result.schema;
-                console.log('Schema loaded:', schema);
-                
-                let formHtml = '<form id="createForm">';
-                
-                // Verificar si la tabla tiene FK a entidades_mutuales o entidades_cooperativas
-                const entityFK = checkEntityForeignKey(schema.foreignKeys);
-                
-                // Si tiene FK a entidades, agregar dropdown de entidad como primer campo
-                if (entityFK) {
-                    formHtml += await createEntityDropdown(entityFK);
-                }
-                
-                schema.columns.forEach(column => {
-                    if (column.column_name !== 'id') {
-                        // Si es el campo de matrícula y tenemos FK a entidades, hacerlo readonly
-                        const isMatriculaField = entityFK && 
-                            ((entityFK.type === 'mutual' && column.column_name.toLowerCase().includes('matricula')) ||
-                             (entityFK.type === 'cooperativa' && column.column_name.toLowerCase().includes('matricula')));
-                        
-                        formHtml += createFormField(column, schema.foreignKeys, isMatriculaField);
-                    }
-                });
-                
-                formHtml += '<button type="submit">Crear</button></form>';
-                document.getElementById('create-fields').innerHTML = formHtml;
-                
-                // Si hay FK a entidades, configurar el evento change
-                if (entityFK) {
-                    setupEntityDropdownHandler(entityFK);
-                }
-                
-                setupFormSubmitHandler(tableName);
-                
             } catch (error) {
-                console.error('Error loading schema:', error);
-                showError('Error al cargar el esquema de la tabla: ' + error.message);
+                console.error('Error loading table schema:', error);
+                showStatus('Error al cargar esquema: ' + error.message, 'error');
             }
         }
 
-        function createFormField(column, foreignKeys = {}, isReadonly = false) {
-            const fieldName = column.column_name;
-            let inputType = 'text';
-            let additionalAttributes = isReadonly ? 'readonly style="background-color: #f0f0f0;"' : '';
-            
-            if (column.data_type === 'integer' || column.data_type === 'bigint') {
-                inputType = 'number';
-            } else if (column.data_type === 'boolean') {
-                return `
-                    <div class="form-field">
-                        <label for="${column.column_name}">${formatColumnName(column.column_name)}:</label>
-                        <select name="${column.column_name}" id="${column.column_name}" ${additionalAttributes}>
-                            <option value="">Seleccionar...</option>
-                            <option value="true">Sí</option>
-                            <option value="false">No</option>
-                        </select>
-                    </div>
-                `;
-            } else if (column.data_type === 'date') {
-                inputType = 'date';
-            } else if (column.data_type === 'timestamp with time zone' || column.data_type === 'timestamp without time zone') {
-                inputType = 'datetime-local';
-            }
-            
-            // Si tiene foreign key y no es readonly, crear dropdown
-            const fk = foreignKeys[fieldName];
-            if (fk && !isReadonly) {
-                return `
-                    <div class="form-group">
-                        <label for="${fieldName}">${formatColumnName(fieldName)}:</label>
-                        <select name="${fieldName}" id="${fieldName}" onchange="loadRelatedData('${fk.table}', this.value, '${fieldName}')">
-                            <option value="">Seleccionar...</option>
-                        </select>
-                    </div>
-                `;
-            }
-            
-            return `
-                <div class="form-group">
-                    <label for="${fieldName}">${formatColumnName(fieldName)}:</label>
-                    <input type="${inputType}" name="${fieldName}" id="${fieldName}" ${additionalAttributes}>
-                </div>
-            `;
-        }
-
-        function checkEntityForeignKey(foreignKeys) {
-            for (const [column, fk] of Object.entries(foreignKeys)) {
-                if (fk.table === 'entidades_mutuales') {
-                    return { type: 'mutual', column: column, matriculaField: 'matricula_nacional' };
-                } else if (fk.table === 'entidades_cooperativas') {
-                    return { type: 'cooperativa', column: column, matriculaField: 'matricula' };
-                }
-            }
-            return null;
-        }
-        
-        async function createEntityDropdown(entityFK) {
-            try {
-                const token = localStorage.getItem('authToken');
-                const endpoint = entityFK.type === 'mutual' ? '/api/entidades/mutuales' : '/api/entidades/cooperativas';
-                
-                const response = await fetch(endpoint, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const result = await response.json();
-                const entities = result.success ? result.data : result;
-                
-                let options = '<option value="">Seleccionar entidad...</option>';
-                entities.forEach(entity => {
-                    const matriculaField = entityFK.type === 'mutual' ? 'matricula_nacional' : 'matricula';
-                    options += `<option value="${entity.id}" data-matricula="${entity[matriculaField]}">${entity.nombre}</option>`;
-                });
-                
-                return `
-                    <div class="form-group">
-                        <label for="entity_selector">Entidad:</label>
-                        <select name="entity_selector" id="entity_selector">
-                            ${options}
-                        </select>
-                    </div>
-                `;
-            } catch (error) {
-                console.error('Error loading entities:', error);
-                return '';
-            }
-        }
-        
-        function setupEntityDropdownHandler(entityFK) {
-            const entitySelector = document.getElementById('entity_selector');
-            if (entitySelector) {
-                entitySelector.addEventListener('change', function() {
-                    const selectedOption = this.options[this.selectedIndex];
-                    const matricula = selectedOption.getAttribute('data-matricula');
-                    
-                    // Buscar el campo de matrícula y completarlo
-                    const matriculaField = document.querySelector(`input[name*="matricula"]`);
-                    if (matriculaField && matricula) {
-                        matriculaField.value = matricula;
-                        matriculaField.setAttribute('readonly', 'readonly');
-                        matriculaField.style.backgroundColor = '#f0f0f0';
-                    }
-                    
-                    // También completar el campo FK si existe
-                    const fkField = document.getElementById(entityFK.column);
-                    if (fkField && this.value) {
-                        fkField.value = this.value;
-                    }
-                });
-            }
-        }
-        
         // Configurar interfaz CRUD dinámicamente
         function setupDynamicCrudInterface() {
             if (!currentTableSchema) return;
@@ -2776,52 +2556,6 @@
                 console.warn('⚠️ No se pudo encontrar el campo matrícula:', targetMatriculaField);
             }
         }
-
-        function setupFormSubmitHandler(tableName) {
-            document.getElementById('createForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                const formData = new FormData(e.target);
-                const data = {};
-                
-                // Procesar todos los campos del formulario
-                for (let [key, value] of formData.entries()) {
-                    // Saltar el selector de entidad ya que no es un campo de la tabla
-                    if (key === 'entity_selector') continue;
-                    
-                    if (value !== '') {
-                        data[key] = value;
-                    }
-                }
-                
-                try {
-                    const response = await fetch(`/api/tables/${tableName}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(data)
-                    });
-                    
-                    if (response.ok) {
-                        showSuccess('Registro creado exitosamente');
-                        e.target.reset();
-                        // Limpiar también el selector de entidad
-                        const entitySelector = document.getElementById('entity_selector');
-                        if (entitySelector) {
-                            entitySelector.value = '';
-                        }
-                        loadTableData(currentTable);
-                    } else {
-                        const error = await response.json();
-                        showError('Error al crear registro: ' + (error.error || 'Error desconocido'));
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    showError('Error al crear registro');
-                }
-            });
-        }
         
         function createInputElement(column, inputType, required) {
             const { column_name, data_type, is_foreign_key, foreign_table } = column;
@@ -3284,7 +3018,7 @@
                 // Solo validar campos que tienen valor
                 if (fieldName && fieldValue && fieldValue.trim() !== '') {
                     // Validar campos específicos
-                    if (fieldName.toLowerCase().includes('matricula') || fieldName.toLowerCase().includes('matrícula')) {
+                    if (fieldName.toLowerCase().includes('matricula')) || fieldName.toLowerCase().includes('matrícula')) {
                         const isValid = await validateMatricula(fieldName, fieldValue);
                         if (!isValid) hasErrors = true;
                     } else if (fieldName.toLowerCase().includes('legajo')) {
