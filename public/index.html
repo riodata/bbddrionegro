@@ -189,6 +189,18 @@
             font-size: 1.2rem;
         }
 
+        /* Estilos para campos readonly */
+        input[readonly], select[readonly] {
+            background-color: #f0f0f0 !important;
+            cursor: not-allowed;
+        }
+        
+        /* Destacar el selector de entidad */
+        #entity_selector {
+            border: 2px solid #007bff;
+            background-color: #f8f9fa;
+        }
+        
         .category-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -1734,6 +1746,116 @@
             }
         }
 
+        function createFormField(column, foreignKeys = {}, isReadonly = false) {
+            const fk = foreignKeys[column.column_name];
+            let inputType = 'text';
+            let additionalAttributes = isReadonly ? 'readonly style="background-color: #f0f0f0;"' : '';
+            
+            if (column.data_type === 'integer' || column.data_type === 'bigint') {
+                inputType = 'number';
+            } else if (column.data_type === 'boolean') {
+                return `
+                    <div class="form-field">
+                        <label for="${column.column_name}">${formatColumnName(column.column_name)}:</label>
+                        <select name="${column.column_name}" id="${column.column_name}" ${additionalAttributes}>
+                            <option value="">Seleccionar...</option>
+                            <option value="true">Sí</option>
+                            <option value="false">No</option>
+                        </select>
+                    </div>
+                `;
+            } else if (column.data_type === 'date') {
+                inputType = 'date';
+            } else if (column.data_type === 'timestamp with time zone' || column.data_type === 'timestamp without time zone') {
+                inputType = 'datetime-local';
+            }
+            
+            if (fk && !isReadonly) {
+                return `
+                    <div class="form-field">
+                        <label for="${column.column_name}">${formatColumnName(column.column_name)}:</label>
+                        <select name="${column.column_name}" id="${column.column_name}" onchange="loadRelatedData('${fk.table}', this.value, '${column.column_name}')">
+                            <option value="">Seleccionar...</option>
+                        </select>
+                    </div>
+                `;
+            }
+            
+            return `
+                <div class="form-field">
+                    <label for="${column.column_name}">${formatColumnName(column.column_name)}:</label>
+                    <input type="${inputType}" name="${column.column_name}" id="${column.column_name}" ${additionalAttributes}>
+                </div>
+            `;
+        }
+
+        function checkEntityForeignKey(foreignKeys) {
+            for (const [column, fk] of Object.entries(foreignKeys)) {
+                if (fk.table === 'entidades_mutuales') {
+                    return { type: 'mutual', column: column, matriculaField: findMatriculaField('matricula_nacional') };
+                } else if (fk.table === 'entidades_cooperativas') {
+                    return { type: 'cooperativa', column: column, matriculaField: findMatriculaField('matricula') };
+                }
+            }
+            return null;
+        }
+        
+        function findMatriculaField(searchTerm) {
+            // Esta función buscará el campo de matrícula en el esquema actual
+            // Por ahora retornamos el nombre esperado, pero se puede mejorar
+            return searchTerm;
+        }
+        
+        async function createEntityDropdown(entityFK) {
+            try {
+                const endpoint = entityFK.type === 'mutual' ? '/api/entidades/mutuales' : '/api/entidades/cooperativas';
+                const response = await fetch(endpoint);
+                const entities = await response.json();
+                
+                let options = '<option value="">Seleccionar entidad...</option>';
+                entities.forEach(entity => {
+                    const matriculaField = entityFK.type === 'mutual' ? 'matricula_nacional' : 'matricula';
+                    options += `<option value="${entity.id}" data-matricula="${entity[matriculaField]}">${entity.nombre}</option>`;
+                });
+                
+                return `
+                    <div class="form-field">
+                        <label for="entity_selector">Entidad:</label>
+                        <select name="entity_selector" id="entity_selector">
+                            ${options}
+                        </select>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading entities:', error);
+                return '';
+            }
+        }
+        
+        function setupEntityDropdownHandler(entityFK) {
+            const entitySelector = document.getElementById('entity_selector');
+            if (entitySelector) {
+                entitySelector.addEventListener('change', function() {
+                    const selectedOption = this.options[this.selectedIndex];
+                    const matricula = selectedOption.getAttribute('data-matricula');
+                    
+                    // Buscar el campo de matrícula y completarlo
+                    const matriculaField = document.querySelector(`input[name*="matricula"]`);
+                    if (matriculaField && matricula) {
+                        matriculaField.value = matricula;
+                        matriculaField.setAttribute('readonly', 'readonly');
+                        matriculaField.style.backgroundColor = '#f0f0f0';
+                    }
+                    
+                    // También completar el campo FK si existe
+                    const fkField = document.getElementById(entityFK.column);
+                    if (fkField && this.value) {
+                        fkField.value = this.value;
+                    }
+                });
+            }
+        }
+
         // Configurar interfaz CRUD dinámicamente
         function setupDynamicCrudInterface() {
             if (!currentTableSchema) return;
@@ -2584,6 +2706,52 @@
             } else {
                 console.warn('⚠️ No se pudo encontrar el campo matrícula:', targetMatriculaField);
             }
+        }
+
+        function setupFormSubmitHandler(tableName) {
+            document.getElementById('createForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = new FormData(e.target);
+                const data = {};
+                
+                // Procesar todos los campos del formulario
+                for (let [key, value] of formData.entries()) {
+                    // Saltar el selector de entidad ya que no es un campo de la tabla
+                    if (key === 'entity_selector') continue;
+                    
+                    if (value !== '') {
+                        data[key] = value;
+                    }
+                }
+                
+                try {
+                    const response = await fetch(`/api/tables/${tableName}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (response.ok) {
+                        showSuccess('Registro creado exitosamente');
+                        e.target.reset();
+                        // Limpiar también el selector de entidad
+                        const entitySelector = document.getElementById('entity_selector');
+                        if (entitySelector) {
+                            entitySelector.value = '';
+                        }
+                        loadTableData(currentTable);
+                    } else {
+                        const error = await response.json();
+                        showError('Error al crear registro: ' + (error.error || 'Error desconocido'));
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    showError('Error al crear registro');
+                }
+            });
         }
         
         function createInputElement(column, inputType, required) {
