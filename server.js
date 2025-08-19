@@ -1050,9 +1050,25 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
     
     logOperation('CREATE REQUEST', { tableName, data });
 
+    // Limpiar datos de campos vacíos o undefined
+    const cleanData = {};
+    Object.keys(data).forEach(key => {
+      if (data[key] !== undefined && data[key] !== null && data[key] !== '') {
+        cleanData[key] = data[key];
+      }
+    });
+
     // Construir query de inserción CON COMILLAS DOBLES
-    const columns = Object.keys(data);
-    const values = Object.values(data);
+    const columns = Object.keys(cleanData);
+    const values = Object.values(cleanData);
+    
+    if (columns.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay datos válidos para insertar'
+      });
+    }
+    
     const placeholders = values.map((_, index) => `$${index + 1}`);
     const quotedColumns = columns.map(col => `"${col}"`).join(', ');
     
@@ -1061,6 +1077,9 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
       VALUES (${placeholders.join(', ')})
       RETURNING *
     `;
+
+    console.log('📋 Query SQL:', insertQuery);
+    console.log('📋 Valores:', values);
 
     const result = await pool.query(insertQuery, values);
     const newRecord = result.rows[0];
@@ -1082,7 +1101,6 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
     });
   }
 });
-
 // READ - Leer todos los registros
 app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   try {
