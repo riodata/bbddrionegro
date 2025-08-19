@@ -2703,6 +2703,61 @@
             }
         }
 
+        // Mapear tipos de PostgreSQL a tipos de input HTML
+        function getInputTypeFromDataType(dataType, columnName) {
+            const lowerDataType = dataType.toLowerCase();
+            const lowerColumnName = columnName.toLowerCase();
+            
+            // Mapeo por tipo de dato
+            const typeMap = {
+                'integer': 'number',
+                'bigint': 'number',
+                'smallint': 'number',
+                'decimal': 'number',
+                'numeric': 'number',
+                'real': 'number',
+                'double precision': 'number',
+                'money': 'number',
+                'date': 'date',
+                'timestamp': 'datetime-local',
+                'timestamptz': 'datetime-local',
+                'time': 'time',
+                'timetz': 'time',
+                'boolean': 'checkbox'
+            };
+            
+            // Verificar por tipo de dato primero
+            if (typeMap[lowerDataType]) {
+                return typeMap[lowerDataType];
+            }
+            
+            // Para tipos de texto, verificar por nombre de columna
+            if (lowerDataType.includes('varchar') || lowerDataType.includes('text') || lowerDataType.includes('char')) {
+                // Detectar emails
+                if (lowerColumnName.includes('email') || lowerColumnName.includes('mail')) {
+                    return 'email';
+                }
+                // Detectar teléfonos
+                if (lowerColumnName.includes('tel') || lowerColumnName.includes('phone') || lowerColumnName.includes('telefono')) {
+                    return 'tel';
+                }
+                // Detectar URLs
+                if (lowerColumnName.includes('url') || lowerColumnName.includes('web') || lowerColumnName.includes('site')) {
+                    return 'url';
+                }
+                // Detectar fechas por nombre
+                if (lowerColumnName.includes('fecha') || lowerColumnName.includes('date')) {
+                    return 'date';
+                }
+                // Para campos de texto largo
+                if (lowerDataType === 'text' || (lowerDataType.includes('varchar') && lowerColumnName.includes('descripcion'))) {
+                    return 'textarea';
+                }
+            }
+            
+            return 'text'; // Por defecto
+        }
+
         // Cargar campos para búsqueda global SIN mostrar el tipo
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) {
@@ -2898,25 +2953,33 @@
         // Manejar formulario de creación
         async function handleCreateForm(e) {
             e.preventDefault();
-
+        
             const formData = new FormData(e.target);
             const data = {};
             let hasErrors = false;
             const formFields = e.target.querySelectorAll('input, select, textarea');
-
+        
+            // Procesar y limpiar datos del formulario
             for (let [key, value] of formData.entries()) {
                 // Excluir el campo auxiliar entidad_selector
                 if (key === 'entidad_selector') {
                     continue;
                 }
-                data[key] = value;
+                
+                // Solo agregar campos con valores
+                if (value !== undefined && value !== null && value.trim() !== '') {
+                    data[key] = value.trim();
+                }
             }
-                        
+        
+            console.log('📋 Datos procesados para envío:', data);
+                            
             for (const field of formFields) {
                 const fieldName = field.name;
                 const fieldValue = field.value;
                 
-                if (fieldName && fieldValue) {
+                // Solo validar campos que tienen valor
+                if (fieldName && fieldValue && fieldValue.trim() !== '') {
                     // Validar campos específicos
                     if (fieldName.toLowerCase().includes('matricula')) {
                         const isValid = await validateMatricula(fieldName, fieldValue);
@@ -2937,10 +3000,16 @@
                 showStatus('Por favor corrige los errores en el formulario antes de continuar', 'error');
                 return;
             }
-
+        
+            // Verificar que hay al menos algunos datos para enviar
+            if (Object.keys(data).length === 0) {
+                showStatus('Debe completar al menos un campo para crear el registro', 'error');
+                return;
+            }
+        
             const submitButton = e.target.querySelector('button[type="submit"]');
             const originalText = submitButton.textContent;
-
+        
             try {
                 submitButton.disabled = true;
                 submitButton.innerHTML = '<span class="loading"></span> Creando...';
@@ -2950,7 +3019,7 @@
                     method: 'POST',
                     body: JSON.stringify(data),
                 });
-
+        
                 const result = await response.json();
                 
                 if (result.success) {
@@ -2961,7 +3030,7 @@
                     clearStatus();
                     // Limpiar formulario
                     e.target.reset();
-            } else {
+                } else {
                     showStatus('Error al crear el registro: ' + result.message, 'error');
                 }
             } catch (error) {
@@ -2972,7 +3041,6 @@
                 submitButton.textContent = originalText;
             }
         }
-
         // Manejar formulario de actualización
         async function handleUpdateForm(e) {
             e.preventDefault();
