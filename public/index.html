@@ -3018,7 +3018,7 @@
                 // Solo validar campos que tienen valor
                 if (fieldName && fieldValue && fieldValue.trim() !== '') {
                     // Validar campos específicos
-                    if (fieldName.toLowerCase().includes('matricula')) || fieldName.toLowerCase().includes('matrícula')) {
+                    if (fieldName.toLowerCase().includes('matricula') || fieldName.toLowerCase().includes('matrícula')) {
                         const isValid = await validateMatricula(fieldName, fieldValue);
                         if (!isValid) hasErrors = true;
                     } else if (fieldName.toLowerCase().includes('legajo')) {
