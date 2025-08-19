@@ -2390,6 +2390,41 @@
             }, 200);
         }
 
+        // Función auxiliar para detectar el nombre del campo matrícula
+        function detectMatriculaFieldName(targetTable) {
+            if (!currentTableSchema || !currentTableSchema.columns) {
+                console.warn('⚠️ No hay esquema de tabla disponible');
+                return null;
+            }
+            
+            console.log('🔍 Detectando campo matrícula para tabla:', targetTable);
+            console.log('📋 Columnas disponibles:', currentTableSchema.columns.map(c => c.column_name));
+            
+            let matriculaField = null;
+            
+            if (targetTable === 'entidades_cooperativas') {
+                // Para cooperativas, buscar campo "matricula" o "matrícula" sin "nacional"
+                matriculaField = currentTableSchema.columns.find(col => {
+                    const name = col.column_name.toLowerCase();
+                    // Buscar tanto "matricula" como "matrícula" y sin "nacional"
+                    return (name.includes('matricula') || name.includes('matrícula')) && 
+                           !name.includes('nacional');
+                });
+            } else if (targetTable === 'entidades_mutuales') {
+                // Para mutuales, buscar campo "matricula nacional" o "matrícula nacional"
+                matriculaField = currentTableSchema.columns.find(col => {
+                    const name = col.column_name.toLowerCase();
+                    return (name.includes('matricula') || name.includes('matrícula')) && 
+                           name.includes('nacional');
+                });
+            }
+            
+            const fieldName = matriculaField ? matriculaField.column_name : null;
+            console.log('✅ Campo matrícula detectado:', fieldName);
+            
+            return fieldName;
+        }
+
         // Crear campo selector de entidad ad-hoc
         async function createEntidadSelectorField() {
             try {
@@ -2419,8 +2454,9 @@
                         // Buscar campo matrícula para cooperativas
                         matriculaTargetField = currentTableSchema.columns.find(col => {
                             const name = col.column_name.toLowerCase();
-                            return name.includes('matricula') && !name.includes('nacional');
-                        })?.column_name || 'matricula';
+                            return (name.includes('matricula') || name.includes('matrícula')) && 
+                                   !name.includes('nacional');
+                        })?.column_name || 'matrícula';
                     }
                 } else if (isMutual) {
                     // Cargar mutuales
@@ -2438,7 +2474,8 @@
                         // Buscar campo matrícula nacional para mutuales
                         matriculaTargetField = currentTableSchema.columns.find(col => {
                             const name = col.column_name.toLowerCase();
-                            return name.includes('matricula') && name.includes('nacional');
+                            return (name.includes('matricula') || name.includes('matrícula')) && 
+                                   name.includes('nacional');
                         })?.column_name || 'Matricula Nacional';
                     }
                 }
@@ -2606,7 +2643,7 @@
             }
         
             // VALIDACIÓN para matrícula (INPUT NORMAL, NO DROPDOWN)
-            if (lowerFieldName.includes('matricula')) {
+            if (lowerFieldName.includes('matricula') || lowerFieldName.includes('matrícula')) {
                 return `<input 
                     type="number" 
                     name="${column_name}" 
@@ -2981,7 +3018,7 @@
                 // Solo validar campos que tienen valor
                 if (fieldName && fieldValue && fieldValue.trim() !== '') {
                     // Validar campos específicos
-                    if (fieldName.toLowerCase().includes('matricula')) {
+                    if (fieldName.toLowerCase().includes('matricula')) || fieldName.toLowerCase().includes('matrícula')) {
                         const isValid = await validateMatricula(fieldName, fieldValue);
                         if (!isValid) hasErrors = true;
                     } else if (fieldName.toLowerCase().includes('legajo')) {
