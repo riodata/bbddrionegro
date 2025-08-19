@@ -1687,21 +1687,50 @@
         // Cargar esquema de tabla específica
         async function loadTableSchema(tableName) {
             try {
-                showStatus('Cargando estructura de tabla...', 'info');
-                
-                const response = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/schema`);
+                const response = await fetch(`/api/tables/${tableName}/schema`);
                 const result = await response.json();
                 
-                if (result.success) {
-                    currentTableSchema = result.schema;
-                    setupDynamicCrudInterface();
-                    clearStatus();
-                } else {
-                    throw new Error(result.message);
+                if (!result.success) {
+                    throw new Error(result.message || 'Error al cargar esquema');
                 }
+                
+                const schema = result.schema;
+                console.log('Schema loaded:', schema);
+                
+                let formHtml = '<form id="createForm">';
+                
+                // Verificar si la tabla tiene FK a entidades_mutuales o entidades_cooperativas
+                const entityFK = checkEntityForeignKey(schema.foreignKeys);
+                
+                // Si tiene FK a entidades, agregar dropdown de entidad como primer campo
+                if (entityFK) {
+                    formHtml += await createEntityDropdown(entityFK);
+                }
+                
+                schema.columns.forEach(column => {
+                    if (column.column_name !== 'id') {
+                        // Si es el campo de matrícula y tenemos FK a entidades, hacerlo readonly
+                        const isMatriculaField = entityFK && 
+                            ((entityFK.type === 'mutual' && column.column_name.toLowerCase().includes('matricula')) ||
+                             (entityFK.type === 'cooperativa' && column.column_name.toLowerCase().includes('matricula')));
+                        
+                        formHtml += createFormField(column, schema.foreignKeys, isMatriculaField);
+                    }
+                });
+                
+                formHtml += '<button type="submit">Crear</button></form>';
+                document.getElementById('formContainer').innerHTML = formHtml;
+                
+                // Si hay FK a entidades, configurar el evento change
+                if (entityFK) {
+                    setupEntityDropdownHandler(entityFK);
+                }
+                
+                setupFormSubmitHandler(tableName);
+                
             } catch (error) {
-                console.error('Error loading table schema:', error);
-                showStatus('Error al cargar esquema: ' + error.message, 'error');
+                console.error('Error loading schema:', error);
+                showError('Error al cargar el esquema de la tabla');
             }
         }
 
