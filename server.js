@@ -251,57 +251,53 @@ async function getDynamicTables() {
 // Obtener esquema completo de una tabla desde app_information_schema
 async function getTableSchema(tableName) {
   try {
-    const query = `
+    // Obtener columnas de la tabla
+    const columnsResult = await pool.query(`
       SELECT 
-        column_name,
-        data_type,
-        is_nullable,
+        column_name, 
+        data_type, 
+        is_nullable, 
         column_default,
-        ordinal_position,
-        max_length,
-        is_primary_key,
-        is_foreign_key,
-        foreign_table,
-        foreign_column
-      FROM app_information_schema 
-      WHERE table_name = $1
+        character_maximum_length
+      FROM information_schema.columns 
+      WHERE table_name = $1 
       ORDER BY ordinal_position
-    `;
-
-    const result = await pool.query(query, [tableName]);
-    const columns = result.rows;
-
-    if (!columns || columns.length === 0) {
-      throw new Error(`No se encontraron columnas para la tabla '${tableName}'`);
-    }
-
-    // Encontrar la clave primaria - USAR EL NOMBRE EXACTO
-    const primaryKeyColumn = columns.find(col => col.is_primary_key === true);
-    const primaryKey = primaryKeyColumn ? primaryKeyColumn.column_name : columns[0].column_name;
-
-    // Convertir el formato para mantener compatibilidad con el frontend
-    const formattedColumns = columns.map(col => ({
-      column_name: col.column_name, // USAR NOMBRE EXACTO SIN MODIFICAR
-      data_type: col.data_type,
-      is_nullable: col.is_nullable ? 'YES' : 'NO',
-      column_default: col.column_default,
-      ordinal_position: col.ordinal_position,
-      character_maximum_length: col.max_length,
-      is_primary_key: col.is_primary_key,
-      is_foreign_key: col.is_foreign_key,
-      foreign_table: col.foreign_table,
-      foreign_column: col.foreign_column
-    }));
-
+    `, [tableName]);
+    
+    // Obtener información de foreign keys
+    const fkResult = await pool.query(`
+      SELECT
+        kcu.column_name,
+        ccu.table_name AS foreign_table_name,
+        ccu.column_name AS foreign_column_name
+      FROM information_schema.table_constraints AS tc
+      JOIN information_schema.key_column_usage AS kcu
+        ON tc.constraint_name = kcu.constraint_name
+        AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage AS ccu
+        ON ccu.constraint_name = tc.constraint_name
+        AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_name = $1;
+    `, [tableName]);
+    
+    // Procesar foreign keys en un objeto
+    const foreignKeys = {};
+    fkResult.rows.forEach(row => {
+      foreignKeys[row.column_name] = {
+        table: row.foreign_table_name,
+        column: row.foreign_column_name
+      };
+    });
+    
     return {
-      tableName,
-      columns: formattedColumns,
-      primaryKey: primaryKey, // NOMBRE EXACTO DE LA CLAVE PRIMARIA
-      displayName: tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      columns: columnsResult.rows,
+      foreignKeys: foreignKeys
     };
+    
   } catch (error) {
-    console.error(`Error obteniendo esquema de ${tableName} desde app_information_schema:`, error);
-    throw error;
+    console.error('Error al obtener esquema:', error);
+    throw new Error('Error al obtener esquema de la tabla');
   }
 }
 
