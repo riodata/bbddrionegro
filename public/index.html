@@ -1247,6 +1247,31 @@
             document.getElementById(containerId).innerHTML = '';
         }
 
+        // Funciones de utilidad para mensajes
+        function showError(message) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.innerHTML = `<div class="alert alert-error">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+        
+        function showSuccess(message) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.innerHTML = `<div class="alert alert-success">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+        }
+        
+        function showInfo(message) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.innerHTML = `<div class="alert alert-info">${message}</div>`;
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+        }
+
         // Manejar login
         async function handleLogin(e) {
             e.preventDefault();
@@ -1699,7 +1724,18 @@
         // Cargar esquema de tabla específica
         async function loadTableSchema(tableName) {
             try {
-                const response = await fetch(`/api/tables/${tableName}/schema`);
+                const token = localStorage.getItem('authToken');
+                if (!token) {
+                    throw new Error('Token de autenticación requerido.');
+                }
+        
+                const response = await fetch(`/api/tables/${tableName}/schema`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
                 const result = await response.json();
                 
                 if (!result.success) {
@@ -1731,7 +1767,7 @@
                 });
                 
                 formHtml += '<button type="submit">Crear</button></form>';
-                document.getElementById('formContainer').innerHTML = formHtml;
+                document.getElementById('create-fields').innerHTML = formHtml;
                 
                 // Si hay FK a entidades, configurar el evento change
                 if (entityFK) {
@@ -1742,12 +1778,12 @@
                 
             } catch (error) {
                 console.error('Error loading schema:', error);
-                showError('Error al cargar el esquema de la tabla');
+                showError('Error al cargar el esquema de la tabla: ' + error.message);
             }
         }
 
         function createFormField(column, foreignKeys = {}, isReadonly = false) {
-            const fk = foreignKeys[column.column_name];
+            const fieldName = column.column_name;
             let inputType = 'text';
             let additionalAttributes = isReadonly ? 'readonly style="background-color: #f0f0f0;"' : '';
             
@@ -1770,11 +1806,13 @@
                 inputType = 'datetime-local';
             }
             
+            // Si tiene foreign key y no es readonly, crear dropdown
+            const fk = foreignKeys[fieldName];
             if (fk && !isReadonly) {
                 return `
-                    <div class="form-field">
-                        <label for="${column.column_name}">${formatColumnName(column.column_name)}:</label>
-                        <select name="${column.column_name}" id="${column.column_name}" onchange="loadRelatedData('${fk.table}', this.value, '${column.column_name}')">
+                    <div class="form-group">
+                        <label for="${fieldName}">${formatColumnName(fieldName)}:</label>
+                        <select name="${fieldName}" id="${fieldName}" onchange="loadRelatedData('${fk.table}', this.value, '${fieldName}')">
                             <option value="">Seleccionar...</option>
                         </select>
                     </div>
@@ -1782,9 +1820,9 @@
             }
             
             return `
-                <div class="form-field">
-                    <label for="${column.column_name}">${formatColumnName(column.column_name)}:</label>
-                    <input type="${inputType}" name="${column.column_name}" id="${column.column_name}" ${additionalAttributes}>
+                <div class="form-group">
+                    <label for="${fieldName}">${formatColumnName(fieldName)}:</label>
+                    <input type="${inputType}" name="${fieldName}" id="${fieldName}" ${additionalAttributes}>
                 </div>
             `;
         }
@@ -1792,25 +1830,28 @@
         function checkEntityForeignKey(foreignKeys) {
             for (const [column, fk] of Object.entries(foreignKeys)) {
                 if (fk.table === 'entidades_mutuales') {
-                    return { type: 'mutual', column: column, matriculaField: findMatriculaField('matricula_nacional') };
+                    return { type: 'mutual', column: column, matriculaField: 'matricula_nacional' };
                 } else if (fk.table === 'entidades_cooperativas') {
-                    return { type: 'cooperativa', column: column, matriculaField: findMatriculaField('matricula') };
+                    return { type: 'cooperativa', column: column, matriculaField: 'matricula' };
                 }
             }
             return null;
         }
         
-        function findMatriculaField(searchTerm) {
-            // Esta función buscará el campo de matrícula en el esquema actual
-            // Por ahora retornamos el nombre esperado, pero se puede mejorar
-            return searchTerm;
-        }
-        
         async function createEntityDropdown(entityFK) {
             try {
+                const token = localStorage.getItem('authToken');
                 const endpoint = entityFK.type === 'mutual' ? '/api/entidades/mutuales' : '/api/entidades/cooperativas';
-                const response = await fetch(endpoint);
-                const entities = await response.json();
+                
+                const response = await fetch(endpoint, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                const entities = result.success ? result.data : result;
                 
                 let options = '<option value="">Seleccionar entidad...</option>';
                 entities.forEach(entity => {
@@ -1819,7 +1860,7 @@
                 });
                 
                 return `
-                    <div class="form-field">
+                    <div class="form-group">
                         <label for="entity_selector">Entidad:</label>
                         <select name="entity_selector" id="entity_selector">
                             ${options}
@@ -1855,7 +1896,7 @@
                 });
             }
         }
-
+        
         // Configurar interfaz CRUD dinámicamente
         function setupDynamicCrudInterface() {
             if (!currentTableSchema) return;
