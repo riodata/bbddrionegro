@@ -2318,7 +2318,7 @@
         }
         
         // Generar formulario de creación dinámicamente
-        async function setupDynamicCreateForm() {
+       async function setupDynamicCreateForm() {
             if (!currentTableSchema || !currentTableSchema.columns) return;
             
             console.log('🔄 Configurando formulario dinámico de creación...');
@@ -2329,6 +2329,19 @@
             const fieldsContainer = document.getElementById('create-fields');
             fieldsContainer.innerHTML = '';
             
+            // AGREGAR CAMPO ENTIDAD AL INICIO si hay campos de matrícula
+            const hasMatriculaField = currentTableSchema.columns.some(col => 
+                col.column_name.toLowerCase().includes('matricula')
+            );
+            
+            if (hasMatriculaField) {
+                const entidadFieldHtml = await createEntidadSelectorField();
+                if (entidadFieldHtml) {
+                    fieldsContainer.innerHTML += entidadFieldHtml;
+                }
+            }
+            
+            // Crear campos normales
             currentTableSchema.columns.forEach(column => {
                 const { column_name, data_type, is_nullable, is_primary_key } = column;
                 if (hiddenFormFields.includes(column_name)) {
@@ -2374,54 +2387,164 @@
                 
                 setupFormChangeListeners('createForm');
                 hasUnsavedChanges = false;
-            }, 200); // Aumentamos el delay para asegurar que el DOM esté listo
+            }, 200);
+        }
+
+        // Crear campo selector de entidad ad-hoc
+        async function createEntidadSelectorField() {
+            try {
+                console.log('🔄 Creando campo selector de entidad...');
+                
+                // Determinar qué tipo de entidades necesitamos según la tabla actual
+                let entidadesData = [];
+                let matriculaTargetField = '';
+                
+                // Detectar si es tabla de cooperativas o mutuales
+                const isCooperativa = currentTable.toLowerCase().includes('cooperativ');
+                const isMutual = currentTable.toLowerCase().includes('mutual');
+                
+                if (isCooperativa) {
+                    // Cargar cooperativas
+                    const response = await fetch(`${API_BASE}/api/entidades/cooperativas`, {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        entidadesData = result.data || [];
+                        
+                        // Buscar campo matrícula para cooperativas
+                        matriculaTargetField = currentTableSchema.columns.find(col => {
+                            const name = col.column_name.toLowerCase();
+                            return name.includes('matricula') && !name.includes('nacional');
+                        })?.column_name || 'matricula';
+                    }
+                } else if (isMutual) {
+                    // Cargar mutuales
+                    const response = await fetch(`${API_BASE}/api/entidades/mutuales`, {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        entidadesData = result.data || [];
+                        
+                        // Buscar campo matrícula nacional para mutuales
+                        matriculaTargetField = currentTableSchema.columns.find(col => {
+                            const name = col.column_name.toLowerCase();
+                            return name.includes('matricula') && name.includes('nacional');
+                        })?.column_name || 'Matricula Nacional';
+                    }
+                }
+                
+                if (entidadesData.length === 0) {
+                    console.log('⚠️ No se encontraron entidades para cargar');
+                    return '';
+                }
+                
+                // Generar opciones del select
+                let optionsHtml = '<option value="">Seleccionar entidad...</option>';
+                entidadesData.forEach(entidad => {
+                    optionsHtml += `<option value="${entidad.matricula}" data-matricula="${entidad.matricula}">${entidad.nombre}</option>`;
+                });
+                
+                // Crear el HTML del campo
+                return `
+                    <div class="form-group" style="border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; background-color: #f8f9fa; margin-bottom: 25px;">
+                        <label for="entidad_selector" style="color: #4a90e2; font-weight: bold;">
+                            🏢 Seleccionar Entidad ${isCooperativa ? '(Cooperativa)' : isMutual ? '(Mutual)' : ''}
+                        </label>
+                        <select 
+                            id="entidad_selector" 
+                            name="entidad_selector"
+                            onchange="handleEntidadSelection(this, '${matriculaTargetField}')"
+                            style="border-color: #4a90e2;"
+                        >
+                            ${optionsHtml}
+                        </select>
+                        <small style="color: #6c757d; display: block; margin-top: 5px;">
+                            Selecciona una entidad para autocompletar la matrícula correspondiente
+                        </small>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('❌ Error creando campo entidad:', error);
+                return '';
+            }
+        }
+        
+        // Manejar selección en el campo Entidad ad-hoc
+        function handleEntidadSelection(selectElement, targetMatriculaField) {
+            const selectedValue = selectElement.value;
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
+            
+            console.log('🔄 Entidad seleccionada:', { selectedValue, targetMatriculaField });
+            
+            if (!selectedValue) {
+                // Limpiar matrícula si se deselecciona
+                const matriculaField = document.getElementById(targetMatriculaField);
+                if (matriculaField) {
+                    matriculaField.value = '';
+                    matriculaField.readOnly = false;
+                    matriculaField.style.backgroundColor = '';
+                }
+                clearStatus();
+                return;
+            }
+            
+            // Autocompletar campo matrícula
+            const matricula = selectedOption.getAttribute('data-matricula');
+            const matriculaField = document.getElementById(targetMatriculaField);
+            
+            if (matriculaField && matricula) {
+                matriculaField.value = matricula;
+                matriculaField.readOnly = true;
+                matriculaField.style.backgroundColor = '#e9ecef';
+                matriculaField.style.cursor = 'not-allowed';
+                
+                showStatus(`✅ Entidad seleccionada: ${selectedOption.text} - Matrícula: ${matricula}`, 'success');
+                
+                // Limpiar error si había
+                showFieldError(targetMatriculaField, '');
+                
+                console.log('✅ Matrícula autocompletada:', matricula);
+            } else {
+                console.warn('⚠️ No se pudo encontrar el campo matrícula:', targetMatriculaField);
+            }
         }
         
         function createInputElement(column, inputType, required) {
             const { column_name, data_type, is_foreign_key, foreign_table } = column;
             const lowerFieldName = column_name.toLowerCase();
             
-            // OCULTAR campos de matrícula cuando hay FK a entidades
-            const matriculaFields = ['matricula', 'matricula nacional'];
-            const isMatriculaField = matriculaFields.some(field => 
-                lowerFieldName.includes(field.toLowerCase())
-            );
+            // NO procesar campos de matrícula como foreign keys
+            // Los campos de matrícula deben ser inputs normales
             
-            if (isMatriculaField && currentTableSchema.columns.some(col => 
-                col.is_foreign_key && col.foreign_table && 
-                (col.foreign_table === 'entidades_cooperativas' || col.foreign_table === 'entidades_mutuales'))) {
+            // Si es foreign key PERO NO ES MATRÍCULA, crear dropdown
+            if (is_foreign_key && foreign_table && foreignKeyData[column_name] && 
+                !lowerFieldName.includes('matricula')) {
                 
-                // Campo oculto para matrícula que se llenará automáticamente
-                return `
-                    <input type="hidden" name="${column_name}" id="${column_name}">
-                    <div id="${column_name}_display" class="matricula-display" style="display: none;">
-                        <strong>Matrícula:</strong> <span id="${column_name}_value"></span>
-                    </div>
-                `;
-            }
-            
-            if (is_foreign_key && foreign_table && foreignKeyData[column_name]) {
                 const fkData = foreignKeyData[column_name];
                 const options = fkData.data || [];
                 
-                let optionsHtml = '<option value="">Seleccionar entidad...</option>';
+                let optionsHtml = '<option value="">Seleccionar...</option>';
                 options.forEach(option => {
-                    optionsHtml += `<option value="${option.value}" 
-                        data-matricula="${option.matricula || ''}" 
-                        data-tipo="${option.tipo || ''}">${option.display}</option>`;
+                    optionsHtml += `<option value="${option.value}">${option.display}</option>`;
                 });
-                
-                // Para entidades, usar onChange sin el tercer parámetro (se detectará automáticamente)
-                const onChangeHandler = (foreign_table === 'entidades_cooperativas' || foreign_table === 'entidades_mutuales') ? 
-                    `handleEntitySelection(this, '${foreign_table}')` : 
-                    `handleEntitySelection(this, '${foreign_table}')`;
                 
                 return `
                     <select 
                         name="${column_name}" 
                         id="${column_name}" 
                         ${required}
-                        onchange="${onChangeHandler}"
+                        onchange="handleEntitySelection(this, '${foreign_table}')"
                     >
                         ${optionsHtml}
                     </select>
@@ -2481,8 +2604,8 @@
                     onblur="validateField('${column_name}', this.value)"
                 >`;
             }
-
-            // AGREGAR: Validación para matrícula
+        
+            // VALIDACIÓN para matrícula (INPUT NORMAL, NO DROPDOWN)
             if (lowerFieldName.includes('matricula')) {
                 return `<input 
                     type="number" 
@@ -2498,7 +2621,7 @@
                 >`;
             }
             
-            // AGREGAR: Validación para legajo
+            // VALIDACIÓN para legajo
             if (lowerFieldName.includes('legajo')) {
                 return `<input 
                     type="number" 
@@ -2514,7 +2637,7 @@
                 >`;
             }
             
-            // AGREGAR: Validación para cantidad de asociados
+            // VALIDACIÓN para cantidad de asociados
             if (lowerFieldName.includes('cantidad') && lowerFieldName.includes('asociados')) {
                 return `<input 
                     type="number" 
@@ -2578,61 +2701,6 @@
                 default:
                     return `<input type="text" name="${column_name}" id="${column_name}" ${required}>`;
             }
-        }
-
-        // Mapear tipos de PostgreSQL a tipos de input HTML
-        function getInputTypeFromDataType(dataType, columnName) {
-            const lowerDataType = dataType.toLowerCase();
-            const lowerColumnName = columnName.toLowerCase();
-            
-            // Mapeo por tipo de dato
-            const typeMap = {
-                'integer': 'number',
-                'bigint': 'number',
-                'smallint': 'number',
-                'decimal': 'number',
-                'numeric': 'number',
-                'real': 'number',
-                'double precision': 'number',
-                'money': 'number',
-                'date': 'date',
-                'timestamp': 'datetime-local',
-                'timestamptz': 'datetime-local',
-                'time': 'time',
-                'timetz': 'time',
-                'boolean': 'checkbox'
-            };
-            
-            // Verificar por tipo de dato primero
-            if (typeMap[lowerDataType]) {
-                return typeMap[lowerDataType];
-            }
-            
-            // Para tipos de texto, verificar por nombre de columna
-            if (lowerDataType.includes('varchar') || lowerDataType.includes('text') || lowerDataType.includes('char')) {
-                // Detectar emails
-                if (lowerColumnName.includes('email') || lowerColumnName.includes('mail')) {
-                    return 'email';
-                }
-                // Detectar teléfonos
-                if (lowerColumnName.includes('tel') || lowerColumnName.includes('phone') || lowerColumnName.includes('telefono')) {
-                    return 'tel';
-                }
-                // Detectar URLs
-                if (lowerColumnName.includes('url') || lowerColumnName.includes('web') || lowerColumnName.includes('site')) {
-                    return 'url';
-                }
-                // Detectar fechas por nombre
-                if (lowerColumnName.includes('fecha') || lowerColumnName.includes('date')) {
-                    return 'date';
-                }
-                // Para campos de texto largo
-                if (lowerDataType === 'text' || (lowerDataType.includes('varchar') && lowerColumnName.includes('descripcion'))) {
-                    return 'textarea';
-                }
-            }
-            
-            return 'text'; // Por defecto
         }
 
         // Cargar campos para búsqueda global SIN mostrar el tipo
@@ -2835,7 +2903,15 @@
             const data = {};
             let hasErrors = false;
             const formFields = e.target.querySelectorAll('input, select, textarea');
-            
+
+            for (let [key, value] of formData.entries()) {
+                // Excluir el campo auxiliar entidad_selector
+                if (key === 'entidad_selector') {
+                    continue;
+                }
+                data[key] = value;
+            }
+                        
             for (const field of formFields) {
                 const fieldName = field.name;
                 const fieldValue = field.value;
