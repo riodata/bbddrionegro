@@ -1694,11 +1694,39 @@
                 // Cambiar a la pantalla de operaciones CRUD
                 showScreen('crud-operations');
                 
-                // Actualizar breadcrumb
-                const tableDisplay = currentTableSchema ? currentTableSchema.displayName : tableName;
+                // CORRECCIÓN: Obtener displayName desde table_categories
+                let tableDisplayName = tableName;
+                
+                try {
+                    // Buscar información de la tabla en las categorías cargadas
+                    const response = await authenticatedFetch(`${API_BASE}/api/categories`);
+                    const result = await response.json();
+                    
+                    if (result.success && result.categories) {
+                        // Buscar en todas las categorías la tabla seleccionada
+                        for (const category of result.categories) {
+                            const tablesResponse = await authenticatedFetch(`${API_BASE}/api/categories/${category.id}/tables`);
+                            const tablesResult = await tablesResponse.json();
+                            
+                            if (tablesResult.success && tablesResult.tables) {
+                                const foundTable = tablesResult.tables.find(table => table.id === tableName);
+                                if (foundTable) {
+                                    tableDisplayName = foundTable.displayName;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn('No se pudo obtener el nombre de display de la tabla:', error);
+                    // Usar el nombre del esquema como fallback
+                    tableDisplayName = currentTableSchema?.displayName || tableName;
+                }
+                
+                // Actualizar breadcrumb con el nombre correcto
                 updateBreadcrumb([
                     { text: 'Inicio', onclick: 'showMainMenu()' },
-                    { text: tableDisplay, active: true }
+                    { text: tableDisplayName, active: true }
                 ]);
                 
             } catch (error) {
@@ -1732,26 +1760,24 @@
         function setupDynamicCrudInterface() {
             if (!currentTableSchema) return;
             
+            // Obtener el nombre de display correcto
+            const tableDisplayName = currentTableSchema.displayName || currentTable || 'Tabla';
+            
             // Actualizar títulos
-            document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${currentTableSchema.displayName}`;
-            document.getElementById('search-title').textContent = `Buscar Registros - ${currentTableSchema.displayName}`;
-
-                updateBreadcrumb([
-                    { text: 'Inicio', onclick: 'showMainMenu()' },
-                    { text: 'Tablas', onclick: 'showTableSelection()' }, // Ajustar si tienes función específica
-                    { text: currentTableSchema.displayName, active: true }
-                ]);
-                
-                // Configurar formulario de creación
-                setupDynamicCreateForm();
-                
-                // Configurar búsqueda global
-                loadDynamicFieldsForGlobalSearch();
-                
-                // Mostrar pestaña de crear por defecto
-                showTab('create');
-            }
-
+            document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${tableDisplayName}`;
+            document.getElementById('search-title').textContent = `Buscar Registros - ${tableDisplayName}`;
+        
+            // NO actualizar breadcrumb aquí, ya se hace en selectDynamicTable
+            
+            // Configurar formulario de creación
+            setupDynamicCreateForm();
+            
+            // Configurar búsqueda global
+            loadDynamicFieldsForGlobalSearch();
+            
+            // Mostrar pestaña de crear por defecto
+            showTab('create');
+        }
         // Función para formatear fecha y hora
         function formatDateTime(dateString) {
             if (!dateString) return '';
