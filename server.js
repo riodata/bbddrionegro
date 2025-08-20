@@ -249,8 +249,11 @@ async function getDynamicTables() {
 }
 
 // Obtener esquema completo de una tabla desde app_information_schema
+// Obtener esquema completo de una tabla desde app_information_schema
 async function getTableSchema(tableName) {
   try {
+    console.log(`🔍 Obteniendo esquema para tabla: ${tableName}`);
+    
     // Obtener columnas de la tabla
     const columnsResult = await pool.query(`
       SELECT 
@@ -260,9 +263,15 @@ async function getTableSchema(tableName) {
         column_default,
         character_maximum_length
       FROM information_schema.columns 
-      WHERE table_name = $1 
+      WHERE table_name = $1
       ORDER BY ordinal_position
     `, [tableName]);
+    
+    if (columnsResult.rows.length === 0) {
+      throw new Error(`No se encontraron columnas para la tabla ${tableName}`);
+    }
+    
+    console.log(`📋 Columnas encontradas: ${columnsResult.rows.length}`);
     
     // Obtener información de foreign keys
     const fkResult = await pool.query(`
@@ -278,8 +287,46 @@ async function getTableSchema(tableName) {
         ON ccu.constraint_name = tc.constraint_name
         AND ccu.table_schema = tc.table_schema
       WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_name = $1;
+        AND tc.table_name = $1
     `, [tableName]);
+    
+    // Obtener primary key correctamente
+    let primaryKey = null;
+    try {
+      const pkResult = await pool.query(`
+        SELECT a.attname as column_name
+        FROM   pg_index i
+        JOIN   pg_attribute a ON a.attrelid = i.indrelid
+                              AND a.attnum = ANY(i.indkey)
+        WHERE  i.indrelid = $1::regclass
+        AND    i.indisprimary
+      `, [tableName]);
+      
+      if (pkResult.rows.length > 0) {
+        primaryKey = pkResult.rows[0].column_name;
+        console.log(`🔑 Primary key encontrado: ${primaryKey}`);
+      }
+    } catch (pkError) {
+      console.warn(`⚠️ Error obteniendo primary key para ${tableName}:`, pkError.message);
+    }
+    
+    // Fallback para primary key si no se encuentra
+    if (!primaryKey) {
+      // Buscar una columna llamada 'id' o similar
+      const idColumn = columnsResult.rows.find(col => 
+        col.column_name.toLowerCase() === 'id' || 
+        col.column_name.toLowerCase().includes('id')
+      );
+      
+      if (idColumn) {
+        primaryKey = idColumn.column_name;
+        console.log(`🔑 Primary key fallback encontrado: ${primaryKey}`);
+      } else {
+        // Último fallback: primera columna
+        primaryKey = columnsResult.rows[0].column_name;
+        console.log(`🔑 Primary key fallback (primera columna): ${primaryKey}`);
+      }
+    }
     
     // Procesar foreign keys en un objeto
     const foreignKeys = {};
@@ -292,29 +339,31 @@ async function getTableSchema(tableName) {
     
     return {
       columns: columnsResult.rows,
-      foreignKeys: foreignKeys
+      foreignKeys: foreignKeys,
+      primaryKey: primaryKey
     };
     
   } catch (error) {
     console.error('Error al obtener esquema:', error);
-    throw new Error('Error al obtener esquema de la tabla');
+    throw new Error(`Error al obtener esquema de la tabla ${tableName}: ${error.message}`);
   }
 }
 
-// Validar que una tabla existe usando app_information_schema
+// Validar que una tabla existe usando information_schema
 async function validateTableAccess(tableName) {
   try {
     const query = `
       SELECT table_name 
-      FROM app_information_schema 
-      WHERE table_name = $1 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name = $1
       LIMIT 1
     `;
     
     const result = await pool.query(query, [tableName]);
 
     if (result.rows.length === 0) {
-      throw new Error(`Tabla '${tableName}' no encontrada en app_information_schema`);
+      throw new Error(`Tabla '${tableName}' no encontrada en la base de datos`);
     }
 
     return true;
@@ -1249,12 +1298,20 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
     // Validar tabla
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
-    const primaryKey = tableSchema.primaryKey; // USAR NOMBRE EXACTO
+    
+    // Asegurar que tenemos un primary key válido
+    const primaryKey = tableSchema.primaryKey;
+    
+    if (!primaryKey) {
+      throw new Error(`No se pudo determinar el primary key para la tabla ${tableName}`);
+    }
     
     logOperation('READ REQUEST', { tableName, primaryKey });
 
     // USAR COMILLAS DOBLES PARA PRESERVAR CASE SENSITIVITY
     const query = `SELECT * FROM "${tableName}" ORDER BY "${primaryKey}" ASC`;
+    console.log(`📋 Query SQL: ${query}`);
+    
     const result = await pool.query(query);
 
     // Mapear datos para mantener compatibilidad con el frontend
@@ -1271,18 +1328,17 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
       data: mappedData,
       total: mappedData.length,
       primaryKey: primaryKey,
-      tableName: tableName
+      tableName: tableName  // ESTA LÍNEA SOLUCIONA EL PROBLEMA DEL UNDEFINED
     });
   } catch (error) {
-      console.error('❌ Error inesperado en READ:', error);
-      const errorInfo = handlePostgresError(error, 'lectura de registros');
-      res.status(errorInfo.status).json({
-        success: false,
-        message: errorInfo.message
-      });
-    }
-  });
-
+    console.error('❌ Error inesperado en READ:', error);
+    const errorInfo = handlePostgresError(error, 'lectura de registros');
+    res.status(errorInfo.status).json({
+      success: false,
+      message: errorInfo.message
+    });
+  }
+});
 // SEARCH - Búsqueda simple usando la función auxiliar mejorada
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
     try {
