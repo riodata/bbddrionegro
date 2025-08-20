@@ -796,6 +796,108 @@ app.get('/api/categories/:categoryName/tables', auth.requireAuth, async (req, re
   }
 });
 
+// Endpoints para estadísticas
+app.get('/estadisticas-cooperativas', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Estadísticas Cooperativas</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .header { background: #007bff; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .back-btn { 
+          margin-bottom: 20px; 
+          padding: 10px 20px; 
+          background: #28a745; 
+          color: white; 
+          text-decoration: none; 
+          border-radius: 5px; 
+          display: inline-block;
+        }
+        .back-btn:hover { background: #218838; }
+        iframe { width: 100%; height: 80vh; border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>📊 Estadísticas Cooperativas</h1>
+        <p>Análisis de datos y métricas del sector cooperativo</p>
+      </div>
+      <a href="/" class="back-btn">← Volver al inicio</a>
+      <iframe src="https://lookerstudio.google.com/reporting/48b80800-b981-4b3f-a254-4f3e55015c91"></iframe>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/estadisticas-mutuales', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Estadísticas Mutuales</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .header { background: #17a2b8; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .back-btn { 
+          margin-bottom: 20px; 
+          padding: 10px 20px; 
+          background: #28a745; 
+          color: white; 
+          text-decoration: none; 
+          border-radius: 5px; 
+          display: inline-block;
+        }
+        .back-btn:hover { background: #218838; }
+        iframe { width: 100%; height: 80vh; border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>📈 Estadísticas Mutuales</h1>
+        <p>Análisis de datos y métricas del sector mutual</p>
+      </div>
+      <a href="/" class="back-btn">← Volver al inicio</a>
+      <iframe src="https://lookerstudio.google.com/reporting/48b80800-b981-4b3f-a254-4f3e55015c91"></iframe>
+    </body>
+    </html>
+  `);
+});
+
+// Endpoint para obtener información de estadísticas disponibles
+app.get('/api/statistics-info', auth.requireAuth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      statistics: [
+        {
+          id: 'cooperativas',
+          name: 'Estadísticas Cooperativas',
+          description: 'Análisis de datos del sector cooperativo',
+          url: '/estadisticas-cooperativas',
+          icon: '📊',
+          color: '#28a745'
+        },
+        {
+          id: 'mutuales',
+          name: 'Estadísticas Mutuales', 
+          description: 'Análisis de datos del sector mutual',
+          url: '/estadisticas-mutuales',
+          icon: '📈',
+          color: '#17a2b8'
+        }
+      ]
+    });
+  } catch (error) {
+    console.error('Error obteniendo información de estadísticas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo información de estadísticas'
+    });
+  }
+});
+
 // Obtener esquema de una tabla específica
 app.get('/api/tables/:tableName/schema', auth.requireAuth, async (req, res) => {
   try {
@@ -978,6 +1080,47 @@ app.post('/api/validate-legajo', auth.requireAuth, async (req, res) => {
   }
 });
 
+// Endpoint para obtener esquema filtrado (sin entidad_id para ciertos formularios)
+app.get('/api/tables/:tableName/schema-filtered', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { formType } = req.query; // 'create' o 'edit'
+    
+    // Verificar que la tabla existe
+    const availableTables = await getDynamicTables();
+    if (!availableTables.includes(tableName)) {
+      return res.status(404).json({
+        success: false,
+        message: `Tabla '${tableName}' no encontrada`,
+        error: `Tabla '${tableName}' no encontrada`
+      });
+    }
+    
+    const schema = await getTableSchema(tableName);
+    
+    // Filtrar columnas para formularios de creación de entidades específicas
+    if (formType === 'create' && 
+        (tableName === 'entidades_cooperativas' || tableName === 'entidades_mutuales')) {
+      schema.columns = schema.columns.filter(col => col.column_name !== 'entidad_id');
+    }
+    
+    res.json({
+      success: true,
+      schema: schema,
+      filtered: formType === 'create' && 
+               (tableName === 'entidades_cooperativas' || tableName === 'entidades_mutuales')
+    });
+  } catch (error) {
+    console.error(`Error obteniendo esquema filtrado de ${req.params.tableName}:`, error);
+    const status = error.message.includes('no encontrada') ? 404 : 500;
+    res.status(status).json({
+      success: false,
+      message: error.message,
+      error: error.message
+    });
+  }
+});
+
 // Endpoint para obtener cooperativas
 app.get('/api/entidades/cooperativas', auth.requireAuth, async (req, res) => {
   try {
@@ -1097,6 +1240,7 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
     });
   }
 });
+
 // READ - Leer todos los registros
 app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   try {
@@ -1130,14 +1274,14 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
       tableName: tableName
     });
   } catch (error) {
-    console.error('❌ Error inesperado en READ:', error);
-    const errorInfo = handlePostgresError(error, 'lectura de registros');
-    res.status(errorInfo.status).json({
-      success: false,
-      message: errorInfo.message
-    });
-  }
-});
+      console.error('❌ Error inesperado en READ:', error);
+      const errorInfo = handlePostgresError(error, 'lectura de registros');
+      res.status(errorInfo.status).json({
+        success: false,
+        message: errorInfo.message
+      });
+    }
+  });
 
 // SEARCH - Búsqueda simple usando la función auxiliar mejorada
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
