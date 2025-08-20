@@ -1585,6 +1585,26 @@
                 `;
                 return;
             }
+
+            // Agregar sección de estadísticas al inicio
+            const statsSection = document.createElement('div');
+            statsSection.style.cssText = 'grid-column: 1 / -1; margin-bottom: 20px; padding: 20px; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 12px; border: 2px solid #4a90e2;';
+            statsSection.innerHTML = `
+                <h3 style="color: #4a90e2; margin-bottom: 15px; text-align: center;">📊 Estadísticas</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.open('/estadisticas-cooperativas', '_blank')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
+                        <span style="font-size: 2rem; margin-bottom: 10px; display: block;">📊</span>
+                        <h4 style="color: #28a745; margin-bottom: 8px;">Estadísticas Cooperativas</h4>
+                        <p style="color: #6c757d; font-size: 0.9rem;">Análisis de datos del sector cooperativo</p>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.3s ease;" onclick="window.open('/estadisticas-mutuales', '_blank')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
+                        <span style="font-size: 2rem; margin-bottom: 10px; display: block;">📈</span>
+                        <h4 style="color: #17a2b8; margin-bottom: 8px;">Estadísticas Mutuales</h4>
+                        <p style="color: #6c757d; font-size: 0.9rem;">Análisis de datos del sector mutual</p>
+                    </div>
+                </div>
+            `;
+            container.appendChild(statsSection);
             
             categories.forEach(category => {
                 const card = document.createElement('div');
@@ -2371,13 +2391,14 @@
             
             const fieldsContainer = document.getElementById('create-fields');
             fieldsContainer.innerHTML = '';
-            
-            // AGREGAR CAMPO ENTIDAD AL INICIO si hay campos de matrícula
+
+            // AGREGAR CAMPO ENTIDAD AL INICIO solo si NO es tabla de entidades y tiene campos de matrícula
+            const isEntidadTable = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
             const hasMatriculaField = currentTableSchema.columns.some(col => 
                 col.column_name.toLowerCase().includes('matricula')
             );
             
-            if (hasMatriculaField) {
+            if (hasMatriculaField && !isEntidadTable) {
                 const entidadFieldHtml = await createEntidadSelectorField();
                 if (entidadFieldHtml) {
                     fieldsContainer.innerHTML += entidadFieldHtml;
@@ -2918,12 +2939,18 @@
             // Ocultar búsqueda global
             const globalSearch = document.getElementById('global-search');
             if (globalSearch) globalSearch.style.display = 'none';
-            
+  
             // Mostrar menú principal
             showMainMenu();
             
             // Actualizar breadcrumb
             updateBreadcrumb([{ text: 'Inicio', active: true }]);
+
+            // Limpiar botón de estadísticas
+            const statsButton = document.getElementById('stats-button');
+            if (statsButton) {
+                statsButton.remove();
+            } 
         }
         
         // Función para actualizar breadcrumb
@@ -3274,6 +3301,29 @@
         
             // Mostrar búsqueda global para pestañas apropiadas
             const globalSearch = document.getElementById('global-search');
+            // Mostrar botón de estadísticas si corresponde
+            const showStatsButton = currentTable && 
+                (currentTable.toLowerCase().includes('cooperativ') || currentTable.toLowerCase().includes('mutual'));
+                
+            if (showStatsButton && !document.getElementById('stats-button')) {
+                const statsButton = document.createElement('button');
+                statsButton.id = 'stats-button';
+                statsButton.className = 'btn';
+                statsButton.style.cssText = 'margin-left: 10px; background: linear-gradient(135deg, #17a2b8, #138496);';
+                statsButton.innerHTML = '📊 Ver Estadísticas';
+                statsButton.onclick = function() {
+                    if (currentTable.toLowerCase().includes('cooperativ')) {
+                        window.open('/estadisticas-cooperativas', '_blank');
+                    } else {
+                        window.open('/estadisticas-mutuales', '_blank');
+                    }
+                };
+                
+                const homeButton = document.getElementById('home-button');
+                if (homeButton && homeButton.parentNode) {
+                    homeButton.parentNode.appendChild(statsButton);
+                }
+            }
             if (['search', 'update', 'delete'].includes(tabName)) {
                 globalSearch.style.display = 'block';
                 loadDynamicFieldsForGlobalSearch();
@@ -3443,6 +3493,10 @@
                     currentRecords = result.data;
                     displaySearchResults(result.data);
                     showStatus(`${result.total} registros cargados`, 'success');
+                    const tableTitle = document.getElementById('table-title');
+                    if (tableTitle && result.tableName) {
+                        tableTitle.textContent = result.tableName;
+                    }
                 } else {
                     throw new Error(result.message);
                 }
@@ -3781,8 +3835,21 @@
             const container = document.getElementById('search-records-container');
             container.innerHTML = '';
         
+            // Agregar título con nombre de tabla
+            const tableName = currentTableSchema?.displayName || currentTable || 'Tabla';
+            const tableHeader = document.createElement('div');
+            tableHeader.style.cssText = 'background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4a90e2;';
+            tableHeader.innerHTML = `
+                <h3 style="margin: 0; color: #4a90e2;">📋 Registros de: ${tableName}</h3>
+                <p style="margin: 5px 0 0 0; color: #6c757d; font-size: 0.9rem;">Total de registros encontrados: ${records?.length || 0}</p>
+            `;
+            container.appendChild(tableHeader);
+        
             if (!records || records.length === 0) {
-                container.innerHTML = '<div class="empty-state"><span class="icon">🔍</span><h3>No hay resultados</h3><p>No se encontraron registros que coincidan con la búsqueda</p></div>';
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.innerHTML = '<span class="icon">🔍</span><h3>No hay resultados</h3><p>No se encontraron registros que coincidan con la búsqueda</p>';
+                container.appendChild(emptyState);
                 return;
             }
         
@@ -3849,13 +3916,26 @@
             // Actualizar records globales para otras operaciones
             currentRecords = records;
         }
-
+        
         function displayUpdateResults(records) {
             const container = document.getElementById('update-records-container');
             container.innerHTML = '';
         
+            // Agregar título con nombre de tabla
+            const tableName = currentTableSchema?.displayName || currentTable || 'Tabla';
+            const tableHeader = document.createElement('div');
+            tableHeader.style.cssText = 'background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f39c12;';
+            tableHeader.innerHTML = `
+                <h3 style="margin: 0; color: #f39c12;">✏️ Editar registros de: ${tableName}</h3>
+                <p style="margin: 5px 0 0 0; color: #6c757d; font-size: 0.9rem;">Selecciona un registro para editarlo. Total: ${records?.length || 0}</p>
+            `;
+            container.appendChild(tableHeader);
+        
             if (!records || records.length === 0) {
-                container.innerHTML = '<div class="empty-state"><span class="icon">✏️</span><h3>No hay registros</h3><p>Busca registros para poder editarlos</p></div>';
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.innerHTML = '<span class="icon">✏️</span><h3>No hay registros</h3><p>Busca registros para poder editarlos</p>';
+                container.appendChild(emptyState);
                 return;
             }
         
@@ -3864,7 +3944,8 @@
                 recordElement.className = 'record';
                 
                 // Extraer campos de metadatos
-                const id = record.id || record._primaryKey || '';
+                const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+                const id = record[primaryKey] || record._primaryKey || '';
                 const createdAt = record.created_at || '';
                 const updatedAt = record.updated_at || '';
                 
@@ -3906,13 +3987,26 @@
             // Actualizar records globales para otras operaciones
             currentRecords = records;
         }
-
+        
         function displayDeleteResults(records) {
             const container = document.getElementById('delete-records');
             container.innerHTML = '';
         
+            // Agregar título con nombre de tabla
+            const tableName = currentTableSchema?.displayName || currentTable || 'Tabla';
+            const tableHeader = document.createElement('div');
+            tableHeader.style.cssText = 'background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e74c3c;';
+            tableHeader.innerHTML = `
+                <h3 style="margin: 0; color: #e74c3c;">🗑️ Eliminar registros de: ${tableName}</h3>
+                <p style="margin: 5px 0 0 0; color: #6c757d; font-size: 0.9rem;">⚠️ Selecciona un registro para eliminarlo. Total: ${records?.length || 0}</p>
+            `;
+            container.appendChild(tableHeader);
+        
             if (!records || records.length === 0) {
-                container.innerHTML = '<div class="empty-state"><span class="icon">🗑️</span><h3>No hay registros</h3><p>Busca registros para poder eliminarlos</p></div>';
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+                emptyState.innerHTML = '<span class="icon">🗑️</span><h3>No hay registros</h3><p>Busca registros para poder eliminarlos</p>';
+                container.appendChild(emptyState);
                 return;
             }
         
