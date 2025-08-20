@@ -1097,12 +1097,15 @@
             }
 
             window.addEventListener('beforeunload', function (e) {
-                if (hasUnsavedChanges || hasFormChanged('updateForm') || hasCreateFormData()) {
-                    const message = 'Hay cambios sin guardar. ¿Estás seguro de que quieres salir?';
-                    e.preventDefault();
-                    e.returnValue = message;
-                    return message;
+                // No mostrar mensaje si el usuario ya confirmó salir o no hay cambios reales
+                if (exitConfirmed || (!hasUnsavedChanges && !hasFormChanged('updateForm') && !hasCreateFormData())) {
+                    return;
                 }
+                
+                const message = 'Hay cambios sin guardar. ¿Estás seguro de que quieres salir?';
+                e.preventDefault();
+                e.returnValue = message;
+                return message;
             });
         });
 
@@ -2229,6 +2232,7 @@
         }
         
         // Función para capturar datos originales del formulario
+        // Función para capturar datos originales del formulario
         function captureOriginalFormData(formId) {
             const form = document.getElementById(formId);
             if (!form) return;
@@ -2238,7 +2242,46 @@
             for (let [key, value] of formData.entries()) {
                 originalFormData[key] = value;
             }
+            hasUnsavedChanges = false; // Resetear estado al capturar
+        }
+
+        // Función para confirmar salida y no volver a preguntar
+        function confirmExitAndProceed(targetFunction, ...args) {
+            if (!hasUnsavedChanges && !hasFormChanged('updateForm') && !hasCreateFormData()) {
+                // No hay cambios, ejecutar función directamente
+                targetFunction(...args);
+                return;
+            }
+            
+            const currentTab = document.querySelector('.tab.active').textContent.trim();
+            let message = '';
+            
+            if (currentTab.includes('Crear')) {
+                message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
+            } else {
+                const entityName = getCurrentEntityName();
+                message = `Hay cambios sin guardar en ${entityName}. ¿Desea descartar los cambios?`;
+            }
+            
+            if (confirm(message)) {
+                // Usuario confirma salir - marcar como confirmado permanentemente para esta sesión
+                clearUnsavedChanges();
+                markExitConfirmed();
+                targetFunction(...args);
+            }
+            // Si cancela, no hacer nada
+        }
+        
+        // Variable para controlar si el usuario ya confirmó salir
+        let exitConfirmed = false;
+        
+        function markExitConfirmed() {
+            exitConfirmed = true;
             hasUnsavedChanges = false;
+        }
+        
+        function resetExitConfirmation() {
+            exitConfirmed = false;
         }
         
         // Función para detectar si hay cambios en el formulario
@@ -3184,26 +3227,32 @@
         
         // TAB MANAGEMENT
         function showTab(tabName) {
-            // Verificar cambios antes de cambiar de pestaña
+            // Verificar cambios antes de cambiar de pestaña usando la nueva función
             if (tabName !== 'create' && (hasUnsavedChanges || hasFormChanged('createForm') || hasCreateFormData())) {
-                const message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
-                if (!confirm(message)) {
-                    return; // No cambiar de pestaña
-                } else {
-                    // Limpiar formulario y estado
-                    const createForm = document.getElementById('createForm');
-                    if (createForm) createForm.reset();
-                    clearUnsavedChanges();
+                if (!exitConfirmed) {
+                    const message = 'Hay datos sin guardar en el formulario de creación. ¿Desea descartar los cambios?';
+                    if (!confirm(message)) {
+                        return; // No cambiar de pestaña
+                    } else {
+                        // Limpiar formulario y estado
+                        const createForm = document.getElementById('createForm');
+                        if (createForm) createForm.reset();
+                        clearUnsavedChanges();
+                        markExitConfirmed();
+                    }
                 }
             }
             
             if (tabName !== 'update' && (hasUnsavedChanges || hasFormChanged('updateForm'))) {
-                const entityName = getCurrentEntityName();
-                const message = `Hay cambios sin guardar en ${entityName}. ¿Desea descartar los cambios?`;
-                if (!confirm(message)) {
-                    return; // No cambiar de pestaña
-                } else {
-                    clearUnsavedChanges();
+                if (!exitConfirmed) {
+                    const entityName = getCurrentEntityName();
+                    const message = `Hay cambios sin guardar en ${entityName}. ¿Desea descartar los cambios?`;
+                    if (!confirm(message)) {
+                        return; // No cambiar de pestaña
+                    } else {
+                        clearUnsavedChanges();
+                        markExitConfirmed();
+                    }
                 }
             }
             
@@ -3230,16 +3279,30 @@
                 loadDynamicFieldsForGlobalSearch();
             } else {
                 globalSearch.style.display = 'none';
+                resetExitConfirmation(); // Resetear confirmación al ir a crear
             }
         
             // Resetear contenedores al cambiar pestañas
             if (tabName === 'update') {
                 document.getElementById('update-form-container').style.display = 'none';
                 document.getElementById('update-records-container').style.display = 'block';
+                
+                // Si hay registros cargados, mostrarlos
+                if (currentRecords && currentRecords.length > 0) {
+                    displayUpdateResults(currentRecords);
+                }
+            }
+        
+            if (tabName === 'delete') {
+                // Si hay registros cargados, mostrarlos
+                if (currentRecords && currentRecords.length > 0) {
+                    displayDeleteResults(currentRecords);
+                }
             }
         
             if (tabName === 'create') {
                 // Limpiar estado de cambios al entrar a crear
+                resetExitConfirmation();
                 clearUnsavedChanges();
                 showCreateForm();
                 
@@ -3257,7 +3320,7 @@
         }
         
         // GLOBAL SEARCH
-        async function performGlobalSearch() {
+         async function performGlobalSearch() {
             const searchText = document.getElementById('globalSearchText').value.trim();
             const searchField = document.getElementById('globalSearchField').value;
             
@@ -3275,7 +3338,10 @@
         
                 if (result.success) {
                     currentRecords = result.data;
-                    displaySearchResults(result.data);
+                    
+                    // Actualizar TODAS las pestañas con los resultados
+                    updateAllTabsWithSearchResults(result.data);
+                    
                     showStatus(`Se encontraron ${result.total} registro(s)`, 'success');
                 } else {
                     throw new Error(result.message);
@@ -3285,37 +3351,67 @@
                 showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
             }
         }
-
+        
+        // Nueva función para actualizar todas las pestañas con resultados
+        function updateAllTabsWithSearchResults(records) {
+            // Actualizar pestaña de búsqueda
+            displaySearchResults(records);
+            
+            // Actualizar pestaña de actualización
+            const updateContainer = document.getElementById('update-records-container');
+            if (updateContainer) {
+                displayUpdateResults(records);
+            }
+            
+            // Actualizar pestaña de eliminación
+            const deleteContainer = document.getElementById('delete-records');
+            if (deleteContainer) {
+                displayDeleteResults(records);
+            }
+        }
+        
         function clearGlobalSearch() {
             document.getElementById('globalSearchText').value = '';
             document.getElementById('globalSearchField').value = '';
             
             currentRecords = [];
+            // Limpiar todas las pestañas
+            clearAllTabResults();
             
-            const activeTab = document.querySelector('.tab-content.active').id;
-            let container, emptyMessage;
+            showStatus('Búsqueda limpiada - Realiza una nueva búsqueda para ver registros', 'info');
+        }
             
-            if (activeTab === 'search') {
-                container = document.getElementById('search-records-container');
-                emptyMessage = `
+
+
+        function clearAllTabResults() {
+            // Limpiar pestaña de búsqueda
+            const searchContainer = document.getElementById('search-records-container');
+            if (searchContainer) {
+                searchContainer.innerHTML = `
                     <div class="empty-state">
                         <span class="icon">🔍</span>
                         <h3>Buscar Registros</h3>
                         <p>Utiliza la barra de búsqueda de arriba o haz clic en "Cargar Todos los Registros" para comenzar</p>
                     </div>
                 `;
-            } else if (activeTab === 'update') {
-                container = document.getElementById('update-records-container');
-                emptyMessage = `
+            }
+            
+            // Limpiar pestaña de actualización
+            const updateContainer = document.getElementById('update-records-container');
+            if (updateContainer) {
+                updateContainer.innerHTML = `
                     <div class="empty-state">
                         <span class="icon">✏️</span>
                         <h3>Seleccionar Registro para Editar</h3>
                         <p>Utiliza la barra de búsqueda de arriba para encontrar el registro que deseas actualizar</p>
                     </div>
                 `;
-            } else if (activeTab === 'delete') {
-                container = document.getElementById('delete-records');
-                emptyMessage = `
+            }
+            
+            // Limpiar pestaña de eliminación
+            const deleteContainer = document.getElementById('delete-records');
+            if (deleteContainer) {
+                deleteContainer.innerHTML = `
                     <div class="empty-state">
                         <span class="icon">🗑️</span>
                         <h3>Seleccionar Registro para Eliminar</h3>
@@ -3323,14 +3419,8 @@
                     </div>
                 `;
             }
-            
-            if (container && emptyMessage) {
-                container.innerHTML = emptyMessage;
-            }
-            
-            showStatus('Búsqueda limpiada - Realiza una nueva búsqueda para ver registros', 'info');
         }
-
+        
         async function loadAllGlobalRecords() {
             const activeTab = document.querySelector('.tab-content.active').id;
             
@@ -3374,16 +3464,8 @@
                 if (result.success) {
                     currentRecords = result.data;
                     
-                    // Mostrar resultados según la pestaña activa
-                    const activeTab = document.querySelector('.tab-content.active').id;
-                    
-                    if (activeTab === 'search') {
-                        displaySearchResults(result.data);
-                    } else if (activeTab === 'update') {
-                        displayUpdateResults(result.data);
-                    } else if (activeTab === 'delete') {
-                        displayDeleteResults(result.data);
-                    }
+                    // Actualizar TODAS las pestañas, no solo la activa
+                    updateAllTabsWithSearchResults(result.data);
                     
                     showStatus(`${result.total} registros cargados`, 'success');
                 } else {
@@ -3475,16 +3557,26 @@
             const form = document.getElementById(formId);
             if (!form) return;
             
-            // Agregar listeners a todos los inputs
+            // Limpiar listeners anteriores para evitar duplicados
             const inputs = form.querySelectorAll('input, select, textarea');
             inputs.forEach(input => {
-                input.addEventListener('input', () => {
-                    hasUnsavedChanges = true;
-                });
-                input.addEventListener('change', () => {
-                    hasUnsavedChanges = true;
-                });
+                input.removeEventListener('input', handleFormChange);
+                input.removeEventListener('change', handleFormChange);
             });
+            
+            // Agregar nuevos listeners solo para cambios reales del usuario
+            inputs.forEach(input => {
+                input.addEventListener('input', handleFormChange);
+                input.addEventListener('change', handleFormChange);
+            });
+        }
+        
+        // Función separada para manejar cambios
+        function handleFormChange(event) {
+            // Solo marcar como cambiado si el usuario realmente interactuó
+            if (event.isTrusted) { // Solo eventos del usuario, no programáticos
+                hasUnsavedChanges = true;
+            }
         }
         
         function createUpdateInputElement(column, inputType, required, value, isPrimaryKey) {
