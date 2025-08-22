@@ -668,6 +668,77 @@ async function getEntityData(tableName, primaryKey, primaryValue) {
   }
 }
 
+// ========== SISTEMA DE AUDITORÍA ==========
+
+// Función para registrar acciones de auditoría
+async function logAuditAction(actionData) {
+    try {
+        const {
+            userEmail,
+            userId,
+            userName,
+            action,
+            tableName,
+            recordId,
+            oldValues,
+            newValues,
+            ipAddress,
+            userAgent,
+            sessionInfo
+        } = actionData;
+
+        const insertQuery = `
+            INSERT INTO audit_log (
+                user_email, user_id, user_name, action, table_name, 
+                record_id, old_values, new_values, ip_address, 
+                user_agent, session_info
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING id, timestamp
+        `;
+
+        const values = [
+            userEmail,
+            userId,
+            userName,
+            action.toUpperCase(),
+            tableName,
+            recordId?.toString() || null,
+            oldValues ? JSON.stringify(oldValues) : null,
+            newValues ? JSON.stringify(newValues) : null,
+            ipAddress,
+            userAgent,
+            sessionInfo ? JSON.stringify(sessionInfo) : null
+        ];
+
+        const result = await pool.query(insertQuery, values);
+        
+        console.log(`📝 Auditoría registrada: ${action} en ${tableName} por ${userEmail} - ID: ${result.rows[0].id}`);
+        
+        return result.rows[0];
+    } catch (error) {
+        console.error('❌ Error registrando auditoría:', error);
+        // No lanzar error para no afectar la operación principal
+    }
+}
+
+// Función para obtener información del request
+function getRequestInfo(req) {
+    return {
+        ipAddress: req.ip || req.connection?.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0]?.trim(),
+        userAgent: req.headers['user-agent'],
+        sessionInfo: {
+            timestamp: new Date().toISOString(),
+            method: req.method,
+            url: req.originalUrl,
+            headers: {
+                'x-forwarded-for': req.headers['x-forwarded-for'],
+                'x-real-ip': req.headers['x-real-ip'],
+                'cf-connecting-ip': req.headers['cf-connecting-ip']
+            }
+        }
+    };
+}
+
 // Endpoint para obtener opciones de dropdowns
 app.get('/api/enum-options', auth.requireAuth, async (req, res) => {
   try {
@@ -1225,7 +1296,7 @@ app.get('/api/entidades/mutuales', auth.requireAuth, async (req, res) => {
 });
 
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
-// CREATE - Crear nuevo registro
+// CREATE - Crear nuevo registro con auditoría
 app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
@@ -1236,7 +1307,7 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
-    logOperation('CREATE REQUEST', { tableName, data });
+    logOperation('CREATE REQUEST', { tableName, data, user: req.user.email });
 
     // Limpiar datos de campos vacíos o undefined
     const cleanData = {};
@@ -1246,7 +1317,7 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
       }
     });
 
-    // Construir query de inserción CON COMILLAS DOBLES
+    // Construir query de inserción
     const columns = Object.keys(cleanData);
     const values = Object.values(cleanData);
     
@@ -1271,6 +1342,22 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
 
     const result = await pool.query(insertQuery, values);
     const newRecord = result.rows[0];
+    
+    // REGISTRAR AUDITORÍA
+    const requestInfo = getRequestInfo(req);
+    await logAuditAction({
+      userEmail: req.user.email,
+      userId: req.user.id,
+      userName: req.user.nombre_apellido,
+      action: 'CREATE',
+      tableName: tableName,
+      recordId: newRecord[primaryKey],
+      oldValues: null,
+      newValues: newRecord,
+      ipAddress: requestInfo.ipAddress,
+      userAgent: requestInfo.userAgent,
+      sessionInfo: requestInfo.sessionInfo
+    });
     
     logOperation('CREATE SUCCESS', newRecord);
     
@@ -1431,7 +1518,7 @@ app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
   }
 });
 
-// UPDATE - Actualizar registro
+// UPDATE - Actualizar registro con auditoría
 app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
@@ -1442,7 +1529,7 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
-    logOperation('UPDATE REQUEST', { tableName, searchCriteria, updateData });
+    logOperation('UPDATE REQUEST', { tableName, searchCriteria, updateData, user: req.user.email });
     
     if (!searchCriteria || !searchCriteria.field || searchCriteria.value === undefined) {
       return res.status(400).json({
@@ -1451,12 +1538,24 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
       });
     }
 
+    // OBTENER VALORES ANTERIORES PARA AUDITORÍA
+    const oldRecordQuery = `SELECT * FROM "${tableName}" WHERE "${searchCriteria.field}" = $1`;
+    const oldRecordResult = await pool.query(oldRecordQuery, [searchCriteria.value]);
+    const oldRecord = oldRecordResult.rows[0];
+
+    if (!oldRecord) {
+      return res.status(404).json({
+        success: false,
+        message: `Registro no encontrado con ${searchCriteria.field}=${searchCriteria.value}`
+      });
+    }
+
     // Limpiar updateData de campos internos
     const cleanUpdateData = { ...updateData };
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
-    // Construir query de actualización CON COMILLAS DOBLES
+    // Construir query de actualización
     const updateColumns = Object.keys(cleanUpdateData);
     const updateValues = Object.values(cleanUpdateData);
     const setClause = updateColumns.map((col, index) => `"${col}" = $${index + 1}`).join(', ');
@@ -1469,15 +1568,24 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     `;
 
     const result = await pool.query(updateQuery, [...updateValues, searchCriteria.value]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: `Registro no encontrado con ${searchCriteria.field}=${searchCriteria.value}`
-      });
-    }
-
     const updatedRecord = result.rows[0];
+
+    // REGISTRAR AUDITORÍA
+    const requestInfo = getRequestInfo(req);
+    await logAuditAction({
+      userEmail: req.user.email,
+      userId: req.user.id,
+      userName: req.user.nombre_apellido,
+      action: 'UPDATE',
+      tableName: tableName,
+      recordId: updatedRecord[primaryKey],
+      oldValues: oldRecord,
+      newValues: updatedRecord,
+      ipAddress: requestInfo.ipAddress,
+      userAgent: requestInfo.userAgent,
+      sessionInfo: requestInfo.sessionInfo
+    });
+
     logOperation('UPDATE SUCCESS', updatedRecord);
 
     res.json({
@@ -1499,7 +1607,7 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
   }
 });
 
-// DELETE - Eliminar registro
+// DELETE - Eliminar registro con auditoría
 app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
@@ -1507,13 +1615,27 @@ app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) =
     
     // Validar tabla
     await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
     
-    logOperation('DELETE REQUEST', { tableName, searchCriteria });
+    logOperation('DELETE REQUEST', { tableName, searchCriteria, user: req.user.email });
 
     if (!searchCriteria || !searchCriteria.field || !searchCriteria.value) {
       return res.status(400).json({
         success: false,
         message: 'Se requiere criterio de búsqueda válido para eliminar'
+      });
+    }
+
+    // OBTENER REGISTRO ANTES DE ELIMINAR PARA AUDITORÍA
+    const selectQuery = `SELECT * FROM "${tableName}" WHERE "${searchCriteria.field}" = $1`;
+    const selectResult = await pool.query(selectQuery, [searchCriteria.value]);
+    const recordToDelete = selectResult.rows[0];
+
+    if (!recordToDelete) {
+      return res.status(404).json({
+        success: false,
+        message: `No se encontró un registro con ${searchCriteria.field}: ${searchCriteria.value}`,
       });
     }
 
@@ -1524,15 +1646,24 @@ app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) =
     `;
 
     const result = await pool.query(deleteQuery, [searchCriteria.value]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: `No se encontró un registro con ${searchCriteria.field}: ${searchCriteria.value}`,
-      });
-    }
-
     const deletedRecord = result.rows[0];
+
+    // REGISTRAR AUDITORÍA
+    const requestInfo = getRequestInfo(req);
+    await logAuditAction({
+      userEmail: req.user.email,
+      userId: req.user.id,
+      userName: req.user.nombre_apellido,
+      action: 'DELETE',
+      tableName: tableName,
+      recordId: deletedRecord[primaryKey],
+      oldValues: recordToDelete,
+      newValues: null,
+      ipAddress: requestInfo.ipAddress,
+      userAgent: requestInfo.userAgent,
+      sessionInfo: requestInfo.sessionInfo
+    });
+
     logOperation('DELETE SUCCESS', deletedRecord);
 
     res.json({
@@ -1546,6 +1677,80 @@ app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) =
     res.status(errorInfo.status).json({
       success: false,
       message: errorInfo.message
+    });
+  }
+});
+
+// Endpoint para consultar logs de auditoría (solo admin)
+app.get('/api/admin/audit-logs', auth.requireAuth, auth.requireAdmin, async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, user_email, table_name, action, date_from, date_to } = req.query;
+    
+    let whereConditions = [];
+    let queryParams = [];
+    let paramIndex = 1;
+
+    if (user_email) {
+      whereConditions.push(`user_email = $${paramIndex}`);
+      queryParams.push(user_email);
+      paramIndex++;
+    }
+
+    if (table_name) {
+      whereConditions.push(`table_name = $${paramIndex}`);
+      queryParams.push(table_name);
+      paramIndex++;
+    }
+
+    if (action) {
+      whereConditions.push(`action = $${paramIndex}`);
+      queryParams.push(action.toUpperCase());
+      paramIndex++;
+    }
+
+    if (date_from) {
+      whereConditions.push(`timestamp >= $${paramIndex}`);
+      queryParams.push(date_from);
+      paramIndex++;
+    }
+
+    if (date_to) {
+      whereConditions.push(`timestamp <= $${paramIndex}`);
+      queryParams.push(date_to);
+      paramIndex++;
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    const query = `
+      SELECT 
+        id, user_email, user_name, action, table_name, record_id,
+        timestamp, ip_address,
+        CASE WHEN old_values IS NOT NULL THEN old_values::text ELSE NULL END as old_values,
+        CASE WHEN new_values IS NOT NULL THEN new_values::text ELSE NULL END as new_values
+      FROM audit_log 
+      ${whereClause}
+      ORDER BY timestamp DESC 
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const result = await pool.query(query, queryParams);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      total: result.rows.length,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo logs de auditoría:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
     });
   }
 });
