@@ -1205,16 +1205,28 @@
             loadDynamicCategories(); // Esta línea debe estar presente
         }
 
-        // Mostrar información del usuario
         function showUserInfo() {
             if (currentUser) {
                 const userInfo = document.getElementById('user-info');
                 const userDetails = document.getElementById('user-details');
                 
+                let adminButton = '';
+                if (currentUser.rol === 'admin') {
+                    adminButton = `
+                        <div style="margin-top: 8px;">
+                            <button onclick="window.open('admin.html', '_blank')" 
+                                    style="background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 0.9rem;">
+                                🛡️ Panel Admin
+                            </button>
+                        </div>
+                    `;
+                }
+                
                 userDetails.innerHTML = `
                     <div>👤 ${currentUser.nombre_apellido}</div>
                     <div>📧 ${currentUser.email}</div>
                     <div>🎭 ${currentUser.rol}</div>
+                    ${adminButton}
                 `;
                 
                 userInfo.style.display = 'block';
