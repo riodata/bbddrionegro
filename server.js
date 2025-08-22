@@ -1890,6 +1890,166 @@ app.get('/api/admin/users', auth.requireAuth, auth.requireAdmin, async (req, res
   }
 });
 
+// ========== ENDPOINTS DE ADMINISTRACIÓN ==========
+
+// Middleware para verificar rol admin
+const requireAdmin = (req, res, next) => {
+  if (!req.user || req.user.rol !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Acceso denegado. Se requieren permisos de administrador.'
+    });
+  }
+  next();
+};
+
+// Obtener estadísticas de auditoría
+app.get('/api/admin/audit-stats', auth.requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE action = 'CREATE' AND timestamp >= $1) as creates,
+        COUNT(*) FILTER (WHERE action = 'UPDATE' AND timestamp >= $1) as updates,
+        COUNT(*) FILTER (WHERE action = 'DELETE' AND timestamp >= $1) as deletes,
+        COUNT(*) FILTER (WHERE timestamp >= $1) as last_month
+      FROM audit_log
+    `, [thirtyDaysAgo]);
+
+    res.json({
+      success: true,
+      data: stats.rows[0]
+    });
+  } catch (error) {
+    console.error('Error obteniendo estadísticas de auditoría:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Obtener lista de tablas para filtros
+app.get('/api/admin/tables', auth.requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT table_name 
+      FROM audit_log 
+      ORDER BY table_name
+    `);
+
+    res.json({
+      success: true,
+      data: result.rows.map(row => row.table_name)
+    });
+  } catch (error) {
+    console.error('Error obteniendo lista de tablas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// Endpoint principal de auditoría con filtros mejorados
+app.get('/api/admin/audit-logs', auth.requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { 
+      limit = 100, 
+      offset = 0, 
+      user_email, 
+      table_name, 
+      action, 
+      date_from, 
+      date_to 
+    } = req.query;
+    
+    let whereConditions = [];
+    let queryParams = [];
+    let paramIndex = 1;
+
+    // Filtro por usuario
+    if (user_email) {
+      whereConditions.push(`user_email ILIKE $${paramIndex}`);
+      queryParams.push(`%${user_email}%`);
+      paramIndex++;
+    }
+
+    // Filtro por tabla
+    if (table_name) {
+      whereConditions.push(`table_name = $${paramIndex}`);
+      queryParams.push(table_name);
+      paramIndex++;
+    }
+
+    // Filtro por acción
+    if (action) {
+      whereConditions.push(`action = $${paramIndex}`);
+      queryParams.push(action.toUpperCase());
+      paramIndex++;
+    }
+
+    // Filtro por fecha desde
+    if (date_from) {
+      whereConditions.push(`timestamp >= $${paramIndex}`);
+      queryParams.push(date_from);
+      paramIndex++;
+    }
+
+    // Filtro por fecha hasta
+    if (date_to) {
+      whereConditions.push(`timestamp <= $${paramIndex}`);
+      queryParams.push(date_to);
+      paramIndex++;
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // Query principal
+    const query = `
+      SELECT 
+        id, user_email, user_name, action, table_name, record_id,
+        timestamp, ip_address, user_agent,
+        old_values, new_values
+      FROM audit_log 
+      ${whereClause}
+      ORDER BY timestamp DESC 
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    const result = await pool.query(query, queryParams);
+
+    // Query para contar total
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM audit_log 
+      ${whereClause}
+    `;
+
+    const countResult = await pool.query(countQuery, queryParams.slice(0, -2));
+
+    res.json({
+      success: true,
+      data: result.rows,
+      total: parseInt(countResult.rows[0].total),
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo logs de auditoría:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
 // Endpoint para activar/desactivar usuario (solo admin)
 app.put('/api/admin/users/:userId/toggle-status', auth.requireAuth, auth.requireAdmin, async (req, res) => {
   try {
