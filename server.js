@@ -670,7 +670,68 @@ async function getEntityData(tableName, primaryKey, primaryValue) {
 
 // ========== SISTEMA DE AUDITORÍA ==========
 
+// Función auxiliar para limpiar y normalizar datos de auditoría
+function cleanAuditData(data) {
+    if (!data || typeof data !== 'object') return data;
+    
+    const cleaned = {};
+    
+    for (const [key, value] of Object.entries(data)) {
+        try {
+            // Normalizar nombres de campos problemáticos
+            let cleanKey = key;
+            
+            // Convertir campos con tildes a sin tildes para consistency
+            if (key.toLowerCase().includes('matrícula')) {
+                cleanKey = key.replace(/matrícula/gi, 'matricula');
+            }
+            
+            // Otros campos problemáticos que podrían tener tildes
+            cleanKey = cleanKey
+                .replace(/ó/g, 'o')
+                .replace(/é/g, 'e')
+                .replace(/í/g, 'i')
+                .replace(/á/g, 'a')
+                .replace(/ú/g, 'u')
+                .replace(/ñ/g, 'n');
+                
+            cleaned[cleanKey] = value;
+            
+        } catch (fieldError) {
+            console.warn(`⚠️ Error procesando campo de auditoría ${key}:`, fieldError.message);
+            // Skip this field if there's an error
+        }
+    }
+    
+    return cleaned;
+}
+
+// Función para validar que el objeto tenga las propiedades esperadas
+function safeGetAuditField(obj, fieldName) {
+    if (!obj) return null;
+    
+    // Intentar diferentes variaciones del nombre del campo
+    const variations = [
+        fieldName,
+        fieldName.toLowerCase(),
+        fieldName.replace(/matrícula/gi, 'matricula'),
+        fieldName.replace(/matricula/gi, 'matrícula'),
+        `"${fieldName}"`, // Para campos con comillas
+        fieldName.replace(/\s+/g, '_'), // Espacios a underscores
+        fieldName.replace(/_/g, ' ') // Underscores a espacios
+    ];
+    
+    for (const variation of variations) {
+        if (obj.hasOwnProperty(variation)) {
+            return obj[variation];
+        }
+    }
+    
+    return null;
+}
+
 // Función para registrar acciones de auditoría
+// Función para registrar acciones de auditoría - VERSIÓN MEJORADA
 async function logAuditAction(actionData) {
     try {
         const {
@@ -686,6 +747,30 @@ async function logAuditAction(actionData) {
             userAgent,
             sessionInfo
         } = actionData;
+
+        // LIMPIAR Y VALIDAR DATOS ANTES DE INSERTAR
+        let cleanOldValues = null;
+        let cleanNewValues = null;
+        
+        if (oldValues) {
+            try {
+                cleanOldValues = cleanAuditData(oldValues);
+                console.log('🧹 Old values limpiados:', Object.keys(cleanOldValues));
+            } catch (cleanError) {
+                console.warn('⚠️ Error limpiando oldValues:', cleanError.message);
+                cleanOldValues = {}; // Objeto vacío en lugar de null para evitar errores
+            }
+        }
+        
+        if (newValues) {
+            try {
+                cleanNewValues = cleanAuditData(newValues);
+                console.log('🧹 New values limpiados:', Object.keys(cleanNewValues));
+            } catch (cleanError) {
+                console.warn('⚠️ Error limpiando newValues:', cleanError.message);
+                cleanNewValues = {}; // Objeto vacío en lugar de null para evitar errores
+            }
+        }
 
         const insertQuery = `
             INSERT INTO audit_log (
@@ -703,8 +788,8 @@ async function logAuditAction(actionData) {
             action.toUpperCase(),
             tableName,
             recordId?.toString() || null,
-            oldValues ? JSON.stringify(oldValues) : null,
-            newValues ? JSON.stringify(newValues) : null,
+            cleanOldValues ? JSON.stringify(cleanOldValues) : null,
+            cleanNewValues ? JSON.stringify(cleanNewValues) : null,
             ipAddress,
             userAgent,
             sessionInfo ? JSON.stringify(sessionInfo) : null
@@ -717,6 +802,12 @@ async function logAuditAction(actionData) {
         return result.rows[0];
     } catch (error) {
         console.error('❌ Error registrando auditoría:', error);
+        console.error('📋 Datos que causaron el error:', {
+            action: actionData.action,
+            tableName: actionData.tableName,
+            hasOldValues: !!actionData.oldValues,
+            hasNewValues: !!actionData.newValues
+        });
         // No lanzar error para no afectar la operación principal
     }
 }
