@@ -2341,8 +2341,17 @@
             input.value = value;
         }
         
-        // Validar matrícula y verificar duplicados
+       // Validar matrícula y verificar duplicados - SOLO para entidades_cooperativas y entidades_mutuales
         async function validateMatricula(fieldName, value) {
+            // Lista de tablas que requieren validación de matrícula
+            const tablasConValidacionMatricula = ['entidades_cooperativas', 'entidades_mutuales'];
+            
+            // Si no es una tabla que requiere validación, retornar true sin validar
+            if (!tablasConValidacionMatricula.includes(currentTable)) {
+                console.log(`🔄 Validación de matrícula omitida para tabla: ${currentTable}`);
+                return true;
+            }
+            
             if (!value || value.trim() === '') {
                 showFieldError(fieldName, '');
                 return true;
