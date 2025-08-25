@@ -1054,9 +1054,12 @@ app.get('/api/tables/:tableName/schema', auth.requireAuth, async (req, res) => {
 
 // Endpoint para solicitar recuperación de contraseña
 app.post('/api/password-reset/request', async (req, res) => {
+  console.log('🔄 Recibida solicitud de reset de contraseña');
+  
   const { email, timestamp, source, action, user_agent, ip } = req.body;
   
   if (!email) {
+    console.log('❌ Email no proporcionado');
     return res.status(400).json({ 
       success: false, 
       message: "Email es requerido" 
@@ -1073,7 +1076,6 @@ app.post('/api/password-reset/request', async (req, res) => {
     );
     
     if (userResult.rows.length === 0) {
-      // Por seguridad, devolvemos éxito aunque no exista el usuario
       console.log(`⚠️ Usuario no encontrado: ${email}`);
       return res.json({ 
         success: true, 
@@ -1097,16 +1099,34 @@ app.post('/api/password-reset/request', async (req, res) => {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const expirationTime = new Date(Date.now() + 60 * 60 * 1000); // 1 hora de expiración
 
-    // Guardar token en la base de datos
-    await pool.query(`
-      INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at) 
-      VALUES ($1, $2, $3, NOW())
-      ON CONFLICT (user_id) 
-      DO UPDATE SET token = $2, expires_at = $3, created_at = NOW()
-    `, [user.id, resetToken, expirationTime]);
+    console.log(`🔑 Token generado para ${email}: ${resetToken.substring(0, 8)}...`);
+
+    // Primero eliminar tokens anteriores para este usuario
+    try {
+      await pool.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [user.id]);
+      console.log(`🗑️ Tokens anteriores eliminados para usuario: ${user.id}`);
+    } catch (deleteError) {
+      console.warn('⚠️ Error eliminando tokens anteriores:', deleteError.message);
+    }
+
+    // Insertar nuevo token
+    try {
+      await pool.query(`
+        INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at) 
+        VALUES ($1, $2, $3, NOW())
+      `, [user.id, resetToken, expirationTime]);
+      
+      console.log(`✅ Token guardado en base de datos para usuario: ${user.id}`);
+    } catch (dbError) {
+      console.error('❌ Error guardando token en BD:', dbError);
+      throw new Error('Error de base de datos: ' + dbError.message);
+    }
 
     // Construir el link de recuperación
+    const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
     const resetLink = `${baseUrl}?token=${resetToken}`;
+    
+    console.log(`🔗 Link de reset generado: ${resetLink}`);
     
     // Datos para el webhook de n8n
     const webhookData = {
@@ -1126,19 +1146,21 @@ app.post('/api/password-reset/request', async (req, res) => {
       }
     };
 
-    console.log(`📧 Enviando datos al webhook de n8n para: ${email}`);
+    console.log(`📧 Preparando envío al webhook de n8n para: ${email}`);
 
     // Verificar que existe la URL del webhook
     if (!process.env.N8N_WEBHOOK_URL) {
       console.error('❌ N8N_WEBHOOK_URL no configurada en variables de entorno');
-      return res.status(500).json({
-        success: false,
-        message: "Error de configuración del servidor"
+      return res.json({
+        success: true,
+        message: "Solicitud procesada. Si el email existe, recibirás instrucciones."
       });
     }
 
     // Enviar datos al webhook de n8n con timeout y manejo de errores
     try {
+      console.log(`📡 Enviando a webhook: ${process.env.N8N_WEBHOOK_URL}`);
+      
       const webhookResponse = await axios.post(process.env.N8N_WEBHOOK_URL, webhookData, {
         timeout: 10000, // 10 segundos de timeout
         headers: {
@@ -1149,38 +1171,15 @@ app.post('/api/password-reset/request', async (req, res) => {
 
       console.log(`✅ Webhook response: ${webhookResponse.status} ${webhookResponse.statusText}`);
       
-      // Registrar en auditoría
-      await logAuditAction({
-        userEmail: 'system',
-        userId: null,
-        userName: 'Sistema',
-        action: 'PASSWORD_RESET_REQUEST',
-        tableName: 'users',
-        recordId: user.id,
-        oldValues: null,
-        newValues: { email, resetToken, expirationTime },
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        sessionInfo: { webhook_status: webhookResponse.status }
-      });
-
     } catch (webhookError) {
       console.error('❌ Error enviando al webhook:', webhookError.message);
-      
-      // Registrar error pero continuar (no fallar la operación)
-      await logAuditAction({
-        userEmail: 'system',
-        userId: null,
-        userName: 'Sistema',
-        action: 'PASSWORD_RESET_REQUEST_ERROR',
-        tableName: 'users',
-        recordId: user.id,
-        oldValues: null,
-        newValues: { email, error: webhookError.message },
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        sessionInfo: { webhook_error: true }
+      console.error('📋 Detalles del webhook error:', {
+        code: webhookError.code,
+        response: webhookError.response?.status,
+        data: webhookError.response?.data
       });
+      
+      // No fallar la operación si el webhook falla
     }
 
     return res.json({ 
@@ -1189,10 +1188,13 @@ app.post('/api/password-reset/request', async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Error en password reset request:", error);
+    console.error("❌ Error completo en password reset request:", error);
+    console.error("📋 Stack trace:", error.stack);
+    
     return res.status(500).json({ 
       success: false, 
-      message: "Error interno del servidor" 
+      message: "Error interno del servidor",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
