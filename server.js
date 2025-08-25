@@ -1106,7 +1106,7 @@ app.post('/api/password-reset/request', async (req, res) => {
     `, [user.id, resetToken, expirationTime]);
 
     // Construir el link de recuperación
-    const resetLink = `${process.env.FRONTEND_URL || req.protocol + '://' + req.get('host')}/reset-password.html?token=${resetToken}`;
+    const resetLink = `${baseUrl}?token=${resetToken}`;
     
     // Datos para el webhook de n8n
     const webhookData = {
