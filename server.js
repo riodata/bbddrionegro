@@ -1064,6 +1064,7 @@ app.post('/api/password-reset/request', async (req, res) => {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     }
     const userId = userResult.rows[0].id;
+    const nombre = userResult.rows[0].nombre_apellido || email;
 
     // Genera token único (simple ejemplo, usa mejor uuid en producción)
     const token = Math.random().toString(36).substr(2, 24);
@@ -1082,7 +1083,7 @@ app.post('/api/password-reset/request', async (req, res) => {
     await axios.post(process.env.N8N_WEBHOOK_URL, {
       email,
       resetLink,
-      nombre: email // Puedes buscar el nombre si lo tienes en la DB
+      nombre
     });
 
     return res.json({ success: true, message: "Solicitud enviada. Revisa tu email." });
