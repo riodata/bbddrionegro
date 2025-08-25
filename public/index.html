@@ -3274,7 +3274,7 @@
             ]);
         }
 
-        // Manejar formulario de creación
+        // Manejar formulario de creación - VERSIÓN CORREGIDA
         async function handleCreateForm(e) {
             e.preventDefault();
         
@@ -3283,10 +3283,19 @@
             let hasErrors = false;
             const formFields = e.target.querySelectorAll('input, select, textarea');
         
+            // LISTA DE CAMPOS AUXILIARES QUE NO DEBEN ENVIARSE A LA BD
+            const auxiliaryFields = [
+                'entidad_autocomplete',
+                'entidad_selector', 
+                'selected_entidad_matricula',
+                'selected_entidad_nombre'
+            ];
+        
             // Procesar y limpiar datos del formulario
             for (let [key, value] of formData.entries()) {
-                // Excluir el campo auxiliar entidad_selector
-                if (key === 'entidad_selector') {
+                // ✅ EXCLUIR CAMPOS AUXILIARES
+                if (auxiliaryFields.includes(key)) {
+                    console.log(`🚫 Excluyendo campo auxiliar: ${key}`);
                     continue;
                 }
                 
@@ -3297,10 +3306,16 @@
             }
         
             console.log('📋 Datos procesados para envío:', data);
-                            
+            console.log('🚫 Campos excluidos:', auxiliaryFields);
+                                
             for (const field of formFields) {
                 const fieldName = field.name;
                 const fieldValue = field.value;
+                
+                // ✅ NO VALIDAR CAMPOS AUXILIARES
+                if (auxiliaryFields.includes(fieldName)) {
+                    continue;
+                }
                 
                 // Solo validar campos que tienen valor
                 if (fieldName && fieldValue && fieldValue.trim() !== '') {
@@ -3354,6 +3369,8 @@
                     clearStatus();
                     // Limpiar formulario
                     e.target.reset();
+                    // Limpiar autocompletado
+                    clearAutocomplete(getCurrentMatriculaField());
                 } else {
                     showStatus('Error al crear el registro: ' + result.message, 'error');
                 }
@@ -3365,6 +3382,7 @@
                 submitButton.textContent = originalText;
             }
         }
+        
         // Manejar formulario de actualización
         async function handleUpdateForm(e) {
             e.preventDefault();
@@ -4276,6 +4294,32 @@
             currentRecords = records;
         }
 
+        // Función helper para obtener el campo matrícula actual
+        function getCurrentMatriculaField() {
+            if (!currentTableSchema || !currentTableSchema.columns) return null;
+            
+            const isCooperativa = currentTable && currentTable.toLowerCase().includes('cooperativ');
+            const isMutual = currentTable && currentTable.toLowerCase().includes('mutual');
+            
+            if (isCooperativa) {
+                const field = currentTableSchema.columns.find(col => {
+                    const name = col.column_name.toLowerCase();
+                    return (name.includes('matricula') || name.includes('matrícula')) && 
+                           !name.includes('nacional');
+                });
+                return field ? field.column_name : null;
+            } else if (isMutual) {
+                const field = currentTableSchema.columns.find(col => {
+                    const name = col.column_name.toLowerCase();
+                    return (name.includes('matricula') || name.includes('matrícula')) && 
+                           name.includes('nacional');
+                });
+                return field ? field.column_name : null;
+            }
+            
+            return null;
+        }
+        
             // FUNCIONES DE AUTOCOMPLETADO
         let selectedAutocompleteIndex = -1;
         let currentAutocompleteMatches = [];
@@ -4426,18 +4470,26 @@
             }, 200);
         }
         
-        function clearAutocomplete(matriculaTargetField) {
+        function clearAutocomplete(matriculaTargetField = null) {
             const input = document.getElementById('entidad_autocomplete');
             const dropdown = document.getElementById('autocomplete-dropdown');
             const clearBtn = document.getElementById('clear-autocomplete');
-            const matriculaField = document.getElementById(matriculaTargetField);
+            
+            // Si no se proporciona el campo, detectarlo automáticamente
+            if (!matriculaTargetField) {
+                matriculaTargetField = getCurrentMatriculaField();
+            }
+            
+            const matriculaField = matriculaTargetField ? document.getElementById(matriculaTargetField) : null;
             
             // Limpiar input
-            input.value = '';
+            if (input) input.value = '';
             
             // Limpiar campos ocultos
-            document.getElementById('selected_entidad_matricula').value = '';
-            document.getElementById('selected_entidad_nombre').value = '';
+            const hiddenMatricula = document.getElementById('selected_entidad_matricula');
+            const hiddenNombre = document.getElementById('selected_entidad_nombre');
+            if (hiddenMatricula) hiddenMatricula.value = '';
+            if (hiddenNombre) hiddenNombre.value = '';
             
             // Limpiar matrícula
             if (matriculaField) {
@@ -4448,8 +4500,8 @@
             }
             
             // Ocultar elementos
-            dropdown.style.display = 'none';
-            clearBtn.style.display = 'none';
+            if (dropdown) dropdown.style.display = 'none';
+            if (clearBtn) clearBtn.style.display = 'none';
             
             // Limpiar estado
             selectedAutocompleteIndex = -1;
