@@ -1319,7 +1319,14 @@
         }
 
         // ========== FUNCIONES DE RECUPERACIÓN DE CONTRASEÑA ==========
-        
+
+        // Función para ocultar todas las pantallas
+        function hideAllScreens() {
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+        }
+                
         // Configuración dinámica del webhook (usa la API del servidor)
         const getApiBase = () => window.location.origin;
         
