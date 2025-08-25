@@ -1050,49 +1050,186 @@ app.get('/api/tables/:tableName/schema', auth.requireAuth, async (req, res) => {
   }
 });
 
+// ========== ENDPOINTS PARA RECUPERACIÓN DE CONTRASEÑA ==========
+
 // Endpoint para solicitar recuperación de contraseña
 app.post('/api/password-reset/request', async (req, res) => {
-  const { email } = req.body;
+  const { email, timestamp, source, action, user_agent, ip } = req.body;
+  
   if (!email) {
-    return res.status(400).json({ success: false, message: "Email requerido" });
+    return res.status(400).json({ 
+      success: false, 
+      message: "Email es requerido" 
+    });
   }
 
   try {
-    // Busca usuario en DB
-    const userResult = await pool.query('SELECT id FROM users WHERE email = $1 LIMIT 1', [email]);
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
-    }
-    const userId = userResult.rows[0].id;
-    const nombre = userResult.rows[0].nombre_apellido || email;
-
-    // Genera token único (simple ejemplo, usa mejor uuid en producción)
-    const token = Math.random().toString(36).substr(2, 24);
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-
-    // Guarda el token en la base
-    await pool.query(
-      `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
-      [userId, token, expires]
+    console.log(`🔄 Procesando solicitud de reset para: ${email}`);
+    
+    // Buscar usuario en la base de datos
+    const userResult = await pool.query(
+      'SELECT id, nombre_apellido, activo FROM users WHERE email = $1 LIMIT 1', 
+      [email]
     );
+    
+    if (userResult.rows.length === 0) {
+      // Por seguridad, devolvemos éxito aunque no exista el usuario
+      console.log(`⚠️ Usuario no encontrado: ${email}`);
+      return res.json({ 
+        success: true, 
+        message: "Si el email existe, recibirás instrucciones de recuperación" 
+      });
+    }
 
-    // Arma el link de recuperación (ajusta la URL según tu frontend)
-    const resetLink = `${process.env.FRONTEND_URL || 'https://tusistema.rionegro.gov.ar'}/reset-password?token=${token}`;
+    const user = userResult.rows[0];
+    
+    // Verificar que el usuario esté activo
+    if (!user.activo) {
+      console.log(`⚠️ Usuario inactivo: ${email}`);
+      return res.json({ 
+        success: true, 
+        message: "Si el email existe, recibirás instrucciones de recuperación" 
+      });
+    }
 
-    // Envía los datos al webhook de n8n
-    await axios.post(process.env.N8N_WEBHOOK_URL, {
-      email,
-      resetLink,
-      nombre
+    // Generar token de reset único y seguro
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expirationTime = new Date(Date.now() + 60 * 60 * 1000); // 1 hora de expiración
+
+    // Guardar token en la base de datos
+    await pool.query(`
+      INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at) 
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (user_id) 
+      DO UPDATE SET token = $2, expires_at = $3, created_at = NOW()
+    `, [user.id, resetToken, expirationTime]);
+
+    // Construir el link de recuperación
+    const resetLink = `${process.env.FRONTEND_URL || req.protocol + '://' + req.get('host')}/reset-password.html?token=${resetToken}`;
+    
+    // Datos para el webhook de n8n
+    const webhookData = {
+      email: email,
+      nombre: user.nombre_apellido || email.split('@')[0],
+      resetLink: resetLink,
+      resetToken: resetToken,
+      expirationTime: expirationTime.toISOString(),
+      timestamp: timestamp || new Date().toISOString(),
+      source: source || 'sistema-gestion-rionegro',
+      action: action || 'password_reset_request',
+      user_agent: user_agent,
+      ip_address: ip || req.ip,
+      request_headers: {
+        'x-forwarded-for': req.headers['x-forwarded-for'],
+        'x-real-ip': req.headers['x-real-ip']
+      }
+    };
+
+    console.log(`📧 Enviando datos al webhook de n8n para: ${email}`);
+
+    // Verificar que existe la URL del webhook
+    if (!process.env.N8N_WEBHOOK_URL) {
+      console.error('❌ N8N_WEBHOOK_URL no configurada en variables de entorno');
+      return res.status(500).json({
+        success: false,
+        message: "Error de configuración del servidor"
+      });
+    }
+
+    // Enviar datos al webhook de n8n con timeout y manejo de errores
+    try {
+      const webhookResponse = await axios.post(process.env.N8N_WEBHOOK_URL, webhookData, {
+        timeout: 10000, // 10 segundos de timeout
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'RioNegro-System/1.0'
+        }
+      });
+
+      console.log(`✅ Webhook response: ${webhookResponse.status} ${webhookResponse.statusText}`);
+      
+      // Registrar en auditoría
+      await logAuditAction({
+        userEmail: 'system',
+        userId: null,
+        userName: 'Sistema',
+        action: 'PASSWORD_RESET_REQUEST',
+        tableName: 'users',
+        recordId: user.id,
+        oldValues: null,
+        newValues: { email, resetToken, expirationTime },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        sessionInfo: { webhook_status: webhookResponse.status }
+      });
+
+    } catch (webhookError) {
+      console.error('❌ Error enviando al webhook:', webhookError.message);
+      
+      // Registrar error pero continuar (no fallar la operación)
+      await logAuditAction({
+        userEmail: 'system',
+        userId: null,
+        userName: 'Sistema',
+        action: 'PASSWORD_RESET_REQUEST_ERROR',
+        tableName: 'users',
+        recordId: user.id,
+        oldValues: null,
+        newValues: { email, error: webhookError.message },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        sessionInfo: { webhook_error: true }
+      });
+    }
+
+    return res.json({ 
+      success: true, 
+      message: "Si el email existe, recibirás instrucciones de recuperación en breve" 
     });
 
-    return res.json({ success: true, message: "Solicitud enviada. Revisa tu email." });
-  } catch (err) {
-    console.error("Error en password reset:", err);
-    return res.status(500).json({ success: false, message: "Error interno" });
+  } catch (error) {
+    console.error("❌ Error en password reset request:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Error interno del servidor" 
+    });
   }
 });
 
+// Endpoint para validar token de reset (opcional, útil para verificar si el token es válido)
+app.get('/api/password-reset/validate/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const result = await pool.query(`
+      SELECT prt.*, u.email 
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token = $1 AND prt.expires_at > NOW() AND prt.used_at IS NULL
+    `, [token]);
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Token inválido o expirado"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Token válido",
+      email: result.rows[0].email.replace(/(.{2}).*(@.*)/, '$1***$2') // Email parcialmente oculto
+    });
+
+  } catch (error) {
+    console.error("Error validando token:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor"
+    });
+  }
+});
 // Endpoint para validar matrícula única
 app.post('/api/validate-matricula', auth.requireAuth, async (req, res) => {
   try {
