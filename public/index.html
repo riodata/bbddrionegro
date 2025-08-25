@@ -2694,10 +2694,10 @@
             return fieldName;
         }
 
-        // Crear campo selector de entidad ad-hoc
+        // Crear campo selector de entidad con autocompletado - VERSIÓN CORREGIDA
         async function createEntidadSelectorField() {
             try {
-                console.log('🔄 Creando campo selector de entidad...');
+                console.log('🔄 Creando campo selector de entidad con autocompletado...');
                 
                 // Determinar qué tipo de entidades necesitamos según la tabla actual
                 let entidadesData = [];
@@ -2725,7 +2725,7 @@
                             const name = col.column_name.toLowerCase();
                             return (name.includes('matricula') || name.includes('matrícula')) && 
                                    !name.includes('nacional');
-                        })?.column_name || 'matrícula';
+                        })?.column_name || 'Matricula';
                     }
                 } else if (isMutual) {
                     // Cargar mutuales
@@ -2754,29 +2754,41 @@
                     return '';
                 }
                 
-                // Generar opciones del select
-                let optionsHtml = '<option value="">Seleccionar entidad...</option>';
-                entidadesData.forEach(entidad => {
-                    optionsHtml += `<option value="${entidad.matricula}" data-matricula="${entidad.matricula}">${entidad.nombre}</option>`;
-                });
+                // 🔧 GUARDAR DATOS EN VARIABLE GLOBAL EN LUGAR DE SCRIPT TAG
+                window.entidadesAutocomplete = entidadesData;
                 
-                // Crear el HTML del campo
+                // Crear el HTML del campo con autocompletado SIN SCRIPT TAG
                 return `
                     <div class="form-group" style="border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; background-color: #f8f9fa; margin-bottom: 25px;">
-                        <label for="entidad_selector" style="color: #4a90e2; font-weight: bold;">
+                        <label for="entidad_autocomplete" style="color: #4a90e2; font-weight: bold;">
                             🏢 Seleccionar Entidad ${isCooperativa ? '(Cooperativa)' : isMutual ? '(Mutual)' : ''}
                         </label>
-                        <select 
-                            id="entidad_selector" 
-                            name="entidad_selector"
-                            onchange="handleEntidadSelection(this, '${matriculaTargetField}')"
-                            style="border-color: #4a90e2;"
-                        >
-                            ${optionsHtml}
-                        </select>
+                        <div style="position: relative;">
+                            <input 
+                                type="text" 
+                                id="entidad_autocomplete" 
+                                name="entidad_autocomplete"
+                                placeholder="Escribe el nombre de la ${isCooperativa ? 'cooperativa' : 'mutual'}..."
+                                style="border-color: #4a90e2; width: 100%; padding-right: 40px;"
+                                autocomplete="off"
+                                oninput="handleAutocompleteInput(this, '${matriculaTargetField}')"
+                                onblur="handleAutocompleteBlur(this, '${matriculaTargetField}')"
+                                onkeydown="handleAutocompleteKeydown(event, '${matriculaTargetField}')"
+                            />
+                            <div id="clear-autocomplete" 
+                                 style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;"
+                                 onclick="clearAutocomplete('${matriculaTargetField}')">
+                                ✕
+                            </div>
+                            <div id="autocomplete-dropdown" 
+                                 style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #4a90e2; border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none;">
+                            </div>
+                        </div>
                         <small style="color: #6c757d; display: block; margin-top: 5px;">
-                            Selecciona una entidad para autocompletar la matrícula correspondiente
+                            Escribe para buscar y seleccionar una entidad. La matrícula se completará automáticamente.
                         </small>
+                        <input type="hidden" id="selected_entidad_matricula" name="selected_entidad_matricula" />
+                        <input type="hidden" id="selected_entidad_nombre" name="selected_entidad_nombre" />
                     </div>
                 `;
                 
@@ -4263,6 +4275,201 @@
             // Actualizar records globales para otras operaciones
             currentRecords = records;
         }
+
+            // FUNCIONES DE AUTOCOMPLETADO
+        let selectedAutocompleteIndex = -1;
+        let currentAutocompleteMatches = [];
+        
+        function handleAutocompleteInput(input, matriculaTargetField) {
+            const query = input.value.toLowerCase().trim();
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            const clearBtn = document.getElementById('clear-autocomplete');
+            
+            // Mostrar/ocultar botón de limpiar
+            clearBtn.style.display = query ? 'block' : 'none';
+            
+            if (query.length < 2) {
+                dropdown.style.display = 'none';
+                selectedAutocompleteIndex = -1;
+                currentAutocompleteMatches = [];
+                return;
+            }
+            
+            // Filtrar entidades que coincidan
+            const matches = window.entidadesAutocomplete.filter(entidad => 
+                entidad.nombre.toLowerCase().includes(query)
+            );
+            
+            currentAutocompleteMatches = matches;
+            selectedAutocompleteIndex = -1;
+            
+            if (matches.length === 0) {
+                dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">No se encontraron coincidencias</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            // Mostrar resultados
+            dropdown.innerHTML = matches.map((entidad, index) => `
+                <div class="autocomplete-item" 
+                     data-index="${index}"
+                     data-matricula="${entidad.matricula}"
+                     data-nombre="${entidad.nombre}"
+                     onclick="selectAutocompleteItem(${index}, '${matriculaTargetField}')"
+                     style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; ${index === selectedAutocompleteIndex ? 'background-color: #f0f8ff;' : ''}"
+                     onmouseover="this.style.backgroundColor='#f0f8ff'"
+                     onmouseout="this.style.backgroundColor='${index === selectedAutocompleteIndex ? '#f0f8ff' : 'white'}'">
+                    <div style="font-weight: bold; color: #4a90e2;">${highlightMatch(entidad.nombre, query)}</div>
+                    <div style="font-size: 0.9em; color: #6c757d;">Matrícula: ${entidad.matricula}</div>
+                </div>
+            `).join('');
+            
+            dropdown.style.display = 'block';
+        }
+        
+        function highlightMatch(text, query) {
+            const regex = new RegExp(`(${query})`, 'gi');
+            return text.replace(regex, '<mark style="background-color: #ffeb3b; padding: 0;">$1</mark>');
+        }
+        
+        function handleAutocompleteKeydown(event, matriculaTargetField) {
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            
+            if (dropdown.style.display === 'none') return;
+            
+            switch (event.key) {
+                case 'ArrowDown':
+                    event.preventDefault();
+                    selectedAutocompleteIndex = Math.min(selectedAutocompleteIndex + 1, currentAutocompleteMatches.length - 1);
+                    updateAutocompleteSelection();
+                    break;
+                    
+                case 'ArrowUp':
+                    event.preventDefault();
+                    selectedAutocompleteIndex = Math.max(selectedAutocompleteIndex - 1, -1);
+                    updateAutocompleteSelection();
+                    break;
+                    
+                case 'Enter':
+                    event.preventDefault();
+                    if (selectedAutocompleteIndex >= 0) {
+                        selectAutocompleteItem(selectedAutocompleteIndex, matriculaTargetField);
+                    }
+                    break;
+                    
+                case 'Escape':
+                    dropdown.style.display = 'none';
+                    selectedAutocompleteIndex = -1;
+                    break;
+            }
+        }
+        
+        function updateAutocompleteSelection() {
+            const items = document.querySelectorAll('.autocomplete-item');
+            items.forEach((item, index) => {
+                if (index === selectedAutocompleteIndex) {
+                    item.style.backgroundColor = '#f0f8ff';
+                    item.scrollIntoView({ block: 'nearest' });
+                } else {
+                    item.style.backgroundColor = 'white';
+                }
+            });
+        }
+        
+        function selectAutocompleteItem(index, matriculaTargetField) {
+            const selectedEntity = currentAutocompleteMatches[index];
+            const input = document.getElementById('entidad_autocomplete');
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            
+            // Actualizar input con el nombre seleccionado
+            input.value = selectedEntity.nombre;
+            
+            // Ocultar dropdown
+            dropdown.style.display = 'none';
+            
+            // Guardar datos en campos ocultos
+            document.getElementById('selected_entidad_matricula').value = selectedEntity.matricula;
+            document.getElementById('selected_entidad_nombre').value = selectedEntity.nombre;
+            
+            // Autocompletar campo matrícula
+            const matriculaField = document.getElementById(matriculaTargetField);
+            if (matriculaField) {
+                matriculaField.value = selectedEntity.matricula;
+                matriculaField.readOnly = true;
+                matriculaField.style.backgroundColor = '#e9ecef';
+                matriculaField.style.cursor = 'not-allowed';
+                
+                // Limpiar error si había
+                showFieldError(matriculaTargetField, '');
+            }
+            
+            showStatus(`✅ ${selectedEntity.nombre} seleccionada - Matrícula: ${selectedEntity.matricula}`, 'success');
+            
+            console.log('✅ Entidad seleccionada:', selectedEntity);
+        }
+        
+        function handleAutocompleteBlur(input, matriculaTargetField) {
+            // Pequeño delay para permitir clicks en el dropdown
+            setTimeout(() => {
+                const dropdown = document.getElementById('autocomplete-dropdown');
+                dropdown.style.display = 'none';
+                
+                // Verificar si se seleccionó una entidad válida
+                const selectedMatricula = document.getElementById('selected_entidad_matricula').value;
+                if (!selectedMatricula && input.value) {
+                    // Si hay texto pero no se seleccionó nada válido
+                    showStatus('⚠️ Por favor selecciona una entidad de la lista', 'error');
+                    input.style.borderColor = '#e74c3c';
+                } else {
+                    input.style.borderColor = '#4a90e2';
+                }
+            }, 200);
+        }
+        
+        function clearAutocomplete(matriculaTargetField) {
+            const input = document.getElementById('entidad_autocomplete');
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            const clearBtn = document.getElementById('clear-autocomplete');
+            const matriculaField = document.getElementById(matriculaTargetField);
+            
+            // Limpiar input
+            input.value = '';
+            
+            // Limpiar campos ocultos
+            document.getElementById('selected_entidad_matricula').value = '';
+            document.getElementById('selected_entidad_nombre').value = '';
+            
+            // Limpiar matrícula
+            if (matriculaField) {
+                matriculaField.value = '';
+                matriculaField.readOnly = false;
+                matriculaField.style.backgroundColor = '';
+                matriculaField.style.cursor = '';
+            }
+            
+            // Ocultar elementos
+            dropdown.style.display = 'none';
+            clearBtn.style.display = 'none';
+            
+            // Limpiar estado
+            selectedAutocompleteIndex = -1;
+            currentAutocompleteMatches = [];
+            
+            clearStatus();
+            console.log('🧹 Autocompletado limpiado');
+        }
+        
+        // Cerrar dropdown al hacer click fuera
+        document.addEventListener('click', function(event) {
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            const input = document.getElementById('entidad_autocomplete');
+            
+            if (dropdown && input && 
+                !dropdown.contains(event.target) && 
+                !input.contains(event.target)) {
+                dropdown.style.display = 'none';
+            }
+        });
         
         // KEYBOARD SHORTCUTS
         document.addEventListener('keydown', function(e) {
@@ -4381,6 +4588,8 @@
         // FINAL INITIALIZATION
         console.log('🚀 Sistema de gestión cargado correctamente');
         console.log('📋 Funciones disponibles: login, registro, CRUD, búsqueda');
+
+        
     </script>
 </body>
 </html>
