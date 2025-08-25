@@ -321,7 +321,6 @@ exports.requireAdmin = function(req, res, next) {
   next();
 };
 
-// En auth.js - endpoint para confirmar reset de contraseña
 exports.passwordResetConfirm = async (req, res) => {
   const { token, password, confirmPassword } = req.body;
 
@@ -369,10 +368,10 @@ exports.passwordResetConfirm = async (req, res) => {
     const bcrypt = require('bcrypt');
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Actualizar contraseña del usuario
+    // Actualizar hash de contraseña del usuario - CORREGIDO
     await pool.query(`
       UPDATE users 
-      SET password = $1 
+      SET password_hash = $1 
       WHERE id = $2
     `, [hashedPassword, userId]);
 
@@ -383,24 +382,24 @@ exports.passwordResetConfirm = async (req, res) => {
       WHERE token = $1
     `, [token]);
 
-    // Registrar en auditoría si la función existe
+    console.log(`✅ Contraseña restablecida para usuario: ${userEmail}`);
+
+    // Registrar en auditoría
     if (typeof logAuditAction === 'function') {
       await logAuditAction({
-        userEmail: 'system',
-        userId: null,
-        userName: 'Sistema',
-        action: 'PASSWORD_RESET_CONFIRMED',
+        userEmail: userEmail,
+        userId: userId,
+        userName: userEmail,
+        action: 'PASSWORD_RESET_COMPLETED',
         tableName: 'users',
         recordId: userId,
         oldValues: null,
-        newValues: { email: userEmail, password_changed: true },
+        newValues: { password_reset: true },
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        sessionInfo: { token_used: token }
+        sessionInfo: { reset_token_used: token.substring(0, 8) + '...' }
       });
     }
-
-    console.log(`✅ Contraseña restablecida para usuario: ${userEmail}`);
 
     res.json({
       success: true,
