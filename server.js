@@ -1230,6 +1230,7 @@ app.get('/api/password-reset/validate/:token', async (req, res) => {
     });
   }
 });
+
 // Endpoint para validar matrícula única
 app.post('/api/validate-matricula', auth.requireAuth, async (req, res) => {
   try {
