@@ -1318,16 +1318,99 @@
             showScreen('login-screen');
         }
 
-        // Mostrar recuperación de contraseña
+        // ========== FUNCIONES DE RECUPERACIÓN DE CONTRASEÑA ==========
+        
+        // Configuración dinámica del webhook (usa la API del servidor)
+        const getApiBase = () => window.location.origin;
+        
+        // Mostrar modal de recuperación de contraseña
         function showPasswordReset() {
-            showScreen('password-reset-modal');
+            console.log('🔄 Mostrando modal de recuperación de contraseña');
+            hideAllScreens();
+            document.getElementById('password-reset-modal').classList.add('active');
+            document.getElementById('resetEmail').focus();
+            
+            // Limpiar formulario y alertas
+            document.getElementById('reset-form').reset();
+            document.getElementById('reset-alert').innerHTML = '';
+        }
+        
+        // Cerrar modal de recuperación de contraseña
+        function closePasswordReset() {
+            console.log('❌ Cerrando modal de recuperación de contraseña');
+            hideAllScreens();
+            document.getElementById('login-screen').classList.add('active');
+            
+            // Limpiar formulario y alertas
+            document.getElementById('reset-form').reset();
+            document.getElementById('reset-alert').innerHTML = '';
+        }
+        
+        // Enviar solicitud de recuperación de contraseña
+        async function sendPasswordResetRequest(email) {
+            try {
+                console.log(`📧 Enviando solicitud de reset para: ${email}`);
+                
+                const payload = {
+                    email: email,
+                    timestamp: new Date().toISOString(),
+                    source: 'sistema-gestion-rionegro',
+                    action: 'password_reset_request',
+                    user_agent: navigator.userAgent,
+                    ip: 'client-side' // El servidor capturará la IP real
+                };
+        
+                console.log('📤 Enviando a servidor:', payload);
+        
+                const response = await fetch(`${getApiBase()}/api/password-reset/request`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+        
+                console.log(`📡 Respuesta del servidor: ${response.status} ${response.statusText}`);
+        
+                const result = await response.json();
+        
+                if (response.ok && result.success) {
+                    console.log('✅ Solicitud procesada exitosamente');
+                    return { success: true, message: result.message };
+                } else {
+                    console.error('❌ Error del servidor:', result);
+                    return { 
+                        success: false, 
+                        error: result.message || 'Error del servidor' 
+                    };
+                }
+            } catch (error) {
+                console.error('💥 Error de conexión:', error);
+                return { 
+                    success: false, 
+                    error: 'Error de conexión. Verifica tu conexión a internet.' 
+                };
+            }
         }
 
-        // Cerrar recuperación de contraseña
-        function closePasswordReset() {
-            showScreen('login-screen');
-            clearAlert('reset-alert');
-            document.getElementById('resetEmail').value = '';
+        // Mostrar mensaje en el modal de reset
+        function showResetAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('reset-alert');
+            const alertClass = type === 'success' ? 'alert-success' : 
+                             type === 'error' ? 'alert-error' : 'alert-info';
+            
+            alertContainer.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${message}
+                </div>
+            `;
+        }
+        
+        // Validar email
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
         }
 
         // Manejar solicitud de recuperación de contraseña
@@ -1364,6 +1447,74 @@
                 showAlert('reset-alert', 'Error al enviar la solicitud. Intenta más tarde.');
             }
         }
+
+        // ========== EVENT LISTENERS PARA RECUPERACIÓN DE CONTRASEÑA ==========
+
+        // Event listener para el formulario de reset
+        document.addEventListener('DOMContentLoaded', function() {
+            const resetForm = document.getElementById('reset-form');
+            
+            if (resetForm) {
+                resetForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    const email = document.getElementById('resetEmail').value.trim();
+                    const submitBtn = e.target.querySelector('button[type="submit"]');
+                    
+                    // Validar email
+                    if (!email) {
+                        showResetAlert('Por favor ingresa tu email', 'error');
+                        return;
+                    }
+                    
+                    if (!isValidEmail(email)) {
+                        showResetAlert('Por favor ingresa un email válido', 'error');
+                        return;
+                    }
+                    
+                    // Deshabilitar botón y mostrar loading
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="loading"></span>Enviando...';
+                    
+                    try {
+                        console.log(`🚀 Iniciando proceso de reset para: ${email}`);
+                        
+                        // Enviar solicitud
+                        const result = await sendPasswordResetRequest(email);
+                        
+                        if (result.success) {
+                            showResetAlert(
+                                `✅ ${result.message}<br><br>
+                                 <strong>Revisa tu bandeja de entrada y carpeta de spam.</strong>`, 
+                                'success'
+                            );
+                            
+                            // Limpiar formulario después del éxito
+                            setTimeout(() => {
+                                document.getElementById('resetEmail').value = '';
+                            }, 2000);
+                            
+                        } else {
+                            showResetAlert(
+                                `❌ ${result.error || 'Error al procesar la solicitud. Intenta nuevamente.'}`, 
+                                'error'
+                            );
+                        }
+                        
+                    } catch (error) {
+                        console.error('💥 Error inesperado:', error);
+                        showResetAlert(
+                            '❌ Error inesperado. Por favor intenta nuevamente.', 
+                            'error'
+                        );
+                    } finally {
+                        // Restaurar botón
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = 'Enviar';
+                    }
+                });
+            }
+        });
 
         // Manejar cambio de contraseña
         async function handleNewPassword(e) {
