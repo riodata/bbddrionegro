@@ -321,78 +321,97 @@ exports.requireAdmin = function(req, res, next) {
   next();
 };
 
-exports.passwordResetConfirm = async function(req, res) {
+// En auth.js - endpoint para confirmar reset de contraseña
+exports.passwordResetConfirm = async (req, res) => {
   const { token, password, confirmPassword } = req.body;
-  
+
   if (!token || !password || !confirmPassword) {
     return res.status(400).json({ 
       success: false, 
-      message: "Token, nueva contraseña y confirmación requeridos." 
+      message: "Todos los campos son requeridos" 
     });
   }
 
   if (password !== confirmPassword) {
     return res.status(400).json({ 
       success: false, 
-      message: "Las contraseñas no coinciden." 
+      message: "Las contraseñas no coinciden" 
     });
   }
 
   if (password.length < 8) {
     return res.status(400).json({ 
       success: false, 
-      message: "La contraseña debe tener al menos 8 caracteres." 
+      message: "La contraseña debe tener al menos 8 caracteres" 
     });
   }
 
   try {
-    // Buscar el token
-    const tokenRes = await pool.query(
-      'SELECT * FROM password_reset_tokens WHERE token = $1 AND usado = false',
-      [token]
-    );
+    // Verificar token válido y no usado
+    const tokenResult = await pool.query(`
+      SELECT prt.user_id, u.email 
+      FROM password_reset_tokens prt
+      JOIN users u ON prt.user_id = u.id
+      WHERE prt.token = $1 AND prt.expires_at > NOW() AND prt.used_at IS NULL
+    `, [token]);
 
-    if (tokenRes.rows.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Token inválido o ya utilizado." 
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Token inválido, expirado o ya usado"
       });
     }
 
-    const tokenRecord = tokenRes.rows[0];
+    const userId = tokenResult.rows[0].user_id;
+    const userEmail = tokenResult.rows[0].email;
 
-    // Verificar expiración
-    if (new Date(tokenRecord.expires_at) < new Date()) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Token expirado." 
-      });
-    }
+    // Hashear nueva contraseña
+    const bcrypt = require('bcrypt');
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     // Actualizar contraseña del usuario
-    const hash = await bcrypt.hash(password, 12);
-    
-    await pool.query(
-      'UPDATE users SET password_hash = $1 WHERE id = $2',
-      [hash, tokenRecord.user_id]
-    );
+    await pool.query(`
+      UPDATE users 
+      SET password = $1 
+      WHERE id = $2
+    `, [hashedPassword, userId]);
 
     // Marcar token como usado
-    await pool.query(
-      'UPDATE password_reset_tokens SET usado = true WHERE id = $1',
-      [tokenRecord.id]
-    );
+    await pool.query(`
+      UPDATE password_reset_tokens 
+      SET used_at = NOW() 
+      WHERE token = $1
+    `, [token]);
 
-    res.json({ 
-      success: true, 
-      message: "Contraseña actualizada correctamente." 
+    // Registrar en auditoría si la función existe
+    if (typeof logAuditAction === 'function') {
+      await logAuditAction({
+        userEmail: 'system',
+        userId: null,
+        userName: 'Sistema',
+        action: 'PASSWORD_RESET_CONFIRMED',
+        tableName: 'users',
+        recordId: userId,
+        oldValues: null,
+        newValues: { email: userEmail, password_changed: true },
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        sessionInfo: { token_used: token }
+      });
+    }
+
+    console.log(`✅ Contraseña restablecida para usuario: ${userEmail}`);
+
+    res.json({
+      success: true,
+      message: "Contraseña actualizada exitosamente"
     });
 
-  } catch (err) {
-    console.error('Error en password reset confirm:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: "Error interno del servidor." 
+  } catch (error) {
+    console.error("Error confirmando reset de contraseña:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor"
     });
   }
 };
