@@ -1036,7 +1036,7 @@ app.get('/estadisticas-cooperativas', (req, res) => {
         <p>Análisis de datos y métricas del sector cooperativo</p>
       </div>
       <a href="/" class="back-btn">← Volver al inicio</a>
-      <iframe src="https://lookerstudio.google.com/embed/reporting/48b80800-b981-4b3f-a254-4f3e55015c91/page/62DPE"></iframe>
+      <iframe src="https://lookerstudio.google.com/embed/reporting/504cccff-eab4-4a50-a957-ccf7a3c6eb4d/page/p_dq1i8cr4md"></iframe>
     </body>
     </html>
   `);
@@ -1070,7 +1070,7 @@ app.get('/estadisticas-mutuales', (req, res) => {
         <p>Análisis de datos y métricas del sector mutual</p>
       </div>
       <a href="/" class="back-btn">← Volver al inicio</a>
-      <iframe src="https://lookerstudio.google.com/embed/reporting/48b80800-b981-4b3f-a254-4f3e55015c91/page/62DPE"></iframe>
+      <iframe src="https://lookerstudio.google.com/embed/reporting/5162eea8-8691-4e71-8a8d-5bbaa7e276a2/page/62DPE"></iframe>
     </body>
     </html>
   `);
