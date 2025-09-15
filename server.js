@@ -563,7 +563,8 @@ async function getAllEnumOptions() {
       'autoridades',
       'sino',
       'estado',
-      'localidad'
+      'localidad',
+      'organo_social'
     ];
 
     const enumPromises = enumTypes.map(async (enumType) => {
