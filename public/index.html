@@ -2631,7 +2631,6 @@
                 
                 // Crear label con información adicional
                 let labelText = column.column_name;
-                if (isPrimaryKey) labelText += ' (Clave Primaria)';
                 if (required) labelText += ' *';
                 
                 fieldDiv.innerHTML = `
@@ -3819,7 +3818,6 @@
                     const isPrimaryKey = fieldName === primaryKey;
                     
                     let labelText = fieldName;
-                    if (isPrimaryKey) labelText += ' (Clave Primaria)';
                     if (isRequired) labelText += ' *';
                     
                     const fieldHtml = `
