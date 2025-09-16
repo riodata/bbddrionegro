@@ -1024,6 +1024,9 @@
               'estado':'estado',
               'renovacion autoridades': 'sino',
               'renovacion sindicatura': 'sino',
+              'Notificación de rendimiento': 'sino',
+              'Rendido': 'sino',
+              'Aprobado': 'sino',
               'órgano social': 'organo_social',
               'organo social': 'organo_social'    
             };
@@ -1967,7 +1970,7 @@
         }
 
         // Lista de campos que no deben mostrarse en formularios
-        const hiddenFormFields = ['id', 'created_at', 'updated_at'];
+        const hiddenFormFields = ['id', 'created_at', 'updated_at', 'orden'];
 
         // Cargar datos de foreign keys para la tabla actual
         async function loadForeignKeyData() {
@@ -3808,6 +3811,9 @@
                 currentTableSchema.columns.forEach(column => {
                     const { column_name, data_type, is_nullable, is_primary_key } = column;
                     if (hiddenFormFields.includes(column_name)) {
+                        return;
+                    }
+                    if (column_name.toLowerCase() === 'orden') {
                         return;
                     }
                     const fieldName = column.column_name;
