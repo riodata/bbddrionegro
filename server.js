@@ -564,7 +564,11 @@ async function getAllEnumOptions() {
       'sino',
       'estado',
       'localidad',
-      'organo_social'
+      'organo_social',
+      'libros_coope',
+      'libros_mutuales',
+      'tipo_libro',
+      'acciones_coope'
     ];
 
     const enumPromises = enumTypes.map(async (enumType) => {
