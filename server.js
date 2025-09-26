@@ -5,6 +5,7 @@ const axios = require('axios');
 const auth = require('./auth');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const XLSX = require('xlsx');
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -1971,6 +1972,226 @@ app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) =
     res.status(errorInfo.status).json({
       success: false,
       message: errorInfo.message
+    });
+  }
+});
+
+app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { searchText, searchField } = req.query;
+    
+    await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    console.log('📊 Generando Excel para:', { tableName, searchText, searchField });
+
+    // --- LÓGICA DE JOIN PARA FK (igual que en search) ---
+    let joinClause = '';
+    let entidadNombreField = '';
+    let entidadLocalidadField = '';
+    let selectFields = `"${tableName}".*`;
+
+    // Detectar FK a entidades
+    const hasMatricula = tableSchema.columns.some(col => col.column_name === 'Matricula');
+    const hasMatriculaNacional = tableSchema.columns.some(col => col.column_name === 'Matricula Nacional');
+    
+    if (hasMatricula) {
+      joinClause = `LEFT JOIN "entidades_cooperativas" e ON "${tableName}"."Matricula" = e."Matricula"`;
+      entidadNombreField = `e."Nombre de la Entidad" AS "Nombre de la Entidad"`;
+      entidadLocalidadField = `e."Localidad" AS "Localidad de la Entidad"`;
+      selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+    } else if (hasMatriculaNacional) {
+      joinClause = `LEFT JOIN "entidades_mutuales" e ON "${tableName}"."Matricula Nacional" = e."Matricula Nacional"`;
+      entidadNombreField = `e."Entidad" AS "Nombre de la Entidad"`;
+      entidadLocalidadField = `e."Localidad" AS "Localidad de la Entidad"`;
+      selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+    }
+
+    // Construir query igual que en search
+    let query;
+    let queryParams = [];
+
+    if (joinClause) {
+      query = `SELECT ${selectFields} FROM "${tableName}" ${joinClause}`;
+    } else {
+      query = `SELECT * FROM "${tableName}"`;
+    }
+
+    if (searchText && searchField) {
+      const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
+      
+      if (!fieldInfo) {
+        return res.status(400).json({
+          success: false,
+          message: `El campo '${searchField}' no existe en la tabla`
+        });
+      }
+
+      const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+      query += ` WHERE ${searchCondition.condition}`;
+      queryParams.push(searchCondition.value);
+    }
+
+    query += ` ORDER BY "${primaryKey}" ASC`;
+    
+    console.log(`📋 Query Excel: ${query}`);
+
+    const result = await pool.query(query, queryParams);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No hay datos para exportar'
+      });
+    }
+
+    // Preparar datos para Excel
+    const excelData = result.rows.map((row, index) => {
+      const cleanRow = {};
+      
+      // Excluir campos internos y ordenar campos importantes primero
+      const excludeFields = ['_primaryKey', '_rowIndex'];
+      const priorityFields = ['Nombre de la Entidad', 'Localidad de la Entidad'];
+      
+      // Primero agregar campos prioritarios si existen
+      priorityFields.forEach(field => {
+        if (row[field] !== undefined && row[field] !== null) {
+          cleanRow[field] = row[field];
+        }
+      });
+      
+      // Luego agregar el resto de campos
+      Object.keys(row).forEach(key => {
+        if (!excludeFields.includes(key) && !priorityFields.includes(key)) {
+          let value = row[key];
+          
+          // Formatear fechas para Excel
+          if (value instanceof Date) {
+            value = value.toISOString().split('T')[0];
+          } else if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}T/)) {
+            value = new Date(value).toISOString().split('T')[0];
+          }
+          
+          cleanRow[key] = value;
+        }
+      });
+      
+      return cleanRow;
+    });
+
+    // Crear workbook y worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Configurar anchos de columna automáticos
+    const colWidths = [];
+    if (excelData.length > 0) {
+      Object.keys(excelData[0]).forEach(key => {
+        const maxLength = Math.max(
+          key.length,
+          ...excelData.map(row => String(row[key] || '').length)
+        );
+        colWidths.push({ wch: Math.min(maxLength + 2, 50) });
+      });
+    }
+    worksheet['!cols'] = colWidths;
+
+    // Agregar worksheet al workbook
+    const sheetName = tableName.length > 31 ? tableName.substring(0, 31) : tableName;
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    // Generar buffer del archivo Excel
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Generar nombre de archivo
+    const timestamp = new Date().toISOString().split('T')[0];
+    let fileName = `${tableName}_${timestamp}`;
+    
+    if (searchText && searchField) {
+      fileName += `_busqueda_${searchField}_${searchText}`.replace(/[^a-zA-Z0-9_-]/g, '');
+    }
+    fileName += '.xlsx';
+
+    // Registrar auditoría
+    const requestInfo = getRequestInfo(req);
+    await logAuditAction({
+      userEmail: req.user.email,
+      userId: req.user.id,
+      userName: req.user.nombre_apellido,
+      action: 'EXPORT_EXCEL',
+      tableName: tableName,
+      recordId: null,
+      oldValues: null,
+      newValues: { 
+        recordsExported: result.rows.length,
+        searchCriteria: { searchText, searchField },
+        fileName: fileName
+      },
+      ipAddress: requestInfo.ipAddress,
+      userAgent: requestInfo.userAgent,
+      sessionInfo: requestInfo.sessionInfo
+    });
+
+    console.log(`✅ Excel generado: ${fileName} (${result.rows.length} registros)`);
+
+    // Enviar archivo
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', excelBuffer.length);
+    
+    res.send(excelBuffer);
+
+  } catch (error) {
+    console.error('❌ Error generando Excel:', error);
+    const errorInfo = handlePostgresError(error, 'exportación a Excel');
+    res.status(errorInfo.status).json({
+      success: false,
+      message: errorInfo.message
+    });
+  }
+});
+
+// Endpoint para obtener información de exportación disponible
+app.get('/api/tables/:tableName/export-info', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { searchText, searchField } = req.query;
+    
+    await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    
+    // Contar registros que se exportarían
+    let countQuery = `SELECT COUNT(*) as total FROM "${tableName}"`;
+    let queryParams = [];
+
+    if (searchText && searchField) {
+      const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
+      if (fieldInfo) {
+        const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+        countQuery += ` WHERE ${searchCondition.condition}`;
+        queryParams.push(searchCondition.value);
+      }
+    }
+
+    const countResult = await pool.query(countQuery, queryParams);
+    const totalRecords = parseInt(countResult.rows[0].total);
+
+    res.json({
+      success: true,
+      tableName: tableName,
+      totalRecords: totalRecords,
+      searchCriteria: { searchText, searchField },
+      exportFormats: ['excel'],
+      estimatedFileSize: `${Math.ceil(totalRecords * 0.5)} KB aprox.`
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo info de exportación:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo información de exportación'
     });
   }
 });
