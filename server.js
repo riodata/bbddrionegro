@@ -1,11 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const csv = require('fast-csv');
+const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const auth = require('./auth');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const XLSX = require('xlsx');
 const { Pool } = require('pg');
 require('dotenv').config();
 
@@ -1976,7 +1977,7 @@ app.delete('/api/tables/:tableName/delete', auth.requireAuth, async (req, res) =
   }
 });
 
-app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res) => {
+app.get('/api/tables/:tableName/export-csv', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
@@ -1985,15 +1986,14 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
     const tableSchema = await getTableSchema(tableName);
     const primaryKey = tableSchema.primaryKey;
     
-    console.log('📊 Generando Excel para:', { tableName, searchText, searchField });
+    console.log('📊 Generando CSV para:', { tableName, searchText, searchField });
 
-    // --- LÓGICA DE JOIN PARA FK (igual que en search) ---
+    // --- LÓGICA DE JOIN PARA FK (copiada de tu código existente) ---
     let joinClause = '';
     let entidadNombreField = '';
     let entidadLocalidadField = '';
     let selectFields = `"${tableName}".*`;
 
-    // Detectar FK a entidades
     const hasMatricula = tableSchema.columns.some(col => col.column_name === 'Matricula');
     const hasMatriculaNacional = tableSchema.columns.some(col => col.column_name === 'Matricula Nacional');
     
@@ -2009,7 +2009,7 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
       selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
     }
 
-    // Construir query igual que en search
+    // Construir query
     let query;
     let queryParams = [];
 
@@ -2036,7 +2036,7 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
 
     query += ` ORDER BY "${primaryKey}" ASC`;
     
-    console.log(`📋 Query Excel: ${query}`);
+    console.log(`📋 Query CSV: ${query}`);
 
     const result = await pool.query(query, queryParams);
 
@@ -2047,8 +2047,8 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
       });
     }
 
-    // Preparar datos para Excel
-    const excelData = result.rows.map((row, index) => {
+    // Preparar datos para CSV
+    const csvData = result.rows.map((row) => {
       const cleanRow = {};
       
       // Excluir campos internos y ordenar campos importantes primero
@@ -2067,43 +2067,20 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
         if (!excludeFields.includes(key) && !priorityFields.includes(key)) {
           let value = row[key];
           
-          // Formatear fechas para Excel
+          // Formatear fechas para CSV
           if (value instanceof Date) {
             value = value.toISOString().split('T')[0];
           } else if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}T/)) {
             value = new Date(value).toISOString().split('T')[0];
           }
           
-          cleanRow[key] = value;
+          // Limpiar valores nulos
+          cleanRow[key] = value === null ? '' : value;
         }
       });
       
       return cleanRow;
     });
-
-    // Crear workbook y worksheet
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-
-    // Configurar anchos de columna automáticos
-    const colWidths = [];
-    if (excelData.length > 0) {
-      Object.keys(excelData[0]).forEach(key => {
-        const maxLength = Math.max(
-          key.length,
-          ...excelData.map(row => String(row[key] || '').length)
-        );
-        colWidths.push({ wch: Math.min(maxLength + 2, 50) });
-      });
-    }
-    worksheet['!cols'] = colWidths;
-
-    // Agregar worksheet al workbook
-    const sheetName = tableName.length > 31 ? tableName.substring(0, 31) : tableName;
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-
-    // Generar buffer del archivo Excel
-    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
     // Generar nombre de archivo
     const timestamp = new Date().toISOString().split('T')[0];
@@ -2112,7 +2089,28 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
     if (searchText && searchField) {
       fileName += `_busqueda_${searchField}_${searchText}`.replace(/[^a-zA-Z0-9_-]/g, '');
     }
-    fileName += '.xlsx';
+    fileName += '.csv';
+
+    // Crear directorio temporal si no existe
+    const tempDir = path.join(__dirname, 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const filePath = path.join(tempDir, fileName);
+
+    // Generar CSV usando fast-csv
+    await new Promise((resolve, reject) => {
+      const writeStream = fs.createWriteStream(filePath);
+      
+      csv.writeToStream(writeStream, csvData, {
+        headers: true,
+        writeBOM: true, // Para compatibilidad con Excel en español
+        encoding: 'utf8'
+      })
+      .on('error', reject)
+      .on('finish', resolve);
+    });
 
     // Registrar auditoría
     const requestInfo = getRequestInfo(req);
@@ -2120,7 +2118,7 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
       userEmail: req.user.email,
       userId: req.user.id,
       userName: req.user.nombre_apellido,
-      action: 'EXPORT_EXCEL',
+      action: 'EXPORT_CSV',
       tableName: tableName,
       recordId: null,
       oldValues: null,
@@ -2134,18 +2132,36 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
       sessionInfo: requestInfo.sessionInfo
     });
 
-    console.log(`✅ Excel generado: ${fileName} (${result.rows.length} registros)`);
+    console.log(`✅ CSV generado: ${fileName} (${result.rows.length} registros)`);
 
     // Enviar archivo
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', excelBuffer.length);
-    
-    res.send(excelBuffer);
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error('Error enviando archivo CSV:', err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: 'Error enviando archivo CSV'
+          });
+        }
+      }
+      
+      // Limpiar archivo temporal después de enviarlo
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`🗑️ Archivo temporal eliminado: ${fileName}`);
+          }
+        } catch (cleanupError) {
+          console.warn('Error eliminando archivo temporal:', cleanupError.message);
+        }
+      }, 5000); // Esperar 5 segundos antes de eliminar
+    });
 
   } catch (error) {
-    console.error('❌ Error generando Excel:', error);
-    const errorInfo = handlePostgresError(error, 'exportación a Excel');
+    console.error('❌ Error generando CSV:', error);
+    const errorInfo = handlePostgresError(error, 'exportación a CSV');
     res.status(errorInfo.status).json({
       success: false,
       message: errorInfo.message
@@ -2153,48 +2169,113 @@ app.get('/api/tables/:tableName/export-excel', auth.requireAuth, async (req, res
   }
 });
 
-// Endpoint para obtener información de exportación disponible
-app.get('/api/tables/:tableName/export-info', auth.requireAuth, async (req, res) => {
+// 3. ENDPOINT ADICIONAL PARA MÚLTIPLES FORMATOS
+app.get('/api/tables/:tableName/export', auth.requireAuth, async (req, res) => {
+  try {
+    const { format = 'csv' } = req.query;
+    
+    switch (format.toLowerCase()) {
+      case 'csv':
+        // Redirigir al endpoint de CSV
+        return req.app.handle({
+          ...req,
+          url: req.originalUrl.replace('/export', '/export-csv')
+        }, res);
+        
+      case 'json':
+        // Exportar como JSON
+        return await exportAsJSON(req, res);
+        
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Formato no soportado. Use: csv, json'
+        });
+    }
+  } catch (error) {
+    console.error('Error en exportación:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en la exportación'
+    });
+  }
+});
+
+// 4. FUNCIÓN AUXILIAR PARA EXPORTAR JSON
+async function exportAsJSON(req, res) {
   try {
     const { tableName } = req.params;
     const { searchText, searchField } = req.query;
     
     await validateTableAccess(tableName);
     const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
     
-    // Contar registros que se exportarían
-    let countQuery = `SELECT COUNT(*) as total FROM "${tableName}"`;
+    // Usar la misma lógica de query que CSV
+    let query = `SELECT * FROM "${tableName}"`;
     let queryParams = [];
 
     if (searchText && searchField) {
       const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
       if (fieldInfo) {
         const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
-        countQuery += ` WHERE ${searchCondition.condition}`;
+        query += ` WHERE ${searchCondition.condition}`;
         queryParams.push(searchCondition.value);
       }
     }
 
-    const countResult = await pool.query(countQuery, queryParams);
-    const totalRecords = parseInt(countResult.rows[0].total);
+    query += ` ORDER BY "${primaryKey}" ASC`;
+    const result = await pool.query(query, queryParams);
 
-    res.json({
-      success: true,
-      tableName: tableName,
-      totalRecords: totalRecords,
-      searchCriteria: { searchText, searchField },
-      exportFormats: ['excel'],
-      estimatedFileSize: `${Math.ceil(totalRecords * 0.5)} KB aprox.`
-    });
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No hay datos para exportar'
+      });
+    }
+
+    // Generar nombre de archivo
+    const timestamp = new Date().toISOString().split('T')[0];
+    let fileName = `${tableName}_${timestamp}`;
+    
+    if (searchText && searchField) {
+      fileName += `_busqueda_${searchField}_${searchText}`.replace(/[^a-zA-Z0-9_-]/g, '');
+    }
+    fileName += '.json';
+
+    // Preparar respuesta JSON
+    const jsonData = {
+      metadata: {
+        tableName: tableName,
+        exportDate: new Date().toISOString(),
+        totalRecords: result.rows.length,
+        searchCriteria: { searchText, searchField }
+      },
+      data: result.rows.map(row => {
+        const cleanRow = {};
+        Object.keys(row).forEach(key => {
+          if (!['_primaryKey', '_rowIndex'].includes(key)) {
+            cleanRow[key] = row[key];
+          }
+        });
+        return cleanRow;
+      })
+    };
+
+    // Configurar headers para descarga
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    
+    res.json(jsonData);
 
   } catch (error) {
-    console.error('Error obteniendo info de exportación:', error);
+    console.error('Error exportando JSON:', error);
     res.status(500).json({
       success: false,
-      message: 'Error obteniendo información de exportación'
+      message: 'Error exportando JSON'
     });
   }
-});
+}
 
 // Endpoint para consultar logs de auditoría (solo admin)
 app.get('/api/admin/audit-logs', auth.requireAuth, auth.requireAdmin, async (req, res) => {
