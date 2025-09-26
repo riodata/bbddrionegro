@@ -1632,8 +1632,35 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
     
     logOperation('READ REQUEST', { tableName, primaryKey });
 
-    // USAR COMILLAS DOBLES PARA PRESERVAR CASE SENSITIVITY
-    const query = `SELECT * FROM "${tableName}" ORDER BY "${primaryKey}" ASC`;
+    // --- INICIO LÓGICA DE JOIN PARA FK ---
+    let joinClause = '';
+    let entidadNombreField = '';
+    let entidadLocalidadField = '';
+    let selectFields = `"${tableName}".*`;
+
+    // Detectar FK a entidades
+    const hasMatricula = tableSchema.columns.some(col => col.column_name === 'Matricula');
+    const hasMatriculaNacional = tableSchema.columns.some(col => col.column_name === 'Matricula Nacional');
+    if (hasMatricula) {
+      joinClause = `JOIN "entidades_cooperativas" e ON "${tableName}"."Matricula" = e."Matricula"`;
+      entidadNombreField = `e."Nombre de la Entidad" AS entidad_nombre`;
+      entidadLocalidadField = `e."Localidad" AS entidad_localidad`;
+      selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+    } else if (hasMatriculaNacional) {
+      joinClause = `JOIN "entidades_mutuales" e ON "${tableName}"."Matricula Nacional" = e."Matricula Nacional"`;
+      entidadNombreField = `e."Entidad" AS entidad_nombre`;
+      entidadLocalidadField = `e."Localidad" AS entidad_localidad`;
+      selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+    }
+    // --- FIN LÓGICA DE JOIN PARA FK ---
+
+    // Construir la query dinámica
+    let query;
+    if (joinClause) {
+      query = `SELECT ${selectFields} FROM "${tableName}" ${joinClause} ORDER BY "${primaryKey}" ASC`;
+    } else {
+      query = `SELECT * FROM "${tableName}" ORDER BY "${primaryKey}" ASC`;
+    }
     console.log(`📋 Query SQL: ${query}`);
     
     const result = await pool.query(query);
@@ -1652,7 +1679,7 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
       data: mappedData,
       total: mappedData.length,
       primaryKey: primaryKey,
-      tableName: tableName  // ESTA LÍNEA SOLUCIONA EL PROBLEMA DEL UNDEFINED
+      tableName: tableName
     });
   } catch (error) {
     console.error('❌ Error inesperado en READ:', error);
@@ -1663,6 +1690,7 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
     });
   }
 });
+
 // SEARCH - Búsqueda simple usando la función auxiliar mejorada
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
     try {
@@ -1675,8 +1703,37 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
         
         logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
 
-        let query = `SELECT * FROM "${tableName}"`;
+        // --- INICIO LÓGICA DE JOIN PARA FK ---
+        let joinClause = '';
+        let entidadNombreField = '';
+        let entidadLocalidadField = '';
+        let selectFields = `"${tableName}".*`;
+
+        // Detectar FK a entidades
+        const hasMatricula = tableSchema.columns.some(col => col.column_name === 'Matricula');
+        const hasMatriculaNacional = tableSchema.columns.some(col => col.column_name === 'Matricula Nacional');
+        if (hasMatricula) {
+            joinClause = `JOIN "entidades_cooperativas" e ON "${tableName}"."Matricula" = e."Matricula"`;
+            entidadNombreField = `e."Nombre de la Entidad" AS entidad_nombre`;
+            entidadLocalidadField = `e."Localidad" AS entidad_localidad`;
+            selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+        } else if (hasMatriculaNacional) {
+            joinClause = `JOIN "entidades_mutuales" e ON "${tableName}"."Matricula Nacional" = e."Matricula Nacional"`;
+            entidadNombreField = `e."Entidad" AS entidad_nombre`;
+            entidadLocalidadField = `e."Localidad" AS entidad_localidad`;
+            selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+        }
+        // --- FIN LÓGICA DE JOIN PARA FK ---
+
+        // Construir la query dinámica
+        let query;
         let queryParams = [];
+
+        if (joinClause) {
+            query = `SELECT ${selectFields} FROM "${tableName}" ${joinClause}`;
+        } else {
+            query = `SELECT * FROM "${tableName}"`;
+        }
 
         if (searchText && searchField) {
             const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
