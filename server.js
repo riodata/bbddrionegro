@@ -2112,6 +2112,49 @@ app.get('/api/tables/:tableName/export-csv', auth.requireAuth, async (req, res) 
       .on('finish', resolve);
     });
 
+    // Endpoint para obtener información de exportación disponible
+app.get('/api/tables/:tableName/export-info', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { searchText, searchField } = req.query;
+    
+    await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    
+    // Contar registros que se exportarían
+    let countQuery = `SELECT COUNT(*) as total FROM "${tableName}"`;
+    let queryParams = [];
+
+    if (searchText && searchField) {
+      const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
+      if (fieldInfo) {
+        const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+        countQuery += ` WHERE ${searchCondition.condition}`;
+        queryParams.push(searchCondition.value);
+      }
+    }
+
+    const countResult = await pool.query(countQuery, queryParams);
+    const totalRecords = parseInt(countResult.rows[0].total);
+
+    res.json({
+      success: true,
+      tableName: tableName,
+      totalRecords: totalRecords,
+      searchCriteria: { searchText, searchField },
+      exportFormats: ['csv'],
+      estimatedFileSize: `${Math.ceil(totalRecords * 0.5)} KB aprox.`
+    });
+
+  } catch (error) {
+    console.error('Error obteniendo info de exportación:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo información de exportación'
+    });
+  }
+});
+
     // Registrar auditoría
     const requestInfo = getRequestInfo(req);
     await logAuditAction({
