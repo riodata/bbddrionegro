@@ -813,8 +813,7 @@
                             <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
                             <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
                             <button onclick="refreshFields()" class="btn" title="Actualizar campos">🔄 Campos</button>
-                            <button onclick="downloadExcel()" class="btn" style="background: linear-gradient(135deg, #28a745, #20c997);" title="Descargar Excel">📊 Excel</button>
-                        </div>
+                            <button onclick="downloadCSV()" class="btn" style="background: linear-gradient(135deg, #28a745, #20c997);" title="Descargar CSV">📊 CSV</button>
                     </div>
                     
                     <!-- Información de exportación -->
@@ -4298,7 +4297,7 @@
             currentRecords = records;
         }
 
-        // ========== FUNCIONES DE EXPORTACIÓN A EXCEL ==========
+        // ========== FUNCIONES DE EXPORTACIÓN A csv ==========
         
         // Variable global para controlar estado de exportación
         let currentExportInfo = null;
@@ -4365,8 +4364,7 @@
             }, 5000);
         }
         
-        // Función principal para descargar Excel
-        async function downloadExcel() {
+        async function downloadCSV() {
             if (!currentTable) {
                 showStatus('❌ No hay tabla seleccionada para exportar', 'error');
                 return;
@@ -4380,33 +4378,19 @@
                     return;
                 }
         
-                // Confirmar exportación si hay muchos registros
-                if (currentExportInfo.totalRecords > 1000) {
-                    const confirmMessage = `Se van a exportar ${currentExportInfo.totalRecords} registros. Esto puede tomar unos momentos. ¿Continuar?`;
-                    if (!confirm(confirmMessage)) {
-                        return;
-                    }
-                }
-        
                 if (currentExportInfo.totalRecords === 0) {
                     showStatus('❌ No hay registros para exportar', 'error');
                     return;
                 }
         
                 // Mostrar estado de descarga
-                showStatus('📊 Generando archivo Excel...', 'info');
+                showStatus('📊 Generando archivo CSV...', 'info');
                 
-                // Deshabilitar botón temporalmente
-                const excelButton = document.querySelector('button[onclick="downloadExcel()"]');
-                const originalText = excelButton.innerHTML;
-                excelButton.disabled = true;
-                excelButton.innerHTML = '<span class="loading"></span> Generando...';
-        
                 // Construir URL de descarga
                 const searchText = document.getElementById('globalSearchText').value.trim();
                 const searchField = document.getElementById('globalSearchField').value;
                 
-                let downloadUrl = `${API_BASE}/api/tables/${currentTable}/export-excel`;
+                let downloadUrl = `${API_BASE}/api/tables/${currentTable}/export-csv`;
                 const params = new URLSearchParams();
                 
                 if (searchText) params.append('searchText', searchText);
@@ -4416,62 +4400,14 @@
                     downloadUrl += '?' + params.toString();
                 }
         
-                console.log('📥 Descargando desde:', downloadUrl);
-        
-                // Realizar descarga
-                const response = await authenticatedFetch(downloadUrl);
+                // Abrir descarga en nueva ventana
+                window.open(downloadUrl, '_blank');
                 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Error en la descarga');
-                }
-        
-                // Obtener el blob del archivo
-                const blob = await response.blob();
-                
-                // Obtener nombre del archivo desde los headers
-                const contentDisposition = response.headers.get('Content-Disposition');
-                let fileName = 'export.xlsx';
-                
-                if (contentDisposition) {
-                    const fileNameMatch = contentDisposition.match(/filename="?([^"]*)"?/);
-                    if (fileNameMatch) {
-                        fileName = fileNameMatch[1];
-                    }
-                }
-        
-                // Crear enlace de descarga y hacer click automático
-                const downloadLink = document.createElement('a');
-                downloadLink.href = URL.createObjectURL(blob);
-                downloadLink.download = fileName;
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
-                document.body.removeChild(downloadLink);
-                
-                // Limpiar URL del blob
-                URL.revokeObjectURL(downloadLink.href);
-                
-                showStatus(`✅ Archivo descargado: ${fileName}`, 'success');
-                console.log('✅ Descarga completada:', fileName);
+                showStatus('✅ Descarga iniciada', 'success');
         
             } catch (error) {
-                console.error('❌ Error descargando Excel:', error);
-                showStatus('❌ Error al descargar Excel: ' + error.message, 'error');
-            } finally {
-                // Restaurar botón
-                const excelButton = document.querySelector('button[onclick="downloadExcel()"]');
-                if (excelButton) {
-                    excelButton.disabled = false;
-                    excelButton.innerHTML = '📊 Excel';
-                }
-                
-                // Limpiar información de exportación después de un tiempo
-                setTimeout(() => {
-                    const exportInfoDiv = document.getElementById('export-info');
-                    if (exportInfoDiv) {
-                        exportInfoDiv.style.display = 'none';
-                    }
-                }, 3000);
+                console.error('❌ Error descargando CSV:', error);
+                showStatus('❌ Error al descargar CSV: ' + error.message, 'error');
             }
         }
         
