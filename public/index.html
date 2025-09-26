@@ -794,7 +794,7 @@
 
             <!-- CRUD OPERATIONS SCREEN -->
             <div id="crud-operations" class="screen">
-                <!-- Global search bar -->
+                <!-- Buscar en el HTML el div con id "global-search" y reemplazar su contenido -->
                 <div id="global-search" class="search-container" style="display: none;">
                     <h3>🔍 Buscar Registros</h3>
                     <div class="search-row">
@@ -813,6 +813,14 @@
                             <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
                             <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
                             <button onclick="refreshFields()" class="btn" title="Actualizar campos">🔄 Campos</button>
+                            <button onclick="downloadExcel()" class="btn" style="background: linear-gradient(135deg, #28a745, #20c997);" title="Descargar Excel">📊 Excel</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Información de exportación -->
+                    <div id="export-info" class="export-info" style="display: none;">
+                        <div style="background: #e9ecef; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 0.9rem;">
+                            <span id="export-details">Preparando información de exportación...</span>
                         </div>
                     </div>
                 </div>
@@ -4289,6 +4297,216 @@
         
             currentRecords = records;
         }
+
+        // ========== FUNCIONES DE EXPORTACIÓN A EXCEL ==========
+        
+        // Variable global para controlar estado de exportación
+        let currentExportInfo = null;
+        
+        // Función para obtener información de exportación
+        async function getExportInfo() {
+            if (!currentTable) {
+                showStatus('❌ No hay tabla seleccionada', 'error');
+                return null;
+            }
+        
+            try {
+                const searchText = document.getElementById('globalSearchText').value.trim();
+                const searchField = document.getElementById('globalSearchField').value;
+                
+                let url = `${API_BASE}/api/tables/${currentTable}/export-info`;
+                const params = new URLSearchParams();
+                
+                if (searchText) params.append('searchText', searchText);
+                if (searchField) params.append('searchField', searchField);
+                
+                if (params.toString()) {
+                    url += '?' + params.toString();
+                }
+        
+                const response = await authenticatedFetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    return result;
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                console.error('Error obteniendo información de exportación:', error);
+                showStatus('❌ Error obteniendo información de exportación: ' + error.message, 'error');
+                return null;
+            }
+        }
+        
+        // Función para mostrar información de exportación
+        async function showExportInfo() {
+            const exportInfo = await getExportInfo();
+            if (!exportInfo) return;
+        
+            currentExportInfo = exportInfo;
+            const exportInfoDiv = document.getElementById('export-info');
+            const exportDetailsSpan = document.getElementById('export-details');
+            
+            let message = `📊 Se exportarán ${exportInfo.totalRecords} registros`;
+            
+            if (exportInfo.searchCriteria.searchText) {
+                message += ` (búsqueda: "${exportInfo.searchCriteria.searchText}" en "${exportInfo.searchCriteria.searchField}")`;
+            }
+            
+            message += ` • Tamaño estimado: ${exportInfo.estimatedFileSize}`;
+            
+            exportDetailsSpan.textContent = message;
+            exportInfoDiv.style.display = 'block';
+            
+            // Ocultar después de 5 segundos
+            setTimeout(() => {
+                exportInfoDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Función principal para descargar Excel
+        async function downloadExcel() {
+            if (!currentTable) {
+                showStatus('❌ No hay tabla seleccionada para exportar', 'error');
+                return;
+            }
+        
+            try {
+                // Mostrar información de exportación primero
+                await showExportInfo();
+                
+                if (!currentExportInfo) {
+                    return;
+                }
+        
+                // Confirmar exportación si hay muchos registros
+                if (currentExportInfo.totalRecords > 1000) {
+                    const confirmMessage = `Se van a exportar ${currentExportInfo.totalRecords} registros. Esto puede tomar unos momentos. ¿Continuar?`;
+                    if (!confirm(confirmMessage)) {
+                        return;
+                    }
+                }
+        
+                if (currentExportInfo.totalRecords === 0) {
+                    showStatus('❌ No hay registros para exportar', 'error');
+                    return;
+                }
+        
+                // Mostrar estado de descarga
+                showStatus('📊 Generando archivo Excel...', 'info');
+                
+                // Deshabilitar botón temporalmente
+                const excelButton = document.querySelector('button[onclick="downloadExcel()"]');
+                const originalText = excelButton.innerHTML;
+                excelButton.disabled = true;
+                excelButton.innerHTML = '<span class="loading"></span> Generando...';
+        
+                // Construir URL de descarga
+                const searchText = document.getElementById('globalSearchText').value.trim();
+                const searchField = document.getElementById('globalSearchField').value;
+                
+                let downloadUrl = `${API_BASE}/api/tables/${currentTable}/export-excel`;
+                const params = new URLSearchParams();
+                
+                if (searchText) params.append('searchText', searchText);
+                if (searchField) params.append('searchField', searchField);
+                
+                if (params.toString()) {
+                    downloadUrl += '?' + params.toString();
+                }
+        
+                console.log('📥 Descargando desde:', downloadUrl);
+        
+                // Realizar descarga
+                const response = await authenticatedFetch(downloadUrl);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Error en la descarga');
+                }
+        
+                // Obtener el blob del archivo
+                const blob = await response.blob();
+                
+                // Obtener nombre del archivo desde los headers
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let fileName = 'export.xlsx';
+                
+                if (contentDisposition) {
+                    const fileNameMatch = contentDisposition.match(/filename="?([^"]*)"?/);
+                    if (fileNameMatch) {
+                        fileName = fileNameMatch[1];
+                    }
+                }
+        
+                // Crear enlace de descarga y hacer click automático
+                const downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(blob);
+                downloadLink.download = fileName;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                
+                // Limpiar URL del blob
+                URL.revokeObjectURL(downloadLink.href);
+                
+                showStatus(`✅ Archivo descargado: ${fileName}`, 'success');
+                console.log('✅ Descarga completada:', fileName);
+        
+            } catch (error) {
+                console.error('❌ Error descargando Excel:', error);
+                showStatus('❌ Error al descargar Excel: ' + error.message, 'error');
+            } finally {
+                // Restaurar botón
+                const excelButton = document.querySelector('button[onclick="downloadExcel()"]');
+                if (excelButton) {
+                    excelButton.disabled = false;
+                    excelButton.innerHTML = '📊 Excel';
+                }
+                
+                // Limpiar información de exportación después de un tiempo
+                setTimeout(() => {
+                    const exportInfoDiv = document.getElementById('export-info');
+                    if (exportInfoDiv) {
+                        exportInfoDiv.style.display = 'none';
+                    }
+                }, 3000);
+            }
+        }
+        
+        // Función para actualizar información de exportación cuando cambia la búsqueda
+        function updateExportInfo() {
+            const exportInfoDiv = document.getElementById('export-info');
+            if (exportInfoDiv && exportInfoDiv.style.display !== 'none') {
+                showExportInfo();
+            }
+        }
+        
+        // Modificar las funciones de búsqueda existentes para actualizar info de exportación
+        const originalPerformGlobalSearch = performGlobalSearch;
+        performGlobalSearch = async function() {
+            await originalPerformGlobalSearch();
+            setTimeout(updateExportInfo, 500);
+        };
+        
+        const originalLoadAllGlobalRecords = loadAllGlobalRecords;
+        loadAllGlobalRecords = async function() {
+            await originalLoadAllGlobalRecords();
+            setTimeout(updateExportInfo, 500);
+        };
+        
+        const originalClearGlobalSearch = clearGlobalSearch;
+        clearGlobalSearch = function() {
+            originalClearGlobalSearch();
+            const exportInfoDiv = document.getElementById('export-info');
+            if (exportInfoDiv) {
+                exportInfoDiv.style.display = 'none';
+            }
+            currentExportInfo = null;
+        };
+        
+        console.log('📊 Funciones de exportación a Excel cargadas');
 
         // Función helper para obtener el campo matrícula actual
         function getCurrentMatriculaField() {
