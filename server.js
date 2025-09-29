@@ -1614,6 +1614,142 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
   }
 });
 
+// Endpoint para descargar datos como CSV
+app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { searchText, searchField } = req.query;
+    
+    await validateTableAccess(tableName);
+    const tableSchema = await getTableSchema(tableName);
+    const primaryKey = tableSchema.primaryKey;
+    
+    logOperation('CSV DOWNLOAD REQUEST', { tableName, searchText, searchField });
+
+    // Usar la misma lógica de JOIN corregida
+    let joinClause = '';
+    let entidadNombreField = '';
+    let entidadLocalidadField = '';
+    let selectFields = `"${tableName}".*`;
+
+    // SOLO aplicar JOIN si NO es tabla de entidades principales
+    const isEntidadPrincipal = tableName === 'entidades_cooperativas' || tableName === 'entidades_mutuales';
+    
+    if (!isEntidadPrincipal) {
+      const hasMatricula = tableSchema.columns.some(col => col.column_name === 'Matricula');
+      const hasMatriculaNacional = tableSchema.columns.some(col => col.column_name === 'Matricula Nacional');
+      
+      if (hasMatricula) {
+          joinClause = `JOIN "entidades_cooperativas" e ON "${tableName}"."Matricula" = e."Matricula"`;
+          entidadNombreField = `e."Nombre de la Entidad" AS entidad_nombre`;
+          entidadLocalidadField = `e."Localidad" AS entidad_localidad`;
+          selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+      } else if (hasMatriculaNacional) {
+          joinClause = `JOIN "entidades_mutuales" e ON "${tableName}"."Matricula Nacional" = e."Matricula Nacional"`;
+          entidadNombreField = `e."Entidad" AS entidad_nombre`;
+          entidadLocalidadField = `e."Localidad" AS entidad_localidad`;
+          selectFields += `, ${entidadNombreField}, ${entidadLocalidadField}`;
+      }
+    }
+
+    // Construir la query
+    let query;
+    let queryParams = [];
+
+    if (joinClause && !isEntidadPrincipal) {
+        query = `SELECT ${selectFields} FROM "${tableName}" ${joinClause}`;
+    } else {
+        query = `SELECT * FROM "${tableName}"`;
+    }
+
+    // Aplicar filtros de búsqueda si existen
+    if (searchText && searchField) {
+        const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
+        
+        if (fieldInfo) {
+            const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+            query += ` WHERE ${searchCondition.condition}`;
+            queryParams.push(searchCondition.value);
+        }
+    }
+
+    query += ` ORDER BY "${primaryKey}" ASC`;
+    
+    console.log(`📋 CSV Query: ${query}`);
+
+    const result = await pool.query(query, queryParams);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No hay datos para exportar'
+      });
+    }
+
+    // Generar CSV
+    const csvData = generateCSV(result.rows, tableName);
+    
+    // Configurar headers para descarga
+    const fileName = `${tableName}_${new Date().toISOString().split('T')[0]}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    // Agregar BOM para Excel
+    res.write('\uFEFF');
+    res.end(csvData);
+    
+    logOperation('CSV DOWNLOAD SUCCESS', `${result.rows.length} registros exportados`);
+    
+  } catch (error) {
+    console.error('❌ Error en descarga CSV:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generando archivo CSV: ' + error.message
+    });
+  }
+});
+
+// Función auxiliar para generar CSV
+function generateCSV(data, tableName) {
+  if (!data || data.length === 0) {
+    return '';
+  }
+
+  // Obtener todas las columnas únicas
+  const allColumns = new Set();
+  data.forEach(row => {
+    Object.keys(row).forEach(key => allColumns.add(key));
+  });
+
+  const columns = Array.from(allColumns).sort();
+  
+  // Función para escapar valores CSV
+  function escapeCSV(value) {
+    if (value === null || value === undefined) return '';
+    
+    const str = String(value);
+    // Si contiene comas, comillas o saltos de línea, escapar
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }
+
+  // Crear header
+  const csvLines = [];
+  csvLines.push(columns.map(col => escapeCSV(col)).join(','));
+
+  // Agregar datos
+  data.forEach(row => {
+    const csvRow = columns.map(col => escapeCSV(row[col] || '')).join(',');
+    csvLines.push(csvRow);
+  });
+
+  return csvLines.join('\n');
+}
+
 // READ - Leer todos los registros
 app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   try {
