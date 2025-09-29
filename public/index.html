@@ -68,6 +68,37 @@
             background: rgba(255,255,255,0.3);
         }
 
+        /* FORZAR VISIBILIDAD DE PESTAÑAS */
+        #crud-operations {
+            display: block !important;
+        }
+        
+        #crud-operations.screen.active {
+            display: block !important;
+        }
+        
+        .tabs {
+            display: flex !important;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 20px;
+            min-height: 400px;
+        }
+        
+        .tab-content.active {
+            display: block !important;
+        }
+        
+        /* Asegurar que los formularios se vean */
+        #create-fields,
+        #update-fields {
+            min-height: 200px;
+        }
+        
         /* Breadcrumb Navigation */
         .breadcrumb {
             background: #f8f9fa;
@@ -1880,13 +1911,13 @@
         // Seleccionar tabla dinámica
         async function selectDynamicTable(tableName) {
             try {
+                console.log(`🔄 Seleccionando tabla: ${tableName}`);
                 currentTable = tableName;
                 
                 // Cargar esquema de la tabla
                 await loadTableSchema(tableName);
                 
-                // Cambiar a la pantalla de operaciones CRUD
-                showScreen('crud-operations');
+                console.log('📋 Esquema cargado, configurando interfaz...');
                 
                 // CORRECCIÓN: Obtener displayName desde table_categories
                 let tableDisplayName = tableName;
@@ -1923,12 +1954,23 @@
                     { text: tableDisplayName, active: true }
                 ]);
                 
+                // FORZAR CAMBIO A PANTALLA CRUD Y CONFIGURAR INTERFAZ
+                console.log('🎯 Forzando cambio a pantalla CRUD...');
+                showScreen('crud-operations');
+                setupDynamicCrudInterface();
+                
+                console.log('✅ Tabla seleccionada y interfaz configurada');
+                
+                // Debug para verificar estado
+                setTimeout(() => {
+                    debugCrudInterface();
+                }, 500);
+                
             } catch (error) {
                 console.error('Error selecting table:', error);
                 showStatus('Error al seleccionar tabla: ' + error.message, 'error');
             }
         }
-
         // Cargar esquema de tabla específica
         async function loadTableSchema(tableName) {
             try {
@@ -1961,7 +2003,8 @@
             document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${tableDisplayName}`;
             document.getElementById('search-title').textContent = `Buscar Registros - ${tableDisplayName}`;
         
-            // NO actualizar breadcrumb aquí, ya se hace en selectDynamicTable
+            // MOSTRAR EXPLÍCITAMENTE LA PANTALLA CRUD
+            showScreen('crud-operations');
             
             // Configurar formulario de creación
             setupDynamicCreateForm();
@@ -1969,9 +2012,24 @@
             // Configurar búsqueda global
             loadDynamicFieldsForGlobalSearch();
             
-            // Mostrar pestaña de crear por defecto
+            // FORZAR MOSTRAR LAS PESTAÑAS
+            const tabsContainer = document.querySelector('.tabs');
+            if (tabsContainer) {
+                tabsContainer.style.display = 'flex';
+            }
+            
+            // FORZAR MOSTRAR BÚSQUEDA GLOBAL (por defecto para search, update, delete)
+            const globalSearch = document.getElementById('global-search');
+            if (globalSearch) {
+                globalSearch.style.display = 'block';
+            }
+            
+            // Mostrar pestaña de crear por defecto y asegurar que esté activa
             showTab('create');
+            
+            console.log('✅ Interfaz CRUD configurada correctamente');
         }
+
         // Función para formatear fecha y hora
         function formatDateTime(dateString) {
             if (!dateString) return '';
@@ -3552,8 +3610,13 @@
                 }
             }
             
+            console.log(`🔄 Cambiando a pestaña: ${tabName}`);
+                    
             // Limpiar clases activas
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+                tab.style.display = 'none';
+            });
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             
             // Activar pestaña seleccionada
@@ -3562,6 +3625,10 @@
             
             if (selectedTab) {
                 selectedTab.classList.add('active');
+                selectedTab.style.display = 'block';
+                console.log(`✅ Pestaña ${tabName} activada`);
+            } else {
+                console.error(`❌ No se encontró la pestaña: ${tabName}`);
             }
             
             if (selectedButton) {
@@ -3570,6 +3637,19 @@
         
             // Mostrar búsqueda global para pestañas apropiadas
             const globalSearch = document.getElementById('global-search');
+            
+            if (['search', 'update', 'delete'].includes(tabName)) {
+                if (globalSearch) {
+                    globalSearch.style.display = 'block';
+                }
+                loadDynamicFieldsForGlobalSearch();
+            } else {
+                if (globalSearch) {
+                    globalSearch.style.display = 'none';
+                }
+                resetExitConfirmation(); // Resetear confirmación al ir a crear
+            }
+            
             // Mostrar botón de estadísticas si corresponde
             const showStatsButton = currentTable && 
                 (currentTable.toLowerCase().includes('cooperativ') || currentTable.toLowerCase().includes('mutual'));
@@ -3601,7 +3681,7 @@
                 resetExitConfirmation(); // Resetear confirmación al ir a crear
             }
         
-            // Resetear contenedores al cambiar pestañas
+                // Resetear contenedores al cambiar pestañas
             if (tabName === 'update') {
                 document.getElementById('update-form-container').style.display = 'none';
                 document.getElementById('update-records-container').style.display = 'block';
@@ -3631,6 +3711,8 @@
                     hasUnsavedChanges = false;
                 }, 100);
             }
+            
+            console.log(`✅ Cambio a pestaña ${tabName} completado`);
         }
 
         function getTabIndex(tabName) {
@@ -4794,6 +4876,31 @@
             }, true);
         });
 
+        // FUNCIÓN DE DEBUGGING - AGREGAR AL FINAL
+        function debugCrudInterface() {
+            console.log('🔍 DEBUG - Estado de la interfaz CRUD:');
+            console.log('- currentTable:', currentTable);
+            console.log('- currentTableSchema:', !!currentTableSchema);
+            
+            const crudScreen = document.getElementById('crud-operations');
+            console.log('- crud-operations display:', crudScreen ? crudScreen.style.display || 'block' : 'NO ENCONTRADO');
+            console.log('- crud-operations classes:', crudScreen ? crudScreen.className : 'NO ENCONTRADO');
+            
+            const tabs = document.querySelector('.tabs');
+            console.log('- tabs display:', tabs ? tabs.style.display || 'flex' : 'NO ENCONTRADO');
+            
+            const activeTab = document.querySelector('.tab.active');
+            console.log('- active tab:', activeTab ? activeTab.textContent : 'NINGUNA');
+            
+            const activeTabContent = document.querySelector('.tab-content.active');
+            console.log('- active tab content:', activeTabContent ? activeTabContent.id : 'NINGUNA');
+            
+            const globalSearch = document.getElementById('global-search');
+            console.log('- global search display:', globalSearch ? globalSearch.style.display || 'block' : 'NO ENCONTRADO');
+        }
+        
+        // Llamar debug cuando se haga clic en Ver Estadísticas para probar
+        window.debugCrudInterface = debugCrudInterface;
         // ERROR REPORTING
         window.addEventListener('error', function(e) {
             console.error('JavaScript Error:', e.error);
