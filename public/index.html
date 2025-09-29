@@ -4325,74 +4325,8 @@
             currentRecords = records;
         }
 
-// Función para descargar resultados como CSV
-async function downloadCSV() {
-    if (!currentRecords || currentRecords.length === 0) {
-        showStatus('No hay datos para descargar. Realiza una búsqueda primero.', 'error');
-        return;
-    }
-
-    try {
-        showStatus('Generando archivo CSV...', 'info');
-        
-        // Obtener parámetros de búsqueda actuales
-        const searchText = document.getElementById('globalSearchText').value.trim();
-        const searchField = document.getElementById('globalSearchField').value;
-        
-        // Construir URL con parámetros de búsqueda
-        let url = `${API_BASE}/api/tables/${currentTable}/download-csv`;
-        const params = new URLSearchParams();
-        
-        if (searchText && searchField) {
-            params.append('searchText', searchText);
-            params.append('searchField', searchField);
-        }
-        
-        if (params.toString()) {
-            url += '?' + params.toString();
-        }
-        
-        const response = await authenticatedFetch(url);
-        
-        if (!response.ok) {
-            throw new Error(`Error ${response.status}: ${response.statusText}`);
-        }
-        
-        // Obtener el blob del archivo
-        const blob = await response.blob();
-        
-        // Crear URL temporal para descarga
-        const downloadUrl = window.URL.createObjectURL(blob);
-        
-        // Crear elemento de descarga temporal
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        
-        // Generar nombre de archivo
-        const tableName = currentTableSchema?.displayName || currentTable || 'datos';
-        const timestamp = new Date().toISOString().split('T')[0];
-        a.download = `${tableName}_${timestamp}.csv`;
-        
-        // Agregar al DOM, hacer click y remover
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // Limpiar URL temporal
-        window.URL.revokeObjectURL(downloadUrl);
-        
-        showStatus(`✅ Archivo CSV descargado: ${currentRecords.length} registros`, 'success');
-        
-        setTimeout(clearStatus, 3000);
-        
-    } catch (error) {
-        console.error('Error descargando CSV:', error);
-        showStatus('Error al descargar archivo CSV: ' + error.message, 'error');
-    }
-}
-
-        // Función alternativa usando los datos ya cargados (más rápida)
-        function downloadCSVFromCurrentData() {
+        // Función para descargar resultados como CSV
+        async function downloadCSV() {
             if (!currentRecords || currentRecords.length === 0) {
                 showStatus('No hay datos para descargar. Realiza una búsqueda primero.', 'error');
                 return;
@@ -4401,47 +4335,157 @@ async function downloadCSV() {
             try {
                 showStatus('Generando archivo CSV...', 'info');
                 
-                // Limpiar datos internos antes de exportar
-                const cleanData = currentRecords.map(record => {
-                    const cleanRecord = { ...record };
-                    delete cleanRecord._primaryKey;
-                    delete cleanRecord._rowIndex;
-                    return cleanRecord;
-                });
+                // Obtener parámetros de búsqueda actuales
+                const searchText = document.getElementById('globalSearchText').value.trim();
+                const searchField = document.getElementById('globalSearchField').value;
                 
-                const csvContent = generateCSVFromData(cleanData);
+                // Construir URL con parámetros de búsqueda
+                let url = `${API_BASE}/api/tables/${currentTable}/download-csv`;
+                const params = new URLSearchParams();
                 
-                // Crear blob y descargar
-                const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                
-                if (link.download !== undefined) {
-                    const url = URL.createObjectURL(blob);
-                    link.setAttribute('href', url);
-                    
-                    // Generar nombre de archivo
-                    const tableName = currentTableSchema?.displayName || currentTable || 'datos';
-                    const timestamp = new Date().toISOString().split('T')[0];
-                    link.setAttribute('download', `${tableName}_${timestamp}.csv`);
-                    
-                    link.style.visibility = 'hidden';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    
-                    showStatus(`✅ Archivo CSV descargado: ${currentRecords.length} registros`, 'success');
-                } else {
-                    throw new Error('Tu navegador no soporta descargas automáticas');
+                if (searchText && searchField) {
+                    params.append('searchText', searchText);
+                    params.append('searchField', searchField);
                 }
+                
+                if (params.toString()) {
+                    url += '?' + params.toString();
+                }
+                
+                const response = await authenticatedFetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Error ${response.status}: ${response.statusText}`);
+                }
+                
+                // Obtener el blob del archivo
+                const blob = await response.blob();
+                
+                // Crear URL temporal para descarga
+                const downloadUrl = window.URL.createObjectURL(blob);
+                
+                // Crear elemento de descarga temporal
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                
+                // Generar nombre de archivo
+                const tableName = currentTableSchema?.displayName || currentTable || 'datos';
+                const timestamp = new Date().toISOString().split('T')[0];
+                a.download = `${tableName}_${timestamp}.csv`;
+                
+                // Agregar al DOM, hacer click y remover
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // Limpiar URL temporal
+                window.URL.revokeObjectURL(downloadUrl);
+                
+                showStatus(`✅ Archivo CSV descargado: ${currentRecords.length} registros`, 'success');
                 
                 setTimeout(clearStatus, 3000);
                 
             } catch (error) {
-                console.error('Error generando CSV:', error);
-                showStatus('Error al generar archivo CSV: ' + error.message, 'error');
+                console.error('Error descargando CSV:', error);
+                showStatus('Error al descargar archivo CSV: ' + error.message, 'error');
             }
         }
+
+        // Función para generar y descargar CSV con orden de columnas preservado
+        function downloadSearchResultsAsCSV() {
+            if (!currentRecords || currentRecords.length === 0) {
+                showStatus('No hay registros para descargar', 'error');
+                return;
+            }
         
+            try {
+                showStatus('Generando archivo CSV...', 'info');
+        
+                // DEFINIR ORDEN DE COLUMNAS basado en el esquema de la tabla
+                let orderedColumns = [];
+                
+                if (currentTableSchema && currentTableSchema.columns) {
+                    // Usar el orden del esquema de la tabla
+                    orderedColumns = currentTableSchema.columns
+                        .map(col => col.column_name)
+                        .filter(colName => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName));
+                    
+                    // Agregar campos de entidad al final si existen
+                    if (currentRecords[0] && currentRecords[0].entidad_nombre) {
+                        orderedColumns.push('entidad_nombre');
+                    }
+                    if (currentRecords[0] && currentRecords[0].entidad_localidad) {
+                        orderedColumns.push('entidad_localidad');
+                    }
+                } else {
+                    // Fallback: usar las claves del primer registro (menos confiable)
+                    const firstRecord = currentRecords[0];
+                    orderedColumns = Object.keys(firstRecord)
+                        .filter(key => !['_primaryKey', '_rowIndex'].includes(key));
+                }
+        
+                // CREAR HEADERS en el orden correcto
+                const headers = orderedColumns.map(col => {
+                    // Formatear nombres de columnas para mejor legibilidad
+                    return col
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, l => l.toUpperCase())
+                        .replace(/De La/g, 'de la')
+                        .replace(/De /g, 'de ');
+                });
+        
+                // CREAR FILAS DE DATOS manteniendo el orden
+                const csvRows = [];
+                csvRows.push(headers.join(','));
+        
+                currentRecords.forEach(record => {
+                    const row = orderedColumns.map(column => {
+                        let value = record[column] || '';
+                        
+                        // Limpiar y escapar el valor
+                        if (typeof value === 'string') {
+                            // Escapar comillas y envolver en comillas si contiene comas
+                            value = value.replace(/"/g, '""');
+                            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+                                value = `"${value}"`;
+                            }
+                        }
+                        
+                        return value;
+                    });
+                    csvRows.push(row.join(','));
+                });
+        
+                // GENERAR Y DESCARGAR ARCHIVO
+                const csvContent = '\ufeff' + csvRows.join('\n'); // \ufeff es BOM para UTF-8
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                
+                // Crear nombre de archivo descriptivo
+                const tableName = currentTableSchema?.displayName || currentTable || 'tabla';
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const filename = `${tableName}_${currentRecords.length}_registros_${timestamp}.csv`;
+                
+                // Descargar archivo
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+        
+                showStatus(`✅ CSV descargado: ${filename} (${currentRecords.length} registros)`, 'success');
+                
+                // Limpiar mensaje después de 3 segundos
+                setTimeout(() => clearStatus(), 3000);
+        
+            } catch (error) {
+                console.error('Error generando CSV:', error);
+                showStatus('Error al generar el archivo CSV: ' + error.message, 'error');
+            }
+        }        
         // Función auxiliar para generar CSV desde datos JavaScript
         function generateCSVFromData(data) {
             if (!data || data.length === 0) {
