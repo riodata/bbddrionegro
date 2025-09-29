@@ -4103,9 +4103,11 @@
                 const recordElement = document.createElement('div');
                 recordElement.className = 'record';
         
-                // Mostrar entidad asociada si existe
+                // SOLO mostrar entidad asociada si NO es tabla principal y existe
                 let entidadHtml = '';
-                if (record.entidad_nombre || record.entidad_localidad) {
+                const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
+                
+                if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
                     entidadHtml = `
                         <div style="background: #e9ecef; border-radius: 5px; padding: 8px; margin-bottom: 8px;">
                             <strong>Entidad:</strong> ${record.entidad_nombre || '-'}<br>
@@ -4114,9 +4116,14 @@
                     `;
                 }
         
-                // Campos normales
+                // Campos normales (excluir campos internos y de entidad si no es tabla principal)
+                const fieldsToExclude = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'];
+                if (!isEntidadPrincipal) {
+                    fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
+                }
+                
                 const recordContent = Object.entries(record)
-                    .filter(([key]) => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at', 'entidad_nombre', 'entidad_localidad'].includes(key))
+                    .filter(([key]) => !fieldsToExclude.includes(key))
                     .map(([key, value]) => {
                         const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                         return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
@@ -4159,7 +4166,7 @@
             // Actualizar records globales para otras operaciones
             currentRecords = records;
         }
-
+        
         function displayUpdateResults(records) {
             const container = document.getElementById('update-records-container');
             container.innerHTML = '';
@@ -4186,9 +4193,11 @@
                 const recordElement = document.createElement('div');
                 recordElement.className = 'record';
         
-                // Mostrar entidad y localidad arriba
+                // SOLO mostrar entidad si NO es tabla principal
                 let entidadHtml = '';
-                if (record.entidad_nombre || record.entidad_localidad) {
+                const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
+                
+                if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
                     entidadHtml = `
                         <div style="background: #e9ecef; border-radius: 5px; padding: 8px; margin-bottom: 8px;">
                             <strong>Entidad:</strong> ${record.entidad_nombre || '-'}<br>
@@ -4197,8 +4206,13 @@
                     `;
                 }
         
+                const fieldsToExclude = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'];
+                if (!isEntidadPrincipal) {
+                    fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
+                }
+        
                 const recordContent = Object.entries(record)
-                    .filter(([key]) => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at', 'entidad_nombre', 'entidad_localidad'].includes(key))
+                    .filter(([key]) => !fieldsToExclude.includes(key))
                     .map(([key, value]) => {
                         const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                         return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
@@ -4251,9 +4265,11 @@
                 const recordElement = document.createElement('div');
                 recordElement.className = 'record';
         
-                // Mostrar entidad y localidad arriba
+                // SOLO mostrar entidad si NO es tabla principal
                 let entidadHtml = '';
-                if (record.entidad_nombre || record.entidad_localidad) {
+                const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
+                
+                if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
                     entidadHtml = `
                         <div style="background: #e9ecef; border-radius: 5px; padding: 8px; margin-bottom: 8px;">
                             <strong>Entidad:</strong> ${record.entidad_nombre || '-'}<br>
@@ -4262,8 +4278,13 @@
                     `;
                 }
         
+                const fieldsToExclude = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'];
+                if (!isEntidadPrincipal) {
+                    fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
+                }
+        
                 const recordContent = Object.entries(record)
-                    .filter(([key]) => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at', 'entidad_nombre', 'entidad_localidad'].includes(key))
+                    .filter(([key]) => !fieldsToExclude.includes(key))
                     .map(([key, value]) => {
                         const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                         return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
@@ -4289,7 +4310,7 @@
         
             currentRecords = records;
         }
-
+        
         // Función helper para obtener el campo matrícula actual
         function getCurrentMatriculaField() {
             if (!currentTableSchema || !currentTableSchema.columns) return null;
