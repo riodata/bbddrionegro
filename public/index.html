@@ -68,9 +68,9 @@
             background: rgba(255,255,255,0.3);
         }
 
-        /* FORZAR VISIBILIDAD DE PESTAÑAS */
+        /* FORZAR VISIBILIDAD DE PESTAÑAS - CORREGIDO */
         #crud-operations {
-            display: block !important;
+            display: none; /* Cambiar de block a none inicialmente */
         }
         
         #crud-operations.screen.active {
@@ -81,6 +81,7 @@
             display: flex !important;
             background: #f8f9fa;
             border-bottom: 1px solid #e9ecef;
+            visibility: visible !important; /* Asegurar visibilidad */
         }
         
         .tab-content {
@@ -91,12 +92,13 @@
         
         .tab-content.active {
             display: block !important;
+            visibility: visible !important; /* Asegurar visibilidad */
         }
         
-        /* Asegurar que los formularios se vean */
-        #create-fields,
-        #update-fields {
-            min-height: 200px;
+        /* Asegurar que las pestañas sean clickeables */
+        .tab {
+            visibility: visible !important;
+            pointer-events: auto !important;
         }
         
         /* Breadcrumb Navigation */
@@ -1992,9 +1994,10 @@
             }
         }
 
-        // Configurar interfaz CRUD dinámicamente
         function setupDynamicCrudInterface() {
             if (!currentTableSchema) return;
+            
+            console.log('🔄 Configurando interfaz CRUD dinámicamente...');
             
             // Obtener el nombre de display correcto
             const tableDisplayName = currentTableSchema.displayName || currentTable || 'Tabla';
@@ -2003,31 +2006,46 @@
             document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${tableDisplayName}`;
             document.getElementById('search-title').textContent = `Buscar Registros - ${tableDisplayName}`;
         
-            // MOSTRAR EXPLÍCITAMENTE LA PANTALLA CRUD
+            // PASO 1: MOSTRAR PANTALLA CRUD PRIMERO
+            console.log('📺 Mostrando pantalla CRUD...');
             showScreen('crud-operations');
             
-            // Configurar formulario de creación
+            // PASO 2: FORZAR VISIBILIDAD DE ELEMENTOS DESPUÉS DE UN DELAY
+            setTimeout(() => {
+                console.log('🔧 Forzando visibilidad de pestañas...');
+                
+                // Forzar mostrar las pestañas
+                const tabsContainer = document.querySelector('.tabs');
+                if (tabsContainer) {
+                    tabsContainer.style.display = 'flex !important';
+                    tabsContainer.style.visibility = 'visible !important';
+                    console.log('✅ Pestañas forzadas a visible');
+                }
+                
+                // Forzar mostrar contenido de pestañas
+                const crudOperations = document.getElementById('crud-operations');
+                if (crudOperations) {
+                    crudOperations.style.display = 'block !important';
+                    crudOperations.classList.add('active');
+                    console.log('✅ CRUD operations forzado a visible');
+                }
+                
+                // Configurar pestaña activa
+                showTab('create');
+                
+                // Ocultar búsqueda global inicialmente (se mostrará en otras pestañas)
+                const globalSearch = document.getElementById('global-search');
+                if (globalSearch) {
+                    globalSearch.style.display = 'none';
+                }
+                
+                console.log('✅ Interfaz CRUD configurada correctamente');
+                
+            }, 100); // Delay de 100ms para asegurar que todo se renderice
+            
+            // PASO 3: Configurar formulario y campos
             setupDynamicCreateForm();
-            
-            // Configurar búsqueda global
             loadDynamicFieldsForGlobalSearch();
-            
-            // FORZAR MOSTRAR LAS PESTAÑAS
-            const tabsContainer = document.querySelector('.tabs');
-            if (tabsContainer) {
-                tabsContainer.style.display = 'flex';
-            }
-            
-            // FORZAR MOSTRAR BÚSQUEDA GLOBAL (por defecto para search, update, delete)
-            const globalSearch = document.getElementById('global-search');
-            if (globalSearch) {
-                globalSearch.style.display = 'block';
-            }
-            
-            // Mostrar pestaña de crear por defecto y asegurar que esté activa
-            showTab('create');
-            
-            console.log('✅ Interfaz CRUD configurada correctamente');
         }
 
         // Función para formatear fecha y hora
@@ -3611,7 +3629,20 @@
             }
             
             console.log(`🔄 Cambiando a pestaña: ${tabName}`);
-                    
+
+            // FORZAR VISIBILIDAD ANTES DE CAMBIAR PESTAÑAS
+            const crudScreen = document.getElementById('crud-operations');
+            if (crudScreen) {
+                crudScreen.style.display = 'block !important';
+                crudScreen.classList.add('active');
+            }
+            
+            const tabsContainer = document.querySelector('.tabs');
+            if (tabsContainer) {
+                tabsContainer.style.display = 'flex !important';
+                tabsContainer.style.visibility = 'visible !important';
+            }
+                        
             // Limpiar clases activas
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
@@ -4898,7 +4929,7 @@
             const globalSearch = document.getElementById('global-search');
             console.log('- global search display:', globalSearch ? globalSearch.style.display || 'block' : 'NO ENCONTRADO');
         }
-        
+      
         // Llamar debug cuando se haga clic en Ver Estadísticas para probar
         window.debugCrudInterface = debugCrudInterface;
         // ERROR REPORTING
@@ -4912,6 +4943,35 @@
             showStatus('Error de conexión. Verifica tu conexión a internet.', 'error');
         });
 
+                // FUNCIÓN DE DEBUG MEJORADA
+        function forceShowTabs() {
+            console.log('🔧 FORZANDO MOSTRAR PESTAÑAS MANUALMENTE...');
+            
+            const crudScreen = document.getElementById('crud-operations');
+            if (crudScreen) {
+                crudScreen.style.display = 'block !important';
+                crudScreen.classList.add('screen', 'active');
+                console.log('✅ crud-operations mostrado');
+            }
+            
+            const tabsContainer = document.querySelector('.tabs');
+            if (tabsContainer) {
+                tabsContainer.style.display = 'flex !important';
+                tabsContainer.style.visibility = 'visible !important';
+                console.log('✅ tabs container mostrado');
+            }
+            
+            // Mostrar pestaña de crear
+            showTab('create');
+            console.log('✅ Pestaña CREATE activada');
+            
+            // Debug final
+            debugCrudInterface();
+        }
+        
+        // Hacer función disponible globalmente para pruebas
+        window.forceShowTabs = forceShowTabs;
+        
         // FINAL INITIALIZATION
         console.log('🚀 Sistema de gestión cargado correctamente');
         console.log('📋 Funciones disponibles: login, registro, CRUD, búsqueda');
