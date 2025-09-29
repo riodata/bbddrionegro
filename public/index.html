@@ -68,39 +68,6 @@
             background: rgba(255,255,255,0.3);
         }
 
-        /* FORZAR VISIBILIDAD DE PESTAÑAS - CORREGIDO */
-        #crud-operations {
-            display: none; /* Cambiar de block a none inicialmente */
-        }
-        
-        #crud-operations.screen.active {
-            display: block !important;
-        }
-        
-        .tabs {
-            display: flex !important;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
-            visibility: visible !important; /* Asegurar visibilidad */
-        }
-        
-        .tab-content {
-            display: none;
-            padding: 20px;
-            min-height: 400px;
-        }
-        
-        .tab-content.active {
-            display: block !important;
-            visibility: visible !important; /* Asegurar visibilidad */
-        }
-        
-        /* Asegurar que las pestañas sean clickeables */
-        .tab {
-            visibility: visible !important;
-            pointer-events: auto !important;
-        }
-        
         /* Breadcrumb Navigation */
         .breadcrumb {
             background: #f8f9fa;
@@ -827,7 +794,7 @@
 
             <!-- CRUD OPERATIONS SCREEN -->
             <div id="crud-operations" class="screen">
-                <!-- Buscar en el HTML el div con id "global-search" y reemplazar su contenido -->
+                <!-- Global search bar -->
                 <div id="global-search" class="search-container" style="display: none;">
                     <h3>🔍 Buscar Registros</h3>
                     <div class="search-row">
@@ -846,13 +813,6 @@
                             <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
                             <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
                             <button onclick="refreshFields()" class="btn" title="Actualizar campos">🔄 Campos</button>
-                            <button onclick="downloadCSV()" class="btn" style="background: linear-gradient(135deg, #28a745, #20c997);" title="Descargar CSV">📊 CSV</button>
-                    </div>
-                    
-                    <!-- Información de exportación -->
-                    <div id="export-info" class="export-info" style="display: none;">
-                        <div style="background: #e9ecef; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 0.9rem;">
-                            <span id="export-details">Preparando información de exportación...</span>
                         </div>
                     </div>
                 </div>
@@ -1285,15 +1245,8 @@
 
         // Mostrar pantalla específica
         function showScreen(screenId) {
-            console.log(`📺 Mostrando pantalla: ${screenId}`);
             document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-            const targetScreen = document.getElementById(screenId);
-            if (targetScreen) {
-                targetScreen.classList.add('active');
-                console.log(`✅ Pantalla ${screenId} activada`);
-            } else {
-                console.error(`❌ Pantalla ${screenId} no encontrada`);
-            }
+            document.getElementById(screenId).classList.add('active');
         }
 
         // Mostrar alerta
@@ -1913,13 +1866,13 @@
         // Seleccionar tabla dinámica
         async function selectDynamicTable(tableName) {
             try {
-                console.log(`🔄 Seleccionando tabla: ${tableName}`);
                 currentTable = tableName;
                 
                 // Cargar esquema de la tabla
                 await loadTableSchema(tableName);
                 
-                console.log('📋 Esquema cargado, configurando interfaz...');
+                // Cambiar a la pantalla de operaciones CRUD
+                showScreen('crud-operations');
                 
                 // CORRECCIÓN: Obtener displayName desde table_categories
                 let tableDisplayName = tableName;
@@ -1956,23 +1909,12 @@
                     { text: tableDisplayName, active: true }
                 ]);
                 
-                // FORZAR CAMBIO A PANTALLA CRUD Y CONFIGURAR INTERFAZ
-                console.log('🎯 Forzando cambio a pantalla CRUD...');
-                showScreen('crud-operations');
-                setupDynamicCrudInterface();
-                
-                console.log('✅ Tabla seleccionada y interfaz configurada');
-                
-                // Debug para verificar estado
-                setTimeout(() => {
-                    debugCrudInterface();
-                }, 500);
-                
             } catch (error) {
                 console.error('Error selecting table:', error);
                 showStatus('Error al seleccionar tabla: ' + error.message, 'error');
             }
         }
+
         // Cargar esquema de tabla específica
         async function loadTableSchema(tableName) {
             try {
@@ -1994,10 +1936,9 @@
             }
         }
 
+        // Configurar interfaz CRUD dinámicamente
         function setupDynamicCrudInterface() {
             if (!currentTableSchema) return;
-            
-            console.log('🔄 Configurando interfaz CRUD dinámicamente...');
             
             // Obtener el nombre de display correcto
             const tableDisplayName = currentTableSchema.displayName || currentTable || 'Tabla';
@@ -2006,48 +1947,17 @@
             document.getElementById('create-title').textContent = `Crear Nuevo Registro - ${tableDisplayName}`;
             document.getElementById('search-title').textContent = `Buscar Registros - ${tableDisplayName}`;
         
-            // PASO 1: MOSTRAR PANTALLA CRUD PRIMERO
-            console.log('📺 Mostrando pantalla CRUD...');
-            showScreen('crud-operations');
+            // NO actualizar breadcrumb aquí, ya se hace en selectDynamicTable
             
-            // PASO 2: FORZAR VISIBILIDAD DE ELEMENTOS DESPUÉS DE UN DELAY
-            setTimeout(() => {
-                console.log('🔧 Forzando visibilidad de pestañas...');
-                
-                // Forzar mostrar las pestañas
-                const tabsContainer = document.querySelector('.tabs');
-                if (tabsContainer) {
-                    tabsContainer.style.display = 'flex !important';
-                    tabsContainer.style.visibility = 'visible !important';
-                    console.log('✅ Pestañas forzadas a visible');
-                }
-                
-                // Forzar mostrar contenido de pestañas
-                const crudOperations = document.getElementById('crud-operations');
-                if (crudOperations) {
-                    crudOperations.style.display = 'block !important';
-                    crudOperations.classList.add('active');
-                    console.log('✅ CRUD operations forzado a visible');
-                }
-                
-                // Configurar pestaña activa
-                showTab('create');
-                
-                // Ocultar búsqueda global inicialmente (se mostrará en otras pestañas)
-                const globalSearch = document.getElementById('global-search');
-                if (globalSearch) {
-                    globalSearch.style.display = 'none';
-                }
-                
-                console.log('✅ Interfaz CRUD configurada correctamente');
-                
-            }, 100); // Delay de 100ms para asegurar que todo se renderice
-            
-            // PASO 3: Configurar formulario y campos
+            // Configurar formulario de creación
             setupDynamicCreateForm();
+            
+            // Configurar búsqueda global
             loadDynamicFieldsForGlobalSearch();
+            
+            // Mostrar pestaña de crear por defecto
+            showTab('create');
         }
-
         // Función para formatear fecha y hora
         function formatDateTime(dateString) {
             if (!dateString) return '';
@@ -2687,10 +2597,6 @@
         
         // Generar formulario de creación dinámicamente
        async function setupDynamicCreateForm() {
-            console.log('🔄 setupDynamicCreateForm iniciado');
-            console.log('📋 currentTableSchema:', currentTableSchema);
-            console.log('📋 Columnas disponibles:', currentTableSchema?.columns?.length);
-            
             if (!currentTableSchema || !currentTableSchema.columns) return;
             
             console.log('🔄 Configurando formulario dinámico de creación...');
@@ -2716,17 +2622,10 @@
             
             // Crear campos normales
             currentTableSchema.columns.forEach(column => {
-                const { column_name, data_type, is_nullable } = column;
-                
-                // ✅ CORRECCIÓN: Solo ocultar campos específicos, no todos los internos
-                if (hiddenFormFields.includes(column_name) || 
-                    column_name.toLowerCase() === 'orden') {
-                    console.log(`🚫 Ocultando campo: ${column_name}`);
+                const { column_name, data_type, is_nullable, is_primary_key } = column;
+                if (hiddenFormFields.includes(column_name)) {
                     return;
                 }
-                
-                console.log(`✅ Procesando campo: ${column_name}`);
-                            
                 const fieldDiv = document.createElement('div');
                 fieldDiv.className = 'form-group';
                 
@@ -3628,26 +3527,8 @@
                 }
             }
             
-            console.log(`🔄 Cambiando a pestaña: ${tabName}`);
-
-            // FORZAR VISIBILIDAD ANTES DE CAMBIAR PESTAÑAS
-            const crudScreen = document.getElementById('crud-operations');
-            if (crudScreen) {
-                crudScreen.style.display = 'block !important';
-                crudScreen.classList.add('active');
-            }
-            
-            const tabsContainer = document.querySelector('.tabs');
-            if (tabsContainer) {
-                tabsContainer.style.display = 'flex !important';
-                tabsContainer.style.visibility = 'visible !important';
-            }
-                        
             // Limpiar clases activas
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-                tab.style.display = 'none';
-            });
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             
             // Activar pestaña seleccionada
@@ -3656,10 +3537,6 @@
             
             if (selectedTab) {
                 selectedTab.classList.add('active');
-                selectedTab.style.display = 'block';
-                console.log(`✅ Pestaña ${tabName} activada`);
-            } else {
-                console.error(`❌ No se encontró la pestaña: ${tabName}`);
             }
             
             if (selectedButton) {
@@ -3668,19 +3545,6 @@
         
             // Mostrar búsqueda global para pestañas apropiadas
             const globalSearch = document.getElementById('global-search');
-            
-            if (['search', 'update', 'delete'].includes(tabName)) {
-                if (globalSearch) {
-                    globalSearch.style.display = 'block';
-                }
-                loadDynamicFieldsForGlobalSearch();
-            } else {
-                if (globalSearch) {
-                    globalSearch.style.display = 'none';
-                }
-                resetExitConfirmation(); // Resetear confirmación al ir a crear
-            }
-            
             // Mostrar botón de estadísticas si corresponde
             const showStatsButton = currentTable && 
                 (currentTable.toLowerCase().includes('cooperativ') || currentTable.toLowerCase().includes('mutual'));
@@ -3712,7 +3576,7 @@
                 resetExitConfirmation(); // Resetear confirmación al ir a crear
             }
         
-                // Resetear contenedores al cambiar pestañas
+            // Resetear contenedores al cambiar pestañas
             if (tabName === 'update') {
                 document.getElementById('update-form-container').style.display = 'none';
                 document.getElementById('update-records-container').style.display = 'block';
@@ -3742,8 +3606,6 @@
                     hasUnsavedChanges = false;
                 }, 100);
             }
-            
-            console.log(`✅ Cambio a pestaña ${tabName} completado`);
         }
 
         function getTabIndex(tabName) {
@@ -4428,153 +4290,6 @@
             currentRecords = records;
         }
 
-        // ========== FUNCIONES DE EXPORTACIÓN A csv ==========
-        
-        // Variable global para controlar estado de exportación
-        let currentExportInfo = null;
-        
-        // Función para obtener información de exportación
-        async function getExportInfo() {
-            if (!currentTable) {
-                showStatus('❌ No hay tabla seleccionada', 'error');
-                return null;
-            }
-        
-            try {
-                const searchText = document.getElementById('globalSearchText').value.trim();
-                const searchField = document.getElementById('globalSearchField').value;
-                
-                let url = `${API_BASE}/api/tables/${currentTable}/export-info`;
-                const params = new URLSearchParams();
-                
-                if (searchText) params.append('searchText', searchText);
-                if (searchField) params.append('searchField', searchField);
-                
-                if (params.toString()) {
-                    url += '?' + params.toString();
-                }
-        
-                const response = await authenticatedFetch(url);
-                const result = await response.json();
-                
-                if (result.success) {
-                    return result;
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                console.error('Error obteniendo información de exportación:', error);
-                showStatus('❌ Error obteniendo información de exportación: ' + error.message, 'error');
-                return null;
-            }
-        }
-        
-        // Función para mostrar información de exportación
-        async function showExportInfo() {
-            const exportInfo = await getExportInfo();
-            if (!exportInfo) return;
-        
-            currentExportInfo = exportInfo;
-            const exportInfoDiv = document.getElementById('export-info');
-            const exportDetailsSpan = document.getElementById('export-details');
-            
-            let message = `📊 Se exportarán ${exportInfo.totalRecords} registros`;
-            
-            if (exportInfo.searchCriteria.searchText) {
-                message += ` (búsqueda: "${exportInfo.searchCriteria.searchText}" en "${exportInfo.searchCriteria.searchField}")`;
-            }
-            
-            message += ` • Tamaño estimado: ${exportInfo.estimatedFileSize}`;
-            
-            exportDetailsSpan.textContent = message;
-            exportInfoDiv.style.display = 'block';
-            
-            // Ocultar después de 5 segundos
-            setTimeout(() => {
-                exportInfoDiv.style.display = 'none';
-            }, 5000);
-        }
-        
-        async function downloadCSV() {
-            if (!currentTable) {
-                showStatus('❌ No hay tabla seleccionada para exportar', 'error');
-                return;
-            }
-        
-            try {
-                // Mostrar información de exportación primero
-                await showExportInfo();
-                
-                if (!currentExportInfo) {
-                    return;
-                }
-        
-                if (currentExportInfo.totalRecords === 0) {
-                    showStatus('❌ No hay registros para exportar', 'error');
-                    return;
-                }
-        
-                // Mostrar estado de descarga
-                showStatus('📊 Generando archivo CSV...', 'info');
-                
-                // Construir URL de descarga
-                const searchText = document.getElementById('globalSearchText').value.trim();
-                const searchField = document.getElementById('globalSearchField').value;
-                
-                let downloadUrl = `${API_BASE}/api/tables/${currentTable}/export-csv`;
-                const params = new URLSearchParams();
-                
-                if (searchText) params.append('searchText', searchText);
-                if (searchField) params.append('searchField', searchField);
-                
-                if (params.toString()) {
-                    downloadUrl += '?' + params.toString();
-                }
-        
-                // Abrir descarga en nueva ventana
-                window.open(downloadUrl, '_blank');
-                
-                showStatus('✅ Descarga iniciada', 'success');
-        
-            } catch (error) {
-                console.error('❌ Error descargando CSV:', error);
-                showStatus('❌ Error al descargar CSV: ' + error.message, 'error');
-            }
-        }
-        
-        // Función para actualizar información de exportación cuando cambia la búsqueda
-        function updateExportInfo() {
-            const exportInfoDiv = document.getElementById('export-info');
-            if (exportInfoDiv && exportInfoDiv.style.display !== 'none') {
-                showExportInfo();
-            }
-        }
-        
-        // Modificar las funciones de búsqueda existentes para actualizar info de exportación
-        const originalPerformGlobalSearch = performGlobalSearch;
-        performGlobalSearch = async function() {
-            await originalPerformGlobalSearch();
-            setTimeout(updateExportInfo, 500);
-        };
-        
-        const originalLoadAllGlobalRecords = loadAllGlobalRecords;
-        loadAllGlobalRecords = async function() {
-            await originalLoadAllGlobalRecords();
-            setTimeout(updateExportInfo, 500);
-        };
-        
-        const originalClearGlobalSearch = clearGlobalSearch;
-        clearGlobalSearch = function() {
-            originalClearGlobalSearch();
-            const exportInfoDiv = document.getElementById('export-info');
-            if (exportInfoDiv) {
-                exportInfoDiv.style.display = 'none';
-            }
-            currentExportInfo = null;
-        };
-        
-        console.log('📊 Funciones de exportación a Excel cargadas');
-
         // Función helper para obtener el campo matrícula actual
         function getCurrentMatriculaField() {
             if (!currentTableSchema || !currentTableSchema.columns) return null;
@@ -4907,31 +4622,6 @@
             }, true);
         });
 
-        // FUNCIÓN DE DEBUGGING - AGREGAR AL FINAL
-        function debugCrudInterface() {
-            console.log('🔍 DEBUG - Estado de la interfaz CRUD:');
-            console.log('- currentTable:', currentTable);
-            console.log('- currentTableSchema:', !!currentTableSchema);
-            
-            const crudScreen = document.getElementById('crud-operations');
-            console.log('- crud-operations display:', crudScreen ? crudScreen.style.display || 'block' : 'NO ENCONTRADO');
-            console.log('- crud-operations classes:', crudScreen ? crudScreen.className : 'NO ENCONTRADO');
-            
-            const tabs = document.querySelector('.tabs');
-            console.log('- tabs display:', tabs ? tabs.style.display || 'flex' : 'NO ENCONTRADO');
-            
-            const activeTab = document.querySelector('.tab.active');
-            console.log('- active tab:', activeTab ? activeTab.textContent : 'NINGUNA');
-            
-            const activeTabContent = document.querySelector('.tab-content.active');
-            console.log('- active tab content:', activeTabContent ? activeTabContent.id : 'NINGUNA');
-            
-            const globalSearch = document.getElementById('global-search');
-            console.log('- global search display:', globalSearch ? globalSearch.style.display || 'block' : 'NO ENCONTRADO');
-        }
-      
-        // Llamar debug cuando se haga clic en Ver Estadísticas para probar
-        window.debugCrudInterface = debugCrudInterface;
         // ERROR REPORTING
         window.addEventListener('error', function(e) {
             console.error('JavaScript Error:', e.error);
@@ -4943,35 +4633,6 @@
             showStatus('Error de conexión. Verifica tu conexión a internet.', 'error');
         });
 
-                // FUNCIÓN DE DEBUG MEJORADA
-        function forceShowTabs() {
-            console.log('🔧 FORZANDO MOSTRAR PESTAÑAS MANUALMENTE...');
-            
-            const crudScreen = document.getElementById('crud-operations');
-            if (crudScreen) {
-                crudScreen.style.display = 'block !important';
-                crudScreen.classList.add('screen', 'active');
-                console.log('✅ crud-operations mostrado');
-            }
-            
-            const tabsContainer = document.querySelector('.tabs');
-            if (tabsContainer) {
-                tabsContainer.style.display = 'flex !important';
-                tabsContainer.style.visibility = 'visible !important';
-                console.log('✅ tabs container mostrado');
-            }
-            
-            // Mostrar pestaña de crear
-            showTab('create');
-            console.log('✅ Pestaña CREATE activada');
-            
-            // Debug final
-            debugCrudInterface();
-        }
-        
-        // Hacer función disponible globalmente para pruebas
-        window.forceShowTabs = forceShowTabs;
-        
         // FINAL INITIALIZATION
         console.log('🚀 Sistema de gestión cargado correctamente');
         console.log('📋 Funciones disponibles: login, registro, CRUD, búsqueda');
