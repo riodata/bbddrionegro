@@ -2112,7 +2112,7 @@ app.get('/api/tables/:tableName/export-csv', auth.requireAuth, async (req, res) 
       .on('finish', resolve);
     });
 
-    // Endpoint para obtener información de exportación disponible
+// Endpoint para obtener información de exportación disponible
 app.get('/api/tables/:tableName/export-info', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
