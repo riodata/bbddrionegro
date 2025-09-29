@@ -1252,8 +1252,15 @@
 
         // Mostrar pantalla específica
         function showScreen(screenId) {
+            console.log(`📺 Mostrando pantalla: ${screenId}`);
             document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-            document.getElementById(screenId).classList.add('active');
+            const targetScreen = document.getElementById(screenId);
+            if (targetScreen) {
+                targetScreen.classList.add('active');
+                console.log(`✅ Pantalla ${screenId} activada`);
+            } else {
+                console.error(`❌ Pantalla ${screenId} no encontrada`);
+            }
         }
 
         // Mostrar alerta
@@ -2604,6 +2611,10 @@
         
         // Generar formulario de creación dinámicamente
        async function setupDynamicCreateForm() {
+            console.log('🔄 setupDynamicCreateForm iniciado');
+            console.log('📋 currentTableSchema:', currentTableSchema);
+            console.log('📋 Columnas disponibles:', currentTableSchema?.columns?.length);
+            
             if (!currentTableSchema || !currentTableSchema.columns) return;
             
             console.log('🔄 Configurando formulario dinámico de creación...');
@@ -2629,10 +2640,17 @@
             
             // Crear campos normales
             currentTableSchema.columns.forEach(column => {
-                const { column_name, data_type, is_nullable, is_primary_key } = column;
-                if (hiddenFormFields.includes(column_name)) {
+                const { column_name, data_type, is_nullable } = column;
+                
+                // ✅ CORRECCIÓN: Solo ocultar campos específicos, no todos los internos
+                if (hiddenFormFields.includes(column_name) || 
+                    column_name.toLowerCase() === 'orden') {
+                    console.log(`🚫 Ocultando campo: ${column_name}`);
                     return;
                 }
+                
+                console.log(`✅ Procesando campo: ${column_name}`);
+                            
                 const fieldDiv = document.createElement('div');
                 fieldDiv.className = 'form-group';
                 
