@@ -1614,7 +1614,7 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
   }
 });
 
-// Endpoint para descargar datos como CSV
+// Endpoint para descargar datos como CSV - CORREGIDO
 app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
@@ -1686,8 +1686,8 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
       });
     }
 
-    // Generar CSV
-    const csvData = generateCSV(result.rows, tableName);
+    // PASAR EL ESQUEMA A LA FUNCIÓN generateCSV
+    const csvData = generateCSVWithSchema(result.rows, tableName, tableSchema);
     
     // Configurar headers para descarga
     const fileName = `${tableName}_${new Date().toISOString().split('T')[0]}.csv`;
@@ -1711,20 +1711,89 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
   }
 });
 
-// Función auxiliar para generar CSV
+// Nueva función que recibe el esquema como parámetro
+function generateCSVWithSchema(data, tableName, tableSchema) {
+  if (!data || data.length === 0) {
+    return '';
+  }
+
+  let orderedColumns = [];
+  
+  if (tableSchema && tableSchema.columns) {
+    // Usar orden del esquema de la tabla, excluyendo campos internos
+    orderedColumns = tableSchema.columns
+      .map(col => col.column_name)
+      .filter(colName => {
+        // Verificar que la columna existe en los datos
+        return data[0].hasOwnProperty(colName) && 
+               !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName);
+      });
+    
+    // Agregar campos de JOIN al final si existen en los datos
+    if (data[0] && data[0].entidad_nombre) {
+      orderedColumns.push('entidad_nombre');
+    }
+    if (data[0] && data[0].entidad_localidad) {
+      orderedColumns.push('entidad_localidad');
+    }
+  } else {
+    // Fallback: usar todas las columnas del primer registro
+    orderedColumns = Object.keys(data[0]);
+  }
+
+  // Función para escapar valores CSV
+  function escapeCSV(value) {
+    if (value === null || value === undefined) return '';
+    
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }
+
+  // Crear header CON ORDEN PRESERVADO
+  const csvLines = [];
+  csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
+
+  // Agregar datos EN EL MISMO ORDEN
+  data.forEach(row => {
+    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
+    csvLines.push(csvRow);
+  });
+
+  return csvLines.join('\n');
+}
+
+// Función auxiliar para generar CSV - CORREGIDA
 function generateCSV(data, tableName) {
   if (!data || data.length === 0) {
     return '';
   }
 
-  // Obtener todas las columnas únicas
-  const allColumns = new Set();
-  data.forEach(row => {
-    Object.keys(row).forEach(key => allColumns.add(key));
-  });
-
-  const columns = Array.from(allColumns).sort();
+  // DEFINIR ORDEN DE COLUMNAS basado en el esquema y lógica de display
+  let orderedColumns = [];
   
+  // Intentar obtener esquema de la tabla actual
+  if (currentTableSchema && currentTableSchema.columns) {
+    // Usar orden del esquema de la tabla, excluyendo campos internos
+    orderedColumns = currentTableSchema.columns
+      .map(col => col.column_name)
+      .filter(colName => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName));
+    
+    // Agregar campos de JOIN al final si existen en los datos
+    if (data[0] && data[0].entidad_nombre) {
+      orderedColumns.push('entidad_nombre');
+    }
+    if (data[0] && data[0].entidad_localidad) {
+      orderedColumns.push('entidad_localidad');
+    }
+  } else {
+    // Fallback: usar todas las columnas del primer registro
+    const firstRecord = data[0];
+    orderedColumns = Object.keys(firstRecord);
+  }
+
   // Función para escapar valores CSV
   function escapeCSV(value) {
     if (value === null || value === undefined) return '';
@@ -1737,19 +1806,18 @@ function generateCSV(data, tableName) {
     return str;
   }
 
-  // Crear header
+  // Crear header CON ORDEN PRESERVADO
   const csvLines = [];
-  csvLines.push(columns.map(col => escapeCSV(col)).join(','));
+  csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
 
-  // Agregar datos
+  // Agregar datos EN EL MISMO ORDEN
   data.forEach(row => {
-    const csvRow = columns.map(col => escapeCSV(row[col] || '')).join(',');
+    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
     csvLines.push(csvRow);
   });
 
   return csvLines.join('\n');
 }
-
 // READ - Leer todos los registros
 app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   try {
