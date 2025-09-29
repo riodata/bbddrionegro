@@ -826,7 +826,7 @@
                             <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
                             <button onclick="loadAllGlobalRecords()" class="btn btn-warning">📋 Ver Todos</button>
                             <button onclick="refreshFields()" class="btn" title="Actualizar campos">🔄 Campos</button>
-                            <button onclick="downloadCSVFromCurrentData()" class="btn btn-success" title="Descargar resultados como CSV">📊 Descargar CSV</button>
+                            <button onclick="downloadSearchResultsAsCSV()" class="btn btn-success" title="Descargar resultados como CSV">📊 Descargar CSV</button>
                         </div>
                     </div>
                 </div>
@@ -4391,7 +4391,7 @@
             }
         }
 
-        // Función para generar y descargar CSV con orden de columnas preservado
+        // Función para generar y descargar CSV con orden de columnas preservado - CORREGIDA
         function downloadSearchResultsAsCSV() {
             if (!currentRecords || currentRecords.length === 0) {
                 showStatus('No hay registros para descargar', 'error');
@@ -4405,34 +4405,35 @@
                 let orderedColumns = [];
                 
                 if (currentTableSchema && currentTableSchema.columns) {
-                    // Usar el orden del esquema de la tabla
+                    // Usar el orden del esquema de la tabla, EXACTAMENTE como se muestra en pantalla
                     orderedColumns = currentTableSchema.columns
                         .map(col => col.column_name)
-                        .filter(colName => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName));
+                        .filter(colName => {
+                            // Solo incluir columnas que existen en los datos
+                            const hasColumn = currentRecords[0] && currentRecords[0].hasOwnProperty(colName);
+                            const isInternal = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName);
+                            return hasColumn && !isInternal;
+                        });
                     
-                    // Agregar campos de entidad al final si existen
-                    if (currentRecords[0] && currentRecords[0].entidad_nombre) {
-                        orderedColumns.push('entidad_nombre');
-                    }
-                    if (currentRecords[0] && currentRecords[0].entidad_localidad) {
-                        orderedColumns.push('entidad_localidad');
+                    // Agregar campos de entidad al final SOLO si existen y NO es tabla principal
+                    const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
+                    if (!isEntidadPrincipal) {
+                        if (currentRecords[0] && currentRecords[0].entidad_nombre) {
+                            orderedColumns.push('entidad_nombre');
+                        }
+                        if (currentRecords[0] && currentRecords[0].entidad_localidad) {
+                            orderedColumns.push('entidad_localidad');
+                        }
                     }
                 } else {
-                    // Fallback: usar las claves del primer registro (menos confiable)
+                    // Fallback: usar las claves del primer registro, excluyendo internos
                     const firstRecord = currentRecords[0];
                     orderedColumns = Object.keys(firstRecord)
                         .filter(key => !['_primaryKey', '_rowIndex'].includes(key));
                 }
         
-                // CREAR HEADERS en el orden correcto
-                const headers = orderedColumns.map(col => {
-                    // Formatear nombres de columnas para mejor legibilidad
-                    return col
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, l => l.toUpperCase())
-                        .replace(/De La/g, 'de la')
-                        .replace(/De /g, 'de ');
-                });
+                // CREAR HEADERS manteniendo el orden exacto
+                const headers = orderedColumns; // Mantener nombres originales
         
                 // CREAR FILAS DE DATOS manteniendo el orden
                 const csvRows = [];
@@ -4485,7 +4486,8 @@
                 console.error('Error generando CSV:', error);
                 showStatus('Error al generar el archivo CSV: ' + error.message, 'error');
             }
-        }        
+        }
+        
         // Función auxiliar para generar CSV desde datos JavaScript
         function generateCSVFromData(data) {
             if (!data || data.length === 0) {
