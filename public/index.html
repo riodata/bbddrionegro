@@ -3026,7 +3026,11 @@
                     
             // Resto de tipos de campo (código existente)
             switch (inputType) {
-                case 'number':
+               case 'number':
+                    // Solo para los 4 campos con decimales
+                    if (['activos', 'ingresos', 'resultado', 'fondo educacion'].includes(column_name.toLowerCase())) {
+                        return `<input type="number" name="${column_name}" id="${column_name}" ${required} step="0.01">`;
+                    }
                     return `<input type="number" name="${column_name}" id="${column_name}" ${required}>`;
                 case 'email':
                     return `<input type="email" name="${column_name}" id="${column_name}" ${required}>`;
