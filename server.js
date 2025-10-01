@@ -563,6 +563,7 @@ async function getAllEnumOptions() {
       'autoridades',
       'sino',
       'estado',
+      'estado_asamblea',
       'localidad',
       'organo_social',
       'libros_coope',
