@@ -3028,7 +3028,7 @@
             switch (inputType) {
                case 'number':
                     // Solo para los 4 campos con decimales
-                    if (['activos', 'ingresos', 'resultado', 'fondo educacion'].includes(column_name.toLowerCase())) {
+                    if (['activos', 'ingresos', 'resultado', 'fondo educacion', 'total ingresos', 'total egresos', 'estado situacion patrimonial'].includes(column_name.toLowerCase())) {
                         return `<input type="number" name="${column_name}" id="${column_name}" ${required} step="0.01">`;
                     }
                     return `<input type="number" name="${column_name}" id="${column_name}" ${required}>`;
