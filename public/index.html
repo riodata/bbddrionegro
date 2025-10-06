@@ -1033,37 +1033,42 @@
               'tipo_financ': 'tipo_financiamiento',
               'tipo_financiamiento': 'tipo_financiamiento',
               'tipo financiamiento': 'tipo_financiamiento',
-              'Tipo de financiamiento':'tipo_financiamiento',
+              'tipo de financiamiento': 'tipo_financiamiento',  // <- Agregado
+              'Tipo de financiamiento': 'tipo_financiamiento', // <- Ya existe
               'tipo asamblea': 'tipo_asamblea',
               'tipo': 'tipo',
               'subtipo': 'subtipo',
-              'estado':'estado',
+              'estado': 'estado',
               'estado asamblea': 'estado_asamblea',
               'renovacion autoridades': 'sino',
               'renovacion sindicatura': 'sino',
-              'Notificación de rendimiento': 'sino',
-              'notificación de rendimiento': 'sino',
-              'notificacion de rendimiento': 'sino',
-              'Rendido': 'sino',
+              'notificación de rendimiento': 'sino',          // <- Agregado (minúsculas)
+              'notificacion de rendimiento': 'sino',           // <- Agregado (sin tilde)
+              'Notificación de rendimiento': 'sino',          // <- Ya existe
+              'notificación rendimiento': 'sino',             // <- Agregado (sin "de")
+              'notificacion rendimiento': 'sino',             // <- Agregado (sin "de" ni tilde)
               'rendido': 'sino',
-              'Aprobado': 'sino',
+              'Rendido': 'sino',
               'aprobado': 'sino',
+              'Aprobado': 'sino',
               'órgano social': 'organo_social',
               'organo social': 'organo_social',
-              'libro': 'libros_coope', 
-              'nombre del libro': 'libros_mutuales',       // LibrosSociales_mutuales
-              'tipo de libro': 'tipo_libro',               // todas
-              'acción': 'acciones_coope',                  // IntimacionesPedidos_cooperativas
+              'libro': 'libros_coope',
+              'nombre del libro': 'libros_mutuales',
+              'tipo de libro': 'tipo_libro',
+              'acción': 'acciones_coope',
               'respuesta': 'sino',
               'legales': 'sino'
             };
-          
+            
             const result = enumFields[columnName.toLowerCase()] || null;
             if (result) {
               console.log(`🏷️ Campo '${columnName}' detectado como enum tipo '${result}'`);
+            } else {
+              console.log(`❓ Campo '${columnName}' NO detectado como enum`);
             }
             return result;
-          }        
+          }
             
           // Detectar si un campo debería ser radio buttons
           isBooleanField(columnName) {
