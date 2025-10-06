@@ -680,8 +680,112 @@
                 cursor: not-allowed;
             }
         }
+        .app-footer {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 20px 0;
+            margin-top: 40px;
+            border-top: 3px solid #4a90e2;
+        }
+        
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+        
+        .footer-logo {
+            flex: 0 0 auto;
+        }
+        
+        .footer-logo img {
+            height: 60px;
+            width: auto;
+            object-fit: contain;
+        }
+        
+        .footer-text {
+            flex: 1;
+            text-align: center;
+            margin: 0 30px;
+        }
+        
+        .footer-text p {
+            margin: 0 0 10px 0;
+            font-size: 1rem;
+            color: #ecf0f1;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .footer-links a {
+            color: #3498db;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+        
+        .footer-links a:hover {
+            color: #5dade2;
+            text-decoration: underline;
+        }
+        
+        .footer-links .separator {
+            color: #7f8c8d;
+        }
+        
+        @media (max-width: 768px) {
+            .footer-content {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+            
+            .footer-text {
+                margin: 0;
+            }
+            
+            .footer-logo img {
+                height: 50px;
+            }
+            
+            .footer-links {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .footer-links .separator {
+                display: none;
+            }
+        }
     </style>
 </head>
+<footer class="app-footer">
+    <div class="footer-content">
+        <div class="footer-logo">
+            <img src="/assets/logo-riodata.png" alt="Rio Data Análisis" class="logo-riodata">
+        </div>
+        <div class="footer-text">
+            <p>Desarrollado por <strong>Rio Data Análisis</strong> para el <strong>Gobierno de la Provincia de Río Negro</strong></p>
+            <div class="footer-links">
+                <a href="mailto:contacto@riodata.com.ar">📧 Rio Data</a>
+                <span class="separator">|</span>
+                <a href="mailto:sistemas@rionegro.gov.ar">📧 Gobierno RN</a>
+            </div>
+        </div>
+        <div class="footer-logo">
+            <img src="/assets/logo-rionegro.png" alt="Gobierno de Río Negro" class="logo-rionegro">
+        </div>
+    </div>
+</footer>
 <body>
     <div class="container">
         <div class="header">
