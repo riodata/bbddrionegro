@@ -1042,8 +1042,11 @@
               'renovacion autoridades': 'sino',
               'renovacion sindicatura': 'sino',
               'Notificación de rendimiento': 'sino',
+              'notificacion de rendimiento': 'sino',
               'Rendido': 'sino',
+              'rendido': 'sino',
               'Aprobado': 'sino',
+              'aprobado': 'sino',
               'órgano social': 'organo_social',
               'organo social': 'organo_social',
               'libro': 'libros_coope', 
@@ -1053,14 +1056,14 @@
               'respuesta': 'sino',
               'legales': 'sino'
             };
-            
+          
             const result = enumFields[columnName.toLowerCase()] || null;
             if (result) {
               console.log(`🏷️ Campo '${columnName}' detectado como enum tipo '${result}'`);
             }
             return result;
-          }
-        
+          }        
+            
           // Detectar si un campo debería ser radio buttons
           isBooleanField(columnName) {
             const booleanFields = [
