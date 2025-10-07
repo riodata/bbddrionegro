@@ -1037,58 +1037,47 @@
         let originalFormData = {};
         let currentEditingEntityName = '';
         
-
         // ========== FUNCIONES DE FORMATEO DE FECHAS ==========
-        
-        // Convertir fecha de cualquier formato a DD/MM/YYYY para visualización
+
+        // Convertir fecha de YYYY-MM-DD a DD/MM/YYYY para visualización
         function formatDateForDisplay(dateString) {
             if (!dateString) return '';
             
             try {
                 // Si ya está en formato DD/MM/YYYY, devolverla tal cual
-                if (dateString.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                if (dateString.includes('/')) {
                     return dateString;
                 }
                 
-                // Manejar formato ISO (YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss)
-                let date;
+                // Manejar formato ISO (YYYY-MM-DD o YYYY-MM-DDTHH:mm:ss o con timezone)
+                let dateOnly = dateString;
                 if (dateString.includes('T')) {
-                    // Formato timestamp - solo tomar la parte de la fecha
-                    date = new Date(dateString.split('T')[0] + 'T00:00:00');
-                } else {
-                    // Formato date simple
-                    date = new Date(dateString + 'T00:00:00');
+                    dateOnly = dateString.split('T')[0];
                 }
                 
-                // Verificar que la fecha es válida
-                if (isNaN(date.getTime())) {
-                    return dateString;
+                const parts = dateOnly.split('-');
+                if (parts.length === 3) {
+                    const year = parts[0];
+                    const month = parts[1];
+                    const day = parts[2];
+                    return `${day}/${month}/${year}`;
                 }
                 
-                const day = String(date.getDate()).padStart(2, '0');
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const year = date.getFullYear();
-                
-                return `${day}/${month}/${year}`;
+                return dateString;
             } catch (error) {
-                console.warn('Error formateando fecha:', dateString, error);
+                console.warn('Error formateando fecha:', error);
                 return dateString;
             }
         }
-    
+        
         // Convertir fecha de DD/MM/YYYY a YYYY-MM-DD para el input HTML
         function formatDateForInput(dateString) {
             if (!dateString) return '';
             
             try {
                 // Si ya está en formato YYYY-MM-DD, devolverla tal cual
-                if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    return dateString;
-                }
-                
-                // Si es timestamp ISO, extraer solo la fecha
-                if (dateString.includes('T')) {
-                    return dateString.split('T')[0];
+                if (dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+                    return dateString.split('T')[0]; // Remover hora si existe
                 }
                 
                 // Convertir DD/MM/YYYY a YYYY-MM-DD
@@ -1101,25 +1090,18 @@
                 
                 return dateString;
             } catch (error) {
-                console.warn('Error convirtiendo fecha para input:', dateString, error);
+                console.warn('Error convirtiendo fecha para input:', error);
                 return dateString;
             }
         }
-    
+        
         // Detectar si un campo es de tipo fecha
         function isDateField(dataType) {
             if (!dataType) return false;
             const lowerType = dataType.toLowerCase();
-            return lowerType === 'date' || 
-                   lowerType.includes('timestamp') ||
-                   lowerType.includes('datetime');
+            return lowerType.includes('date') || lowerType.includes('timestamp');
         }
-    
-        // Detectar si un campo es SOLO date (sin hora)
-        function isDateOnlyField(dataType) {
-            if (!dataType) return false;
-            return dataType.toLowerCase() === 'date';
-        }                
+                
         // ========== DROPDOWN MANAGER INTEGRADO ==========
         
         // Clase para manejar dropdowns con enums
@@ -4117,6 +4099,12 @@
         }
         
         function createUpdateInputElement(column, inputType, required, value, isPrimaryKey) {
+            // FORMATEAR FECHAS PARA INPUTS
+            let formattedValue = value;
+            if (isDateField(column.data_type) && value) {
+                formattedValue = formatDateForInput(value);
+            }
+            
             const commonAttributes = `
                 id="update-${column.column_name.replace(/\s+/g, '_')}" 
                 name="${column.column_name}" 
@@ -4125,25 +4113,19 @@
                 ${column.character_maximum_length ? `maxlength="${column.character_maximum_length}"` : ''}
             `;
             
-            // FORMATEAR FECHAS PARA INPUT
-            let displayValue = value;
-            if (inputType === 'date' && value) {
-                displayValue = formatDateForInput(value);
-            }
-            
             if (inputType === 'textarea') {
-                return `<textarea ${commonAttributes} rows="3">${displayValue}</textarea>`;
+                return `<textarea ${commonAttributes} rows="3">${formattedValue}</textarea>`;
             } else if (inputType === 'checkbox') {
                 return `<input type="checkbox" ${commonAttributes} ${value ? 'checked' : ''}>`;
             } else if (inputType === 'select') {
                 return `<select ${commonAttributes}>
                     <option value=""${!value ? ' selected' : ''}>Seleccionar...</option>
-                    <option value="${displayValue}"${value ? ' selected' : ''}>${displayValue}</option>
+                    <option value="${value}"${value ? ' selected' : ''}>${value}</option>
                 </select>`;
             } else {
-                return `<input type="${inputType}" ${commonAttributes} value="${displayValue || ''}">`;
+                return `<input type="${inputType}" ${commonAttributes} value="${formattedValue || ''}">`;
             }
-        }        
+        }
         
         function cancelUpdate() {
                 if (hasUnsavedChanges || hasFormChanged('updateForm')) {
@@ -4370,15 +4352,15 @@
                     .map(([key, value]) => {
                         const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                         
-                        // FORMATEAR FECHAS PARA VISUALIZACIÓN
-                        let displayValue = value || 'N/A';
+                        // FORMATEAR FECHAS
+                        let displayValue = value;
                         if (currentTableSchema && currentTableSchema.columns) {
                             const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
-                            if (columnInfo && isDateOnlyField(columnInfo.data_type) && value) {
+                            if (columnInfo && isDateField(columnInfo.data_type)) {
                                 displayValue = formatDateForDisplay(value);
                             }
                         }
-                                        
+                        
                         return `<strong>${displayKey}:</strong> ${displayValue || 'N/A'}`;
                     })
                     .join('<br>');
@@ -4468,11 +4450,10 @@
                     .filter(([key]) => !fieldsToExclude.includes(key))
                     .map(([key, value]) => {
                         const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        // FORMATEAR FECHAS PARA VISUALIZACIÓN
-                        let displayValue = value || 'N/A';
+                        let displayValue = value;
                         if (currentTableSchema && currentTableSchema.columns) {
                             const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
-                            if (columnInfo && isDateOnlyField(columnInfo.data_type) && value) {
+                            if (columnInfo && isDateField(columnInfo.data_type)) {
                                 displayValue = formatDateForDisplay(value);
                             }
                         }
@@ -4548,11 +4529,10 @@
                     .filter(([key]) => !fieldsToExclude.includes(key))
                     .map(([key, value]) => {
                         const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        // FORMATEAR FECHAS PARA VISUALIZACIÓN
-                        let displayValue = value || 'N/A';
+                        let displayValue = value;
                         if (currentTableSchema && currentTableSchema.columns) {
                             const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
-                            if (columnInfo && isDateOnlyField(columnInfo.data_type) && value) {
+                            if (columnInfo && isDateField(columnInfo.data_type)) {
                                 displayValue = formatDateForDisplay(value);
                             }
                         }
