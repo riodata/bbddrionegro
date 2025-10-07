@@ -3981,23 +3981,38 @@
 
         // UPDATE FUNCTIONS
         function editRecord(primaryKeyValue) {
-            console.log('Editando registro con clave primaria:', primaryKeyValue);
+            console.log('🔍 Editando registro con clave primaria:', primaryKeyValue);
+            console.log('📋 Esquema actual:', currentTableSchema);
+            console.log('📊 Registros disponibles:', currentRecords);
             
-            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
-            const record = currentRecords.find(r => 
-                (r[primaryKey] || r[`_${primaryKey}`] || r._primaryKey) == primaryKeyValue
-            );
-            
-            if (!record) {
-                showStatus(`No se encontró el registro con ${primaryKey}: ${primaryKeyValue}`, 'error');
+            if (!currentTableSchema || !currentTableSchema.primaryKey) {
+                showStatus('Error: No se pudo determinar la clave primaria de la tabla', 'error');
                 return;
             }
             
+            const primaryKey = currentTableSchema.primaryKey;
+            console.log('🔑 Primary key:', primaryKey);
+            
+            const record = currentRecords.find(r => {
+                const pk = r[primaryKey] || r[`_${primaryKey}`] || r._primaryKey;
+                console.log(`Comparando: ${pk} == ${primaryKeyValue}`);
+                return String(pk) === String(primaryKeyValue);
+            });
+            
+            if (!record) {
+                console.error('❌ No se encontró el registro');
+                console.log('Buscando con primaryKey:', primaryKey);
+                console.log('Valor buscado:', primaryKeyValue);
+                console.log('Registros disponibles:', currentRecords);
+                showStatus(`Error: No se encontró el registro con ${primaryKey}: ${primaryKeyValue}`, 'error');
+                return;
+            }
+            
+            console.log('✅ Registro encontrado:', record);
             currentEditingRow = record;
             showTab('update');
             showUpdateForm(record);
         }
-
         function showUpdateForm(record) {
             document.getElementById('update-form-container').style.display = 'block';
             document.getElementById('update-records-container').style.display = 'none';
@@ -4022,8 +4037,13 @@
                         return;
                     }
                     const fieldName = column.column_name;
-                    const value = record[fieldName] || '';
+                    let value = record[fieldName] || '';
+                    
+                    // ⭐ FORMATEAR FECHAS PARA EL INPUT
                     const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
+                    if (inputType === 'date' && value) {
+                        value = formatDateForInput(value);
+                    }
                     
                     const fieldId = `update-${fieldName.replace(/\s+/g, '_')}`;
                     const isRequired = column.is_nullable === 'NO' ? 'required' : '';
