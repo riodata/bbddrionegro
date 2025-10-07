@@ -3982,33 +3982,38 @@
         // UPDATE FUNCTIONS
         function editRecord(primaryKeyValue) {
             console.log('🔍 Editando registro con clave primaria:', primaryKeyValue);
-            console.log('📋 Esquema actual:', currentTableSchema);
-            console.log('📊 Registros disponibles:', currentRecords);
             
-            if (!currentTableSchema || !currentTableSchema.primaryKey) {
-                showStatus('Error: No se pudo determinar la clave primaria de la tabla', 'error');
-                return;
-            }
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            console.log('🔑 Primary key de la tabla:', primaryKey);
+            console.log('📊 Registros actuales:', currentRecords);
             
-            const primaryKey = currentTableSchema.primaryKey;
-            console.log('🔑 Primary key:', primaryKey);
-            
+            // CORREGIR: Buscar el registro usando múltiples estrategias
             const record = currentRecords.find(r => {
-                const pk = r[primaryKey] || r[`_${primaryKey}`] || r._primaryKey;
-                console.log(`Comparando: ${pk} == ${primaryKeyValue}`);
-                return String(pk) === String(primaryKeyValue);
+                // Estrategia 1: Buscar por primary key directo
+                if (r[primaryKey] == primaryKeyValue) return true;
+                
+                // Estrategia 2: Buscar por _primaryKey
+                if (r._primaryKey == primaryKeyValue) return true;
+                
+                // Estrategia 3: Buscar por id
+                if (r.id == primaryKeyValue) return true;
+                
+                return false;
             });
             
             if (!record) {
-                console.error('❌ No se encontró el registro');
-                console.log('Buscando con primaryKey:', primaryKey);
-                console.log('Valor buscado:', primaryKeyValue);
-                console.log('Registros disponibles:', currentRecords);
-                showStatus(`Error: No se encontró el registro con ${primaryKey}: ${primaryKeyValue}`, 'error');
+                console.error('❌ No se encontró registro. Primary Key buscado:', primaryKeyValue);
+                console.error('📋 Registros disponibles:', currentRecords.map(r => ({
+                    primaryKey: r[primaryKey],
+                    _primaryKey: r._primaryKey,
+                    id: r.id
+                })));
+                showStatus(`No se encontró el registro con ${primaryKey}: ${primaryKeyValue}`, 'error');
                 return;
             }
             
             console.log('✅ Registro encontrado:', record);
+            
             currentEditingRow = record;
             showTab('update');
             showUpdateForm(record);
@@ -4018,7 +4023,15 @@
             document.getElementById('update-records-container').style.display = 'none';
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
-            const primaryKeyValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey;
+            
+            // CORREGIR: Buscar el primaryKeyValue correctamente
+            let primaryKeyValue = record[primaryKey];
+            if (!primaryKeyValue) {
+                primaryKeyValue = record._primaryKey || record.id;
+            }
+            
+            console.log('📝 Primary Key:', primaryKey, 'Valor:', primaryKeyValue);
+            console.log('📝 Registro completo:', record);
             
             // Capturar nombre de la entidad que se está editando
             currentEditingEntityName = record.nombre || record.denominacion || record.razon_social || `ID ${primaryKeyValue}`;
@@ -4029,22 +4042,25 @@
             // Usar esquema dinámico para crear campos
             if (currentTableSchema && currentTableSchema.columns) {
                 currentTableSchema.columns.forEach(column => {
-                    const { column_name, data_type, is_nullable, is_primary_key } = column;
+                    const { column_name, data_type, is_nullable } = column;
+                    
                     if (hiddenFormFields.includes(column_name)) {
                         return;
                     }
                     if (column_name.toLowerCase() === 'orden') {
                         return;
                     }
+                    
                     const fieldName = column.column_name;
                     let value = record[fieldName] || '';
                     
-                    // ⭐ FORMATEAR FECHAS PARA EL INPUT
-                    const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
-                    if (inputType === 'date' && value) {
+                    // FORMATEAR FECHAS PARA INPUT
+                    if (isDateField(data_type) && value) {
                         value = formatDateForInput(value);
+                        console.log(`📅 Campo fecha ${fieldName}: ${record[fieldName]} -> ${value}`);
                     }
                     
+                    const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
                     const fieldId = `update-${fieldName.replace(/\s+/g, '_')}`;
                     const isRequired = column.is_nullable === 'NO' ? 'required' : '';
                     const isPrimaryKey = fieldName === primaryKey;
@@ -4069,8 +4085,7 @@
                 captureOriginalFormData('updateForm');
                 setupFormChangeListeners('updateForm');
             }, 100);
-        }
-        
+        }        
         // Función para configurar listeners de cambios en formulario
         function setupFormChangeListeners(formId) {
             const form = document.getElementById(formId);
