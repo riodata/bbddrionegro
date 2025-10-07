@@ -3614,9 +3614,17 @@
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
             const primaryKeyField = document.getElementById('update-primary-key');
+            
+            console.log('🔍 Debug Update:');
+            console.log('Primary Key Field:', primaryKeyField);
+            console.log('Primary Key Value:', primaryKeyField ? primaryKeyField.value : 'NO EXISTE');
+            console.log('Primary Key Name:', primaryKey);
+            console.log('Data a enviar:', data);
+            
             const primaryKeyValue = primaryKeyField ? primaryKeyField.value : null;
             
             if (!primaryKeyValue) {
+                console.error('❌ Primary key no encontrado en el formulario');
                 showStatus('Error: No se encontró el identificador del registro', 'error');
                 return;
             }
@@ -4018,32 +4026,40 @@
             showTab('update');
             showUpdateForm(record);
         }
+        
         function showUpdateForm(record) {
+            console.log('📋 showUpdateForm - Registro recibido:', record);
+            
             document.getElementById('update-form-container').style.display = 'block';
             document.getElementById('update-records-container').style.display = 'none';
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const primaryKeyValue = record[primaryKey] || record[`_${primaryKey}`] || record._primaryKey;
             
-            // CORREGIR: Buscar el primaryKeyValue correctamente
-            let primaryKeyValue = record[primaryKey];
-            if (!primaryKeyValue) {
-                primaryKeyValue = record._primaryKey || record.id;
-            }
-            
-            console.log('📝 Primary Key:', primaryKey, 'Valor:', primaryKeyValue);
-            console.log('📝 Registro completo:', record);
+            console.log('🔑 Primary Key:', primaryKey, 'Valor:', primaryKeyValue);
             
             // Capturar nombre de la entidad que se está editando
-            currentEditingEntityName = record.nombre || record.denominacion || record.razon_social || `ID ${primaryKeyValue}`;
+            currentEditingEntityName = record.nombre || record.denominacion || record.razon_social || record.Nombre || `ID ${primaryKeyValue}`;
             
             const fieldsContainer = document.getElementById('update-fields');
             fieldsContainer.innerHTML = '';
             
+            // IMPORTANTE: Guardar el ID en un campo hidden
+            const hiddenIdField = document.createElement('input');
+            hiddenIdField.type = 'hidden';
+            hiddenIdField.id = 'update-record-id';
+            hiddenIdField.name = primaryKey;
+            hiddenIdField.value = primaryKeyValue;
+            fieldsContainer.appendChild(hiddenIdField);
+            
+            console.log('✅ Campo hidden creado con ID:', primaryKeyValue);
+            
             // Usar esquema dinámico para crear campos
             if (currentTableSchema && currentTableSchema.columns) {
                 currentTableSchema.columns.forEach(column => {
-                    const { column_name, data_type, is_nullable } = column;
+                    const { column_name, data_type, is_nullable, is_primary_key } = column;
                     
+                    // Saltar campos que no deben mostrarse
                     if (hiddenFormFields.includes(column_name)) {
                         return;
                     }
@@ -4054,13 +4070,14 @@
                     const fieldName = column.column_name;
                     let value = record[fieldName] || '';
                     
-                    // FORMATEAR FECHAS PARA INPUT
-                    if (isDateField(data_type) && value) {
+                    // FORMATEAR FECHAS para el input (YYYY-MM-DD)
+                    if (isDateField(value, data_type)) {
                         value = formatDateForInput(value);
                         console.log(`📅 Campo fecha ${fieldName}: ${record[fieldName]} -> ${value}`);
                     }
                     
                     const inputType = getInputTypeFromDataType(column.data_type, column.column_name);
+                    
                     const fieldId = `update-${fieldName.replace(/\s+/g, '_')}`;
                     const isRequired = column.is_nullable === 'NO' ? 'required' : '';
                     const isPrimaryKey = fieldName === primaryKey;
@@ -4085,7 +4102,8 @@
                 captureOriginalFormData('updateForm');
                 setupFormChangeListeners('updateForm');
             }, 100);
-        }        
+        }
+        
         // Función para configurar listeners de cambios en formulario
         function setupFormChangeListeners(formId) {
             const form = document.getElementById(formId);
