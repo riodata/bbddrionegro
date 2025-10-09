@@ -392,10 +392,15 @@ async function getTableFields(tableName) {
 }
 
 // Función auxiliar mejorada para construir condiciones de búsqueda según el tipo de dato
-function buildSearchCondition(fieldName, searchText, dataType) {
+function buildSearchCondition(fieldName, searchText, dataType, tableName = null) {
     const lowerDataType = dataType.toLowerCase();
     
-    console.log(`🔍 Construyendo búsqueda para campo: ${fieldName}, tipo: ${dataType}, texto: ${searchText}`);
+    // ✅ CLAVE: Usar nombre calificado si se proporciona tableName
+    const qualifiedField = tableName 
+        ? `"${tableName}"."${fieldName}"` 
+        : `"${fieldName}"`;
+    
+    console.log(`🔍 Construyendo búsqueda para campo: ${fieldName}, tipo: ${dataType}, texto: ${searchText}, tabla: ${tableName || 'sin especificar'}`);
     
     // Números (enteros, decimales, etc.)
     if (lowerDataType.includes('int') || lowerDataType.includes('numeric') || 
@@ -406,13 +411,13 @@ function buildSearchCondition(fieldName, searchText, dataType) {
         if (isNaN(searchText)) {
             console.log(`📊 Número buscado como texto: ${searchText}`);
             return {
-                condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+                condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
                 value: `%${searchText}%`
             };
         } else {
             console.log(`📊 Búsqueda numérica exacta: ${searchText}`);
             return {
-                condition: `"${fieldName}" = $1`,
+                condition: `${qualifiedField} = $1`,
                 value: parseFloat(searchText)
             };
         }
@@ -423,7 +428,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
         const boolValue = ['true', '1', 'sí', 'si', 'yes', 't', 'verdadero'].includes(searchText.toLowerCase());
         console.log(`✅ Búsqueda booleana: ${searchText} -> ${boolValue}`);
         return {
-            condition: `"${fieldName}" = $1`,
+            condition: `${qualifiedField} = $1`,
             value: boolValue
         };
     }
@@ -433,7 +438,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
              lowerDataType.includes('time')) {
         console.log(`📅 Búsqueda de fecha como texto: ${searchText}`);
         return {
-            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -443,7 +448,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
              lowerDataType.includes('enum')) {
         console.log(`🏷️ Tipo USER-DEFINED detectado: ${dataType}`);
         return {
-            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -455,7 +460,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
              lowerDataType.includes('citext')) {
         console.log(`📝 Texto nativo: ${dataType}`);
         return {
-            condition: `"${fieldName}" ILIKE $1`,
+            condition: `${qualifiedField} ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -464,7 +469,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
     else if (lowerDataType.includes('array') || lowerDataType.includes('[]')) {
         console.log(`📋 Array detectado: ${dataType}`);
         return {
-            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -475,13 +480,13 @@ function buildSearchCondition(fieldName, searchText, dataType) {
         if (searchText.length === 36 && searchText.includes('-')) {
             // Búsqueda exacta si parece un UUID completo
             return {
-                condition: `"${fieldName}" = $1`,
+                condition: `${qualifiedField} = $1`,
                 value: searchText
             };
         } else {
             // Búsqueda parcial
             return {
-                condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+                condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
                 value: `%${searchText}%`
             };
         }
@@ -491,7 +496,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
     else if (lowerDataType.includes('json')) {
         console.log(`📄 JSON detectado: ${dataType}`);
         return {
-            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -500,7 +505,7 @@ function buildSearchCondition(fieldName, searchText, dataType) {
     else {
         console.log(`❓ Tipo desconocido, usando conversión segura: ${dataType}`);
         return {
-            condition: `CAST("${fieldName}" AS TEXT) ILIKE $1`,
+            condition: `CAST(${qualifiedField} AS TEXT) ILIKE $1`,
             value: `%${searchText}%`
         };
     }
@@ -1962,12 +1967,13 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
                 });
             }
 
-            const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+            // ✅ CAMBIO AQUÍ: Pasar tableName como cuarto parámetro
+            const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type, tableName);
             query += ` WHERE ${searchCondition.condition}`;
             queryParams.push(searchCondition.value);
         }
 
-        query += ` ORDER BY "${primaryKey}" ASC`;
+        query += ` ORDER BY "${tableName}"."${primaryKey}" ASC`; // ✅ También calificar ORDER BY
         
         console.log(`📋 Query final: ${query}`);
         console.log(`📋 Parámetros: ${JSON.stringify(queryParams)}`);
@@ -2000,6 +2006,7 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
         });
     }
 });
+
 app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
   try {
     const { tableName } = req.params;
