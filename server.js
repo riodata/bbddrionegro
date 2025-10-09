@@ -1673,7 +1673,7 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
         const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
         
         if (fieldInfo) {
-            const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type);
+            const searchCondition = buildSearchCondition(searchField, searchText, fieldInfo.data_type, tableName);
             query += ` WHERE ${searchCondition.condition}`;
             queryParams.push(searchCondition.value);
         }
