@@ -2653,6 +2653,7 @@
 
         // Función para marcar que hay cambios sin guardar
         function markAsChanged() {
+            userHasInteracted = true;
             hasUnsavedChanges = true;
         }
         
@@ -2661,6 +2662,8 @@
             hasUnsavedChanges = false;
             originalFormData = {};
             currentEditingEntityName = '';
+            userHasInteracted = false;
+            formModified = false;
         }
         
         // Función para capturar datos originales del formulario
@@ -2803,7 +2806,7 @@
             
             const fieldsContainer = document.getElementById('create-fields');
             fieldsContainer.innerHTML = '';
-
+    
             // AGREGAR CAMPO ENTIDAD AL INICIO solo si NO es tabla de entidades y tiene campos de matrícula
             const isEntidadTable = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
             const hasMatriculaField = currentTableSchema.columns.some(col => 
@@ -2849,7 +2852,7 @@
                 
                 fieldsContainer.appendChild(fieldDiv);
             });
-            
+                
             // Poblar dropdowns después de crear el formulario
             setTimeout(async () => {
                 try {
@@ -2860,9 +2863,16 @@
                     console.error('❌ Error poblando dropdowns de enum:', error);
                 }
                 
-                setupFormChangeListeners('createForm');
-                hasUnsavedChanges = false;
-            }, 200);
+                // IMPORTANTE: Configurar listeners DESPUÉS de poblar dropdowns
+                // Y después de un pequeño delay adicional
+                setTimeout(() => {
+                    setupFormChangeListeners('createForm');
+                    userHasInteracted = false; // Asegurar que empieza en false
+                    hasUnsavedChanges = false;
+                    console.log('✅ Listeners configurados - Estado inicial limpio');
+                }, 100);
+                
+            }, 300); // Aumentado de 200 a 300ms
         }
 
         // Función auxiliar para detectar el nombre del campo matrícula
@@ -3286,7 +3296,10 @@
             return 'text'; // Por defecto
         }
 
-        // Función para capturar los valores iniciales del formulario
+// Variable global mejorada
+let userHasInteracted = false; // Nueva variable para rastrear interacción real del usuario
+
+        // Función mejorada para capturar valores iniciales
         function captureInitialFormValues(formId) {
             initialFormValues = {};
             const form = document.getElementById(formId);
@@ -3305,11 +3318,19 @@
                 }
             });
             
+            // Resetear flag de interacción
+            userHasInteracted = false;
+            
             console.log('📸 Valores iniciales capturados:', initialFormValues);
         }
         
-                // Función mejorada para detectar si el formulario ha sido modificado realmente
+        // Función mejorada para detectar cambios REALES
         function hasFormBeenModified(formId) {
+            // Si el usuario no ha interactuado, no hay cambios
+            if (!userHasInteracted) {
+                return false;
+            }
+            
             const form = document.getElementById(formId);
             if (!form) return false;
             
@@ -3347,35 +3368,72 @@
             
             return false;
         }
-
-        // Configurar listeners para detectar cambios en el formulario
+        
+         // Función mejorada para configurar listeners SOLO para interacción del usuario
         function setupFormChangeListeners(formId) {
             const form = document.getElementById(formId);
             if (!form) return;
             
             // Resetear estado
             formModified = false;
+            userHasInteracted = false;
             
             // Capturar valores iniciales
             captureInitialFormValues(formId);
             
-            // Agregar listeners a todos los inputs
+            // Remover listeners anteriores para evitar duplicados
             const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
             inputs.forEach(input => {
-                // Usar 'input' event para detectar cambios en tiempo real
-                input.addEventListener('input', () => {
-                    formModified = hasFormBeenModified(formId);
-                });
-                
-                // Usar 'change' event para selects y radios
-                input.addEventListener('change', () => {
-                    formModified = hasFormBeenModified(formId);
-                });
+                // Clonar el elemento para remover todos los event listeners
+                const newInput = input.cloneNode(true);
+                input.parentNode.replaceChild(newInput, input);
+            });
+            
+            // Volver a obtener los inputs después de clonarlos
+            const cleanInputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            
+            cleanInputs.forEach(input => {
+                // Para inputs de texto y textareas - usar 'input' event
+                if (input.tagName === 'INPUT' && (input.type === 'text' || input.type === 'number' || input.type === 'email' || input.type === 'tel' || input.type === 'date')) {
+                    input.addEventListener('input', handleUserInput);
+                    // También escuchar 'change' para detectar autocompletado del navegador
+                    input.addEventListener('change', handleUserChange);
+                }
+                // Para selects y radios - usar 'change' event
+                else if (input.tagName === 'SELECT' || input.type === 'radio' || input.type === 'checkbox') {
+                    input.addEventListener('change', handleUserChange);
+                }
+                // Para textareas
+                else if (input.tagName === 'TEXTAREA') {
+                    input.addEventListener('input', handleUserInput);
+                }
             });
             
             console.log('👂 Listeners de cambio configurados para el formulario:', formId);
         }
 
+        // Handler para eventos 'input' (typing)
+        function handleUserInput(event) {
+            // Solo marcar si es un evento confiable (del usuario, no programático)
+            if (event.isTrusted) {
+                userHasInteracted = true;
+                formModified = hasFormBeenModified(event.target.closest('form').id);
+                console.log('⌨️ Usuario escribió en:', event.target.name, '- Modificado:', formModified);
+            }
+        }
+        
+        // Handler para eventos 'change' (select, radio, checkbox)
+        function handleUserChange(event) {
+            // Solo marcar si es un evento confiable (del usuario, no programático)
+            if (event.isTrusted) {
+                userHasInteracted = true;
+                formModified = hasFormBeenModified(event.target.closest('form').id);
+                console.log('🔘 Usuario cambió:', event.target.name, '- Modificado:', formModified);
+            }
+        }
+
+
+        
         // Cargar campos para búsqueda global SIN mostrar el tipo
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) {
@@ -4120,7 +4178,7 @@
             showTab('update');
             showUpdateForm(record);
         }
-        
+                
         function showUpdateForm(record) {
             console.log('📋 showUpdateForm - Registro recibido:', record);
             
@@ -4146,8 +4204,7 @@
             hiddenIdField.value = primaryKeyValue;
             fieldsContainer.appendChild(hiddenIdField);
             
-            console.log('✅ Campo hidden creado con ID:', primaryKeyValue);
-            
+            console.log('✅ Campo hidden creado con ID:', primaryKeyValue);            
             // Usar esquema dinámico para crear campos
             if (currentTableSchema && currentTableSchema.columns) {
                 currentTableSchema.columns.forEach(column => {
@@ -4193,10 +4250,15 @@
             
             // Capturar datos originales después de un breve delay
             setTimeout(() => {
-                captureOriginalFormData('updateForm');
-                setupFormChangeListeners('updateForm');
-            }, 100);
-        }
+                    captureOriginalFormData('updateForm');
+                    
+                    setTimeout(() => {
+                        setupFormChangeListeners('updateForm');
+                        userHasInteracted = false; // Asegurar que empieza en false
+                        console.log('✅ Formulario de actualización listo - Estado inicial limpio');
+                    }, 100);
+                }, 200);
+            }
         
         // Función para configurar listeners de cambios en formulario
         function setupFormChangeListeners(formId) {
@@ -4411,6 +4473,11 @@
         }
 
         function hasCreateFormData() {
+            // Si el usuario no ha interactuado, no hay datos
+            if (!userHasInteracted) {
+                return false;
+            }
+            
             const form = document.getElementById('createForm');
             if (!form) return false;
             
@@ -4422,7 +4489,6 @@
             }
             return false;
         }
-
         function viewAllRecords() {
             clearUnsavedChanges();
             showTab('search');
