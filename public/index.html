@@ -4277,15 +4277,16 @@
             const fieldsContainer = document.getElementById('update-fields');
             fieldsContainer.innerHTML = '';
             
-            // IMPORTANTE: Guardar el ID en un campo hidden
+            // ✅ CORRECCIÓN: Usar setAttribute para asegurar que el name se aplique correctamente
             const hiddenIdField = document.createElement('input');
             hiddenIdField.type = 'hidden';
-            hiddenIdField.id = 'update-record-id';
-            hiddenIdField.name = primaryKey;
+            hiddenIdField.id = 'update-primary-key';
+            hiddenIdField.setAttribute('name', primaryKey);  // ✅ Usar setAttribute
             hiddenIdField.value = primaryKeyValue;
             fieldsContainer.appendChild(hiddenIdField);
             
-            console.log('✅ Campo hidden creado con ID:', primaryKeyValue);            
+            console.log('✅ Campo hidden creado con ID:', primaryKeyValue, 'y name:', primaryKey);
+            
             // Usar esquema dinámico para crear campos
             if (currentTableSchema && currentTableSchema.columns) {
                 currentTableSchema.columns.forEach(column => {
@@ -4303,7 +4304,7 @@
                     let value = record[fieldName] || '';
                     
                     // FORMATEAR FECHAS para el input (YYYY-MM-DD)
-                    if (isDateField(value, data_type)) {
+                    if (isDateField(data_type) && value) {
                         value = formatDateForInput(value);
                         console.log(`📅 Campo fecha ${fieldName}: ${record[fieldName]} -> ${value}`);
                     }
@@ -4337,10 +4338,10 @@
                     console.log('🎯 Configurando listeners para formulario de actualización...');
                     setupFormChangeListeners('updateForm');
                     console.log('✅ Formulario de actualización listo');
-                }, 200);
-            }, 300);
+                }, 100);
+            }, 200);
         }
-                
+                        
         // Función para configurar listeners de cambios en formulario
         function setupFormChangeListeners(formId) {
             const form = document.getElementById(formId);
