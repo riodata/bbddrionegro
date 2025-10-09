@@ -897,16 +897,60 @@
                 <div id="global-search" class="search-container" style="display: none;">
                     <h3>🔍 Buscar Registros</h3>
                     <div class="search-row">
-                        <div class="search-field">
-                            <label for="globalSearchText">Texto a buscar:</label>
-                            <input type="text" id="globalSearchText" placeholder="Ingresa el texto a buscar...">
-                        </div>
                         <div class="search-dropdown">
                             <label for="globalSearchField">Campo:</label>
-                            <select id="globalSearchField">
+                            <select id="globalSearchField" onchange="handleSearchFieldChange()">
                                 <option value="">Selecciona un campo...</option>
                             </select>
                         </div>
+                        
+                        <!-- Input de texto estándar -->
+                        <div class="search-field" id="search-text-container">
+                            <label for="globalSearchText">Texto a buscar:</label>
+                            <input type="text" id="globalSearchText" placeholder="Ingresa el texto a buscar...">
+                        </div>
+                        
+                        <!-- ✅ NUEVO: Búsqueda por rango de fechas -->
+                        <div class="search-field" id="search-date-container" style="display: none;">
+                            <label>Rango de fechas:</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <div style="flex: 1;">
+                                    <label for="globalSearchDateFrom" style="font-size: 0.85rem; margin-bottom: 4px;">Desde:</label>
+                                    <input type="date" id="globalSearchDateFrom" style="width: 100%;">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label for="globalSearchDateTo" style="font-size: 0.85rem; margin-bottom: 4px;">Hasta:</label>
+                                    <input type="date" id="globalSearchDateTo" style="width: 100%;">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ✅ NUEVO: Autocompletado para campo "Entidad" -->
+                        <div class="search-field" id="search-entity-container" style="display: none;">
+                            <label for="globalSearchEntity">Entidad:</label>
+                            <div style="position: relative;">
+                                <input 
+                                    type="text" 
+                                    id="globalSearchEntity" 
+                                    placeholder="Escribe el nombre de la entidad..."
+                                    autocomplete="off"
+                                    oninput="handleGlobalEntityAutocomplete(this)"
+                                    onblur="handleGlobalEntityBlur(this)"
+                                    onkeydown="handleGlobalEntityKeydown(event)"
+                                    style="width: 100%; padding-right: 40px;"
+                                />
+                                <div id="clear-global-entity" 
+                                     style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;"
+                                     onclick="clearGlobalEntityAutocomplete()">
+                                    ✕
+                                </div>
+                                <div id="global-entity-dropdown" 
+                                     style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #4a90e2; border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none;">
+                                </div>
+                            </div>
+                            <input type="hidden" id="selected_global_entity_id" />
+                        </div>
+                        
                         <div class="search-buttons">
                             <button onclick="performGlobalSearch()" class="btn">🔍 Buscar</button>
                             <button onclick="clearGlobalSearch()" class="btn btn-clear">🧹 Limpiar</button>
@@ -3510,7 +3554,7 @@
 
 
         
-        // Cargar campos para búsqueda global SIN mostrar el tipo
+        // Cargar campos para búsqueda global - MEJORADO
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) {
                 console.log('⚠️ No hay esquema de tabla disponible para cargar campos');
@@ -3522,14 +3566,21 @@
                 if (select) {
                     select.innerHTML = '<option value="">Selecciona un campo...</option>';
                     
-                    currentTableSchema.columns.forEach(column => {
-                        // SOLO MOSTRAR EL NOMBRE DE LA COLUMNA, SIN EL TIPO
-                        const displayName = column.column_name;
-                        select.innerHTML += `<option value="${column.column_name}">${displayName}</option>`;
-                    });
+                    // ✅ CAMPOS A EXCLUIR DE LAS BÚSQUEDAS
+                    const excludedFields = ['id', 'created_at', 'updated_at', 'orden'];
                     
-                    console.log('✅ Campos cargados:', currentTableSchema.columns.map(c => c.column_name));
-                    availableFields = currentTableSchema.columns.map(col => col.column_name);
+                    currentTableSchema.columns
+                        .filter(column => !excludedFields.includes(column.column_name.toLowerCase()))
+                        .forEach(column => {
+                            const displayName = column.column_name;
+                            // Agregar data-type para detectar campos de fecha
+                            select.innerHTML += `<option value="${column.column_name}" data-type="${column.data_type}">${displayName}</option>`;
+                        });
+                    
+                    console.log('✅ Campos cargados (excluidos: id, created_at, updated_at, orden)');
+                    availableFields = currentTableSchema.columns
+                        .filter(col => !excludedFields.includes(col.column_name.toLowerCase()))
+                        .map(col => col.column_name);
                 }
             } catch (error) {
                 console.error('Error loading fields for search:', error);
@@ -4057,21 +4108,316 @@
             const tabs = { 'create': 1, 'search': 2, 'update': 3, 'delete': 4 };
             return tabs[tabName] || 1;
         }
+
+        // Variables globales para autocompletado de entidad en búsqueda
+        let globalEntityMatches = [];
+        let globalEntitySelectedIndex = -1;
         
-        // GLOBAL SEARCH
-         async function performGlobalSearch() {
-            const searchText = document.getElementById('globalSearchText').value.trim();
+        // Manejar cambio de campo de búsqueda
+        async function handleSearchFieldChange() {
+            const select = document.getElementById('globalSearchField');
+            const selectedOption = select.options[select.selectedIndex];
+            const fieldType = selectedOption.getAttribute('data-type');
+            const fieldName = select.value;
+            
+            // Contenedores
+            const textContainer = document.getElementById('search-text-container');
+            const dateContainer = document.getElementById('search-date-container');
+            const entityContainer = document.getElementById('search-entity-container');
+            
+            // Ocultar todos
+            textContainer.style.display = 'none';
+            dateContainer.style.display = 'none';
+            entityContainer.style.display = 'none';
+            
+            if (!fieldName) {
+                textContainer.style.display = 'block';
+                return;
+            }
+            
+            // Determinar tipo de búsqueda
+            const lowerFieldName = fieldName.toLowerCase();
+            
+            // ✅ SI ES CAMPO DE ENTIDAD O NOMBRE DE ENTIDAD
+            if (lowerFieldName.includes('entidad') || 
+                lowerFieldName === 'nombre de la entidad' ||
+                lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales')) {
+                
+                entityContainer.style.display = 'block';
+                
+                // Cargar entidades según el tipo de tabla
+                await loadGlobalEntityData();
+                
+            // ✅ SI ES CAMPO DE FECHA
+            } else if (isDateField(fieldType)) {
+                dateContainer.style.display = 'block';
+                
+                // Limpiar campos de fecha
+                document.getElementById('globalSearchDateFrom').value = '';
+                document.getElementById('globalSearchDateTo').value = '';
+                
+            // ✅ BÚSQUEDA DE TEXTO NORMAL
+            } else {
+                textContainer.style.display = 'block';
+                document.getElementById('globalSearchText').value = '';
+            }
+        }
+        
+        // Cargar datos de entidades para búsqueda global
+        async function loadGlobalEntityData() {
+            try {
+                let endpoint = '';
+                
+                // Determinar qué tipo de entidades cargar
+                if (currentTable && (currentTable.toLowerCase().includes('cooperativ') || currentTable === 'entidades_cooperativas')) {
+                    endpoint = '/api/entidades/cooperativas';
+                } else if (currentTable && (currentTable.toLowerCase().includes('mutual') || currentTable === 'entidades_mutuales')) {
+                    endpoint = '/api/entidades/mutuales';
+                } else {
+                    // Por defecto, cargar ambas
+                    endpoint = '/api/entidades/todas';
+                }
+                
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    window.globalEntidadesSearch = result.data || [];
+                    console.log('✅ Entidades cargadas para búsqueda:', window.globalEntidadesSearch.length);
+                } else {
+                    window.globalEntidadesSearch = [];
+                }
+            } catch (error) {
+                console.error('❌ Error cargando entidades para búsqueda:', error);
+                window.globalEntidadesSearch = [];
+            }
+        }
+        
+        // Manejar autocompletado de entidad en búsqueda global
+        function handleGlobalEntityAutocomplete(input) {
+            const query = input.value.toLowerCase().trim();
+            const dropdown = document.getElementById('global-entity-dropdown');
+            const clearBtn = document.getElementById('clear-global-entity');
+            
+            clearBtn.style.display = query ? 'block' : 'none';
+            
+            if (query.length < 2) {
+                dropdown.style.display = 'none';
+                globalEntitySelectedIndex = -1;
+                globalEntityMatches = [];
+                return;
+            }
+            
+            if (!window.globalEntidadesSearch || window.globalEntidadesSearch.length === 0) {
+                dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">Cargando entidades...</div>';
+                dropdown.style.display = 'block';
+                loadGlobalEntityData().then(() => handleGlobalEntityAutocomplete(input));
+                return;
+            }
+            
+            // Filtrar entidades
+            const matches = window.globalEntidadesSearch.filter(entidad => 
+                entidad.nombre.toLowerCase().includes(query)
+            );
+            
+            globalEntityMatches = matches;
+            globalEntitySelectedIndex = -1;
+            
+            if (matches.length === 0) {
+                dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">No se encontraron coincidencias</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            // Mostrar resultados
+            dropdown.innerHTML = matches.map((entidad, index) => `
+                <div class="global-entity-item" 
+                     data-index="${index}"
+                     data-id="${entidad.id}"
+                     data-nombre="${entidad.nombre}"
+                     onclick="selectGlobalEntity(${index})"
+                     style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; ${index === globalEntitySelectedIndex ? 'background-color: #f0f8ff;' : ''}"
+                     onmouseover="this.style.backgroundColor='#f0f8ff'"
+                     onmouseout="this.style.backgroundColor='${index === globalEntitySelectedIndex ? '#f0f8ff' : 'white'}'">
+                    <div style="font-weight: bold; color: #4a90e2;">${highlightMatch(entidad.nombre, query)}</div>
+                    <div style="font-size: 0.9em; color: #6c757d;">
+                        ${entidad.matricula ? `Matrícula: ${entidad.matricula}` : ''} 
+                        ${entidad.localidad ? `| Localidad: ${entidad.localidad}` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            dropdown.style.display = 'block';
+        }
+        
+        // Seleccionar entidad en búsqueda global
+        function selectGlobalEntity(index) {
+            const selectedEntity = globalEntityMatches[index];
+            const input = document.getElementById('globalSearchEntity');
+            const dropdown = document.getElementById('global-entity-dropdown');
+            const hiddenId = document.getElementById('selected_global_entity_id');
+            
+            input.value = selectedEntity.nombre;
+            hiddenId.value = selectedEntity.nombre; // Guardar el nombre para buscar
+            dropdown.style.display = 'none';
+            
+            console.log('✅ Entidad seleccionada para búsqueda:', selectedEntity.nombre);
+        }
+        
+        // Manejar teclado en autocompletado global
+        function handleGlobalEntityKeydown(event) {
+            const dropdown = document.getElementById('global-entity-dropdown');
+            
+            if (dropdown.style.display === 'none') return;
+            
+            switch (event.key) {
+                case 'ArrowDown':
+                    event.preventDefault();
+                    globalEntitySelectedIndex = Math.min(globalEntitySelectedIndex + 1, globalEntityMatches.length - 1);
+                    updateGlobalEntitySelection();
+                    break;
+                    
+                case 'ArrowUp':
+                    event.preventDefault();
+                    globalEntitySelectedIndex = Math.max(globalEntitySelectedIndex - 1, -1);
+                    updateGlobalEntitySelection();
+                    break;
+                    
+                case 'Enter':
+                    event.preventDefault();
+                    if (globalEntitySelectedIndex >= 0) {
+                        selectGlobalEntity(globalEntitySelectedIndex);
+                    }
+                    break;
+                    
+                case 'Escape':
+                    dropdown.style.display = 'none';
+                    globalEntitySelectedIndex = -1;
+                    break;
+            }
+        }
+        
+        // Actualizar selección visual
+        function updateGlobalEntitySelection() {
+            const items = document.querySelectorAll('.global-entity-item');
+            items.forEach((item, index) => {
+                if (index === globalEntitySelectedIndex) {
+                    item.style.backgroundColor = '#f0f8ff';
+                    item.scrollIntoView({ block: 'nearest' });
+                } else {
+                    item.style.backgroundColor = 'white';
+                }
+            });
+        }
+        
+        // Manejar blur
+        function handleGlobalEntityBlur(input) {
+            setTimeout(() => {
+                const dropdown = document.getElementById('global-entity-dropdown');
+                dropdown.style.display = 'none';
+            }, 200);
+        }
+        
+        // Limpiar autocompletado
+        function clearGlobalEntityAutocomplete() {
+            const input = document.getElementById('globalSearchEntity');
+            const dropdown = document.getElementById('global-entity-dropdown');
+            const clearBtn = document.getElementById('clear-global-entity');
+            const hiddenId = document.getElementById('selected_global_entity_id');
+            
+            if (input) input.value = '';
+            if (hiddenId) hiddenId.value = '';
+            if (dropdown) dropdown.style.display = 'none';
+            if (clearBtn) clearBtn.style.display = 'none';
+            
+            globalEntitySelectedIndex = -1;
+            globalEntityMatches = [];
+        }
+        
+        // GLOBAL SEARCH - VERSIÓN MEJORADA
+        async function performGlobalSearch() {
             const searchField = document.getElementById('globalSearchField').value;
             
-            if (!searchText || !searchField) {
-                showStatus('Por favor, ingresa texto y selecciona un campo para buscar', 'error');
+            if (!searchField) {
+                showStatus('Por favor, selecciona un campo para buscar', 'error');
                 return;
+            }
+            
+            // Determinar tipo de búsqueda
+            const selectedOption = document.getElementById('globalSearchField').options[document.getElementById('globalSearchField').selectedIndex];
+            const fieldType = selectedOption.getAttribute('data-type');
+            const lowerFieldName = searchField.toLowerCase();
+            
+            let searchText = '';
+            let searchParams = {};
+            
+            // ✅ BÚSQUEDA POR ENTIDAD
+            if (lowerFieldName.includes('entidad') || 
+                lowerFieldName === 'nombre de la entidad' ||
+                (lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales'))) {
+                
+                const entityInput = document.getElementById('globalSearchEntity').value.trim();
+                const selectedEntityId = document.getElementById('selected_global_entity_id').value;
+                
+                searchText = selectedEntityId || entityInput;
+                
+                if (!searchText) {
+                    showStatus('Por favor, selecciona o escribe el nombre de una entidad', 'error');
+                    return;
+                }
+                
+            // ✅ BÚSQUEDA POR RANGO DE FECHAS
+            } else if (isDateField(fieldType)) {
+                const dateFrom = document.getElementById('globalSearchDateFrom').value;
+                const dateTo = document.getElementById('globalSearchDateTo').value;
+                
+                if (!dateFrom && !dateTo) {
+                    showStatus('Por favor, selecciona al menos una fecha', 'error');
+                    return;
+                }
+                
+                // Construir búsqueda de rango
+                searchParams = {
+                    searchField: searchField,
+                    dateFrom: dateFrom,
+                    dateTo: dateTo,
+                    searchType: 'date-range'
+                };
+                
+            // ✅ BÚSQUEDA DE TEXTO NORMAL
+            } else {
+                searchText = document.getElementById('globalSearchText').value.trim();
+                
+                if (!searchText) {
+                    showStatus('Por favor, ingresa texto para buscar', 'error');
+                    return;
+                }
             }
         
             try {
                 showStatus('Buscando...', 'info');
                 
-                const url = `${getDynamicApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                let url;
+                
+                if (searchParams.searchType === 'date-range') {
+                    // Búsqueda por rango de fechas
+                    const params = new URLSearchParams({
+                        searchField: searchParams.searchField,
+                        ...(searchParams.dateFrom && { dateFrom: searchParams.dateFrom }),
+                        ...(searchParams.dateTo && { dateTo: searchParams.dateTo }),
+                        searchType: 'date-range'
+                    });
+                    url = `${getDynamicApiUrl('search')}?${params.toString()}`;
+                } else {
+                    // Búsqueda normal
+                    url = `${getDynamicApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
+                }
+                
                 const response = await authenticatedFetch(url);
                 const result = await response.json();
         
@@ -4110,17 +4456,29 @@
         }
         
         function clearGlobalSearch() {
+            // Limpiar campo de texto
             document.getElementById('globalSearchText').value = '';
+            
+            // Limpiar campos de fecha
+            document.getElementById('globalSearchDateFrom').value = '';
+            document.getElementById('globalSearchDateTo').value = '';
+            
+            // Limpiar campo de entidad
+            clearGlobalEntityAutocomplete();
+            
+            // Limpiar selector de campo
             document.getElementById('globalSearchField').value = '';
             
+            // Mostrar solo campo de texto
+            document.getElementById('search-text-container').style.display = 'block';
+            document.getElementById('search-date-container').style.display = 'none';
+            document.getElementById('search-entity-container').style.display = 'none';
+            
             currentRecords = [];
-            // Limpiar todas las pestañas
             clearAllTabResults();
             
             showStatus('Búsqueda limpiada - Realiza una nueva búsqueda para ver registros', 'info');
-        }
-            
-
+        }    
 
         function clearAllTabResults() {
             // Limpiar pestaña de búsqueda
