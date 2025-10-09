@@ -942,11 +942,10 @@
                             <p>El registro se ha guardado correctamente en la base de datos.</p>
                             <div>
                                 <button onclick="createAnotherRecord()" class="btn btn-success">➕ Crear otro registro</button>
-                                <button onclick="viewAllRecords()" class="btn btn-warning">📋 Ver registros cargados</button>
+                                <button onclick="viewCreatedRecord()" class="btn btn-warning">👁️ Ver el registro</button>
                             </div>
                         </div>
                     </div>
-                </div>
 
                 <div id="search" class="tab-content">
                     <h2 id="search-title">Buscar Registros</h2>
@@ -3708,7 +3707,10 @@
             ]);
         }
 
-        // Manejar formulario de creación - VERSIÓN CORREGIDA
+        // Variable global para almacenar el último registro creado
+        let lastCreatedRecord = null;
+        
+        // Manejar formulario de creación - VERSIÓN MEJORADA
         async function handleCreateForm(e) {
             e.preventDefault();
         
@@ -3796,6 +3798,9 @@
                 const result = await response.json();
                 
                 if (result.success) {
+                    // ✅ GUARDAR EL REGISTRO CREADO
+                    lastCreatedRecord = result.data;
+                    
                     showCreateSuccess();
                     showStatus('✅ Registro creado exitosamente', 'success');
                     // Limpiar estado de cambios al guardar exitosamente
@@ -4546,7 +4551,194 @@
             document.getElementById('create-success-container').style.display = 'none';
         }
 
+                // Función para mostrar el registro recién creado
+        function viewCreatedRecord() {
+            if (!lastCreatedRecord) {
+                showStatus('No hay registro para mostrar', 'error');
+                return;
+            }
+            
+            // Ocultar el mensaje de éxito
+            document.getElementById('create-success-container').style.display = 'none';
+            document.getElementById('create-form-container').style.display = 'none';
+            
+            // Crear y mostrar tarjeta del registro
+            showRecordCard(lastCreatedRecord);
+        }
+
+        // Función para mostrar tarjeta bonita del registro creado
+        function showRecordCard(record) {
+            const tableName = currentTableSchema?.displayName || currentTable || 'Registro';
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const primaryKeyValue = record[primaryKey];
+            
+            // Crear contenedor de la tarjeta
+            const cardContainer = document.createElement('div');
+            cardContainer.id = 'created-record-card';
+            cardContainer.style.cssText = 'margin: 20px 0;';
+            
+            // Detectar si es tabla principal de entidades
+            const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
+            
+            // Campos a excluir
+            const fieldsToExclude = ['id', 'created_at', 'updated_at', '_primaryKey', '_rowIndex'];
+            if (!isEntidadPrincipal) {
+                fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
+            }
+            
+            // Construir HTML de la tarjeta
+            let cardHTML = `
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 3px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+                    <div style="background: white; border-radius: 13px; padding: 30px;">
+                        <!-- Encabezado -->
+                        <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #667eea;">
+                            <span style="font-size: 4rem; display: block; margin-bottom: 15px;">✅</span>
+                            <h2 style="color: #667eea; margin: 0 0 10px 0; font-size: 2rem;">Registro Creado Exitosamente</h2>
+                            <p style="color: #6c757d; margin: 0; font-size: 1.1rem;">${tableName}</p>
+                            <div style="display: inline-block; background: #e9ecef; padding: 8px 16px; border-radius: 20px; margin-top: 10px;">
+                                <strong style="color: #495057;">ID:</strong> 
+                                <span style="color: #667eea; font-weight: bold; font-size: 1.2rem;">${primaryKeyValue}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Información de entidad (si aplica) -->
+            `;
+            
+            if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
+                cardHTML += `
+                    <div style="background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 10px; padding: 20px; margin-bottom: 25px; border-left: 4px solid #28a745;">
+                        <h3 style="color: #28a745; margin: 0 0 15px 0; font-size: 1.3rem;">🏢 Entidad Asociada</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                            <div>
+                                <strong style="color: #495057;">Nombre:</strong>
+                                <div style="color: #212529; font-size: 1.1rem; margin-top: 5px;">${record.entidad_nombre || '-'}</div>
+                            </div>
+                            <div>
+                                <strong style="color: #495057;">Localidad:</strong>
+                                <div style="color: #212529; font-size: 1.1rem; margin-top: 5px;">${record.entidad_localidad || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Datos del registro
+            cardHTML += `
+                <div style="background: #f8f9fa; border-radius: 10px; padding: 20px; margin-bottom: 25px;">
+                    <h3 style="color: #495057; margin: 0 0 20px 0; font-size: 1.3rem;">📋 Datos del Registro</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+            `;
+            
+            // Agregar campos
+            Object.entries(record)
+                .filter(([key]) => !fieldsToExclude.includes(key))
+                .forEach(([key, value]) => {
+                    const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    
+                    // Formatear fechas
+                    let displayValue = value;
+                    if (currentTableSchema && currentTableSchema.columns) {
+                        const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
+                        if (columnInfo && isDateField(columnInfo.data_type)) {
+                            displayValue = formatDateForDisplay(value);
+                        }
+                    }
+                    
+                    // Formatear booleanos
+                    if (typeof value === 'boolean' || value === 'true' || value === 'false') {
+                        displayValue = value === true || value === 'true' ? '✅ Sí' : '❌ No';
+                    }
+                    
+                    cardHTML += `
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 3px solid #667eea;">
+                            <div style="font-weight: 600; color: #495057; margin-bottom: 5px; font-size: 0.9rem;">${displayKey}</div>
+                            <div style="color: #212529; font-size: 1.1rem; word-break: break-word;">${displayValue || '-'}</div>
+                        </div>
+                    `;
+                });
+            
+            cardHTML += `
+                    </div>
+                </div>
+                
+                <!-- Botones de acción -->
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="createAnotherRecord()" class="btn btn-success" style="flex: 1; min-width: 200px;">
+                        ➕ Crear otro registro
+                    </button>
+                    <button onclick="editCreatedRecord()" class="btn btn-warning" style="flex: 1; min-width: 200px;">
+                        ✏️ Editar este registro
+                    </button>
+                    <button onclick="viewAllRecords()" class="btn" style="flex: 1; min-width: 200px;">
+                        📋 Ver todos los registros
+                    </button>
+                </div>
+                    </div>
+                </div>
+            `;
+            
+            cardContainer.innerHTML = cardHTML;
+            
+            // Limpiar contenedor de creación y agregar tarjeta
+            const createTabContent = document.getElementById('create');
+            const formContainer = document.getElementById('create-form-container');
+            const successContainer = document.getElementById('create-success-container');
+            
+            // Ocultar formulario y mensaje de éxito
+            formContainer.style.display = 'none';
+            successContainer.style.display = 'none';
+            
+            // Remover tarjeta anterior si existe
+            const existingCard = document.getElementById('created-record-card');
+            if (existingCard) {
+                existingCard.remove();
+            }
+            
+            // Agregar nueva tarjeta
+            createTabContent.appendChild(cardContainer);
+            
+            // Scroll suave hacia arriba
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        // Función para editar el registro recién creado
+        function editCreatedRecord() {
+            if (!lastCreatedRecord) {
+                showStatus('No hay registro para editar', 'error');
+                return;
+            }
+            
+            const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
+            const primaryKeyValue = lastCreatedRecord[primaryKey];
+            
+            // Buscar el registro en currentRecords o cargarlo
+            if (currentRecords && currentRecords.length > 0) {
+                const record = currentRecords.find(r => r[primaryKey] == primaryKeyValue);
+                if (record) {
+                    showTab('update');
+                    editRecord(primaryKeyValue);
+                    return;
+                }
+            }
+            
+            // Si no está en currentRecords, agregarlo temporalmente
+            currentRecords = [{
+                ...lastCreatedRecord,
+                _primaryKey: primaryKeyValue,
+                _rowIndex: 1
+            }];
+            
+            showTab('update');
+            editRecord(primaryKeyValue);
+        }
+
         function createAnotherRecord() {
+            // Remover tarjeta si existe
+            const existingCard = document.getElementById('created-record-card');
+            if (existingCard) {
+                existingCard.remove();
+            }
+            
             showCreateForm();
             const createForm = document.getElementById('createForm');
             if (createForm) {
@@ -4554,10 +4746,13 @@
             }
             clearUnsavedChanges();
             
+            // Limpiar registro creado
+            lastCreatedRecord = null;
+            
             // Reconfigurar listeners
             setTimeout(() => setupFormChangeListeners('createForm'), 100);
         }
-
+        
         function hasCreateFormData() {
             // Si el formulario no está inicializado o el usuario no ha interactuado, no hay datos
             if (!formInitialized || !userHasInteracted) {
