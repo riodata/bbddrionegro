@@ -3819,7 +3819,6 @@
             }
         }
         
-        // Manejar formulario de actualización
         async function handleUpdateForm(e) {
             e.preventDefault();
             
@@ -3841,7 +3840,10 @@
             }
             
             const primaryKey = currentTableSchema ? currentTableSchema.primaryKey : 'id';
-            const primaryKeyField = document.getElementById('update-primary-key');
+            
+            // ✅ CORRECCIÓN: Buscar por el name correcto del primaryKey
+            const primaryKeyField = document.querySelector(`#update-primary-key[name="${primaryKey}"]`) || 
+                                   document.getElementById('update-primary-key');
             
             console.log('🔍 Debug Update:');
             console.log('Primary Key Field:', primaryKeyField);
@@ -3853,6 +3855,7 @@
             
             if (!primaryKeyValue) {
                 console.error('❌ Primary key no encontrado en el formulario');
+                console.error('📋 FormData completo:', Object.fromEntries(formData));
                 showStatus('Error: No se encontró el identificador del registro', 'error');
                 return;
             }
@@ -3860,6 +3863,9 @@
             // Limpiar datos internos
             delete data._rowIndex;
             delete data._primaryKey;
+            
+            // ✅ IMPORTANTE: NO enviar el primaryKey en updateData si ya está en searchCriteria
+            delete data[primaryKey];
             
             const updateButton = e.target.querySelector('button[type="submit"]');
             const originalText = updateButton.textContent;
@@ -3895,7 +3901,6 @@
                     
                     // Actualizar la lista de registros si está visible
                     if (currentRecords && currentRecords.length > 0) {
-                        // Actualizar el registro en la lista actual
                         const recordIndex = currentRecords.findIndex(record => {
                             const recordPrimaryKey = record[primaryKey] || record._primaryKey;
                             return recordPrimaryKey == primaryKeyValue;
@@ -3929,8 +3934,7 @@
                 updateButton.disabled = false;
                 updateButton.textContent = originalText;
             }
-        }
-        
+        }        
         // TAB MANAGEMENT
         function showTab(tabName) {
             // Verificar cambios antes de cambiar de pestaña usando la nueva función
