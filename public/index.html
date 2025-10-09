@@ -1036,6 +1036,8 @@
         let hasUnsavedChanges = false;
         let originalFormData = {};
         let currentEditingEntityName = '';
+        let formModified = false; // Variable para rastrear si el formulario ha sido modificado realmente
+        let initialFormValues = {}; // Para almacenar los valores iniciales del formulario
         
         // ========== FUNCIONES DE FORMATEO DE FECHAS ==========
 
@@ -3284,6 +3286,96 @@
             return 'text'; // Por defecto
         }
 
+        // Función para capturar los valores iniciales del formulario
+        function captureInitialFormValues(formId) {
+            initialFormValues = {};
+            const form = document.getElementById(formId);
+            if (!form) return;
+            
+            const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            inputs.forEach(input => {
+                if (input.type === 'radio') {
+                    if (input.checked) {
+                        initialFormValues[input.name] = input.value;
+                    }
+                } else if (input.type === 'checkbox') {
+                    initialFormValues[input.name] = input.checked;
+                } else {
+                    initialFormValues[input.name] = input.value || '';
+                }
+            });
+            
+            console.log('📸 Valores iniciales capturados:', initialFormValues);
+        }
+        
+                // Función mejorada para detectar si el formulario ha sido modificado realmente
+        function hasFormBeenModified(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return false;
+            
+            const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            
+            for (let input of inputs) {
+                let currentValue;
+                let initialValue;
+                
+                if (input.type === 'radio') {
+                    if (input.checked) {
+                        currentValue = input.value;
+                        initialValue = initialFormValues[input.name] || '';
+                        if (currentValue !== initialValue) {
+                            console.log(`🔄 Campo modificado: ${input.name} - Inicial: "${initialValue}" -> Actual: "${currentValue}"`);
+                            return true;
+                        }
+                    }
+                } else if (input.type === 'checkbox') {
+                    currentValue = input.checked;
+                    initialValue = initialFormValues[input.name] || false;
+                    if (currentValue !== initialValue) {
+                        console.log(`🔄 Campo modificado: ${input.name} - Inicial: ${initialValue} -> Actual: ${currentValue}`);
+                        return true;
+                    }
+                } else {
+                    currentValue = input.value || '';
+                    initialValue = initialFormValues[input.name] || '';
+                    if (currentValue !== initialValue) {
+                        console.log(`🔄 Campo modificado: ${input.name} - Inicial: "${initialValue}" -> Actual: "${currentValue}"`);
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // Configurar listeners para detectar cambios en el formulario
+        function setupFormChangeListeners(formId) {
+            const form = document.getElementById(formId);
+            if (!form) return;
+            
+            // Resetear estado
+            formModified = false;
+            
+            // Capturar valores iniciales
+            captureInitialFormValues(formId);
+            
+            // Agregar listeners a todos los inputs
+            const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            inputs.forEach(input => {
+                // Usar 'input' event para detectar cambios en tiempo real
+                input.addEventListener('input', () => {
+                    formModified = hasFormBeenModified(formId);
+                });
+                
+                // Usar 'change' event para selects y radios
+                input.addEventListener('change', () => {
+                    formModified = hasFormBeenModified(formId);
+                });
+            });
+            
+            console.log('👂 Listeners de cambio configurados para el formulario:', formId);
+        }
+
         // Cargar campos para búsqueda global SIN mostrar el tipo
         async function loadDynamicFieldsForGlobalSearch() {
             if (!currentTableSchema || !currentTableSchema.columns) {
@@ -3579,6 +3671,8 @@
                     e.target.reset();
                     // Limpiar autocompletado
                     clearAutocomplete(getCurrentMatriculaField());
+                    formModified = false;
+                    initialFormValues = {};
                 } else {
                     showStatus('Error al crear el registro: ' + result.message, 'error');
                 }
