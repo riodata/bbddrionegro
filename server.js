@@ -1911,13 +1911,13 @@ app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
 app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
     try {
         const { tableName } = req.params;
-        const { searchText, searchField } = req.query;
+        const { searchText, searchField, dateFrom, dateTo, searchType } = req.query; // ✅ Agregar dateFrom, dateTo, searchType
         
         await validateTableAccess(tableName);
         const tableSchema = await getTableSchema(tableName);
         const primaryKey = tableSchema.primaryKey;
         
-        logOperation('SEARCH REQUEST', { tableName, searchText, searchField });
+        logOperation('SEARCH REQUEST', { tableName, searchText, searchField, dateFrom, dateTo, searchType });
 
         // --- LÓGICA DE JOIN PARA FK CORREGIDA ---
         let joinClause = '';
@@ -1928,10 +1928,15 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
         // SOLO aplicar JOIN si NO es tabla de entidades principales
         const isEntidadPrincipal = tableName === 'entidades_cooperativas' || tableName === 'entidades_mutuales';
         
+        // Detectar si hay matrícula para JOIN
+        let hasMatriculaField = false;
+        
         if (!isEntidadPrincipal) {
           // Detectar FK a entidades solo en tablas que NO son las principales
           const hasMatricula = tableSchema.columns.some(col => col.column_name === 'Matricula');
           const hasMatriculaNacional = tableSchema.columns.some(col => col.column_name === 'Matricula Nacional');
+          
+          hasMatriculaField = hasMatricula || hasMatriculaNacional;
           
           if (hasMatricula) {
               joinClause = `JOIN "entidades_cooperativas" e ON "${tableName}"."Matricula" = e."Matricula"`;
@@ -1947,7 +1952,82 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
         }
         // --- FIN LÓGICA DE JOIN PARA FK CORREGIDA ---
 
-        // Construir la query dinámica
+        // ✅ NUEVA LÓGICA: BÚSQUEDA POR RANGO DE FECHAS
+        if (searchType === 'date-range' && (dateFrom || dateTo)) {
+            const fieldInfo = tableSchema.columns.find(col => col.column_name === searchField);
+            
+            if (!fieldInfo) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El campo '${searchField}' no existe en la tabla`
+                });
+            }
+            
+            const qualifiedField = `"${tableName}"."${searchField}"`;
+            
+            let conditions = [];
+            let params = [];
+            let paramIndex = 1;
+            
+            if (dateFrom) {
+                conditions.push(`${qualifiedField}::date >= $${paramIndex}::date`);
+                params.push(dateFrom);
+                paramIndex++;
+            }
+            
+            if (dateTo) {
+                conditions.push(`${qualifiedField}::date <= $${paramIndex}::date`);
+                params.push(dateTo);
+                paramIndex++;
+            }
+            
+            const whereClause = conditions.join(' AND ');
+            
+            let searchQuery;
+            if (hasMatriculaField && !isEntidadPrincipal) {
+                // Con JOIN
+                searchQuery = `
+                    SELECT ${selectFields}
+                    FROM "${tableName}" ${joinClause}
+                    WHERE ${whereClause}
+                    ORDER BY "${tableName}"."${primaryKey}" ASC
+                `;
+            } else {
+                // Sin JOIN
+                searchQuery = `
+                    SELECT * FROM "${tableName}"
+                    WHERE ${whereClause}
+                    ORDER BY "${primaryKey}" ASC
+                `;
+            }
+            
+            console.log('📅 Búsqueda por rango de fechas:', { dateFrom, dateTo });
+            console.log('📋 Query:', searchQuery);
+            console.log('📋 Params:', params);
+            
+            const result = await pool.query(searchQuery, params);
+            
+            const mappedData = result.rows.map((record, index) => ({
+                _primaryKey: record[primaryKey],
+                ...record,
+                _rowIndex: index + 1
+            }));
+            
+            logOperation('SEARCH SUCCESS (DATE RANGE)', `${mappedData.length} registros encontrados`);
+            
+            return res.json({
+                success: true,
+                data: mappedData,
+                total: mappedData.length,
+                searchField: searchField,
+                dateFrom: dateFrom || null,
+                dateTo: dateTo || null,
+                primaryKey: primaryKey,
+                availableFields: tableSchema.columns.map(col => col.column_name)
+            });
+        }
+
+        // ✅ BÚSQUEDA NORMAL (TEXTO/NÚMERO)
         let query;
         let queryParams = [];
 
@@ -1973,7 +2053,7 @@ app.get('/api/tables/:tableName/search', auth.requireAuth, async (req, res) => {
             queryParams.push(searchCondition.value);
         }
 
-        query += ` ORDER BY "${tableName}"."${primaryKey}" ASC`; // ✅ También calificar ORDER BY
+        query += ` ORDER BY "${tableName}"."${primaryKey}" ASC`;
         
         console.log(`📋 Query final: ${query}`);
         console.log(`📋 Parámetros: ${JSON.stringify(queryParams)}`);
