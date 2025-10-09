@@ -1038,6 +1038,8 @@
         let currentEditingEntityName = '';
         let formModified = false; // Variable para rastrear si el formulario ha sido modificado realmente
         let initialFormValues = {}; // Para almacenar los valores iniciales del formulario
+        let userHasInteracted = false;
+        let formInitialized = false;
         
         // ========== FUNCIONES DE FORMATEO DE FECHAS ==========
 
@@ -2664,6 +2666,9 @@
             currentEditingEntityName = '';
             userHasInteracted = false;
             formModified = false;
+            formInitialized = false;
+            
+            console.log('🧹 Estado de cambios limpiado completamente');
         }
         
         // Función para capturar datos originales del formulario
@@ -2796,10 +2801,15 @@
         }
         
         // Generar formulario de creación dinámicamente
-       async function setupDynamicCreateForm() {
+        async function setupDynamicCreateForm() {
             if (!currentTableSchema || !currentTableSchema.columns) return;
             
             console.log('🔄 Configurando formulario dinámico de creación...');
+            
+            // Resetear estado ANTES de construir el formulario
+            userHasInteracted = false;
+            formInitialized = false;
+            formModified = false;
             
             // Cargar datos de foreign keys antes de crear el formulario
             await loadForeignKeyData();
@@ -2856,23 +2866,21 @@
             // Poblar dropdowns después de crear el formulario
             setTimeout(async () => {
                 try {
-                    console.log('🔄 Poblando dropdowns de enum después de crear formulario...');
+                    console.log('🔄 Poblando dropdowns de enum...');
                     await dropdownManager.populateAllEnumDropdowns(document.getElementById('createForm'));
-                    console.log('✅ Dropdowns de enum poblados exitosamente');
+                    console.log('✅ Dropdowns poblados');
                 } catch (error) {
-                    console.error('❌ Error poblando dropdowns de enum:', error);
+                    console.error('❌ Error poblando dropdowns:', error);
                 }
-                
-                // IMPORTANTE: Configurar listeners DESPUÉS de poblar dropdowns
-                // Y después de un pequeño delay adicional
+                    
+                // DESPUÉS de poblar dropdowns, configurar listeners
                 setTimeout(() => {
+                    console.log('🎯 Configurando listeners DESPUÉS de poblar dropdowns...');
                     setupFormChangeListeners('createForm');
-                    userHasInteracted = false; // Asegurar que empieza en false
-                    hasUnsavedChanges = false;
-                    console.log('✅ Listeners configurados - Estado inicial limpio');
-                }, 100);
+                    console.log('✅ Configuración completa');
+                }, 200); // Delay adicional para asegurar que dropdowns estén listos
                 
-            }, 300); // Aumentado de 200 a 300ms
+            }, 400); // Aumentado a 400ms
         }
 
         // Función auxiliar para detectar el nombre del campo matrícula
@@ -3296,17 +3304,21 @@
             return 'text'; // Por defecto
         }
 
-// Variable global mejorada
-let userHasInteracted = false; // Nueva variable para rastrear interacción real del usuario
-
-        // Función mejorada para capturar valores iniciales
         function captureInitialFormValues(formId) {
             initialFormValues = {};
             const form = document.getElementById(formId);
             if (!form) return;
             
-            const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            const inputs = form.querySelectorAll('input:not([type="hidden"]):not([name="entidad_autocomplete"]):not([name="selected_entidad_matricula"]):not([name="selected_entidad_nombre"]), select, textarea');
             inputs.forEach(input => {
+                // Excluir campos auxiliares del autocompletado
+                if (input.name === 'entidad_autocomplete' || 
+                    input.name === 'entidad_selector' ||
+                    input.name === 'selected_entidad_matricula' ||
+                    input.name === 'selected_entidad_nombre') {
+                    return;
+                }
+                
                 if (input.type === 'radio') {
                     if (input.checked) {
                         initialFormValues[input.name] = input.value;
@@ -3318,25 +3330,36 @@ let userHasInteracted = false; // Nueva variable para rastrear interacción real
                 }
             });
             
-            // Resetear flag de interacción
+            // Resetear flags
             userHasInteracted = false;
+            formInitialized = false;
             
             console.log('📸 Valores iniciales capturados:', initialFormValues);
         }
+
         
         // Función mejorada para detectar cambios REALES
         function hasFormBeenModified(formId) {
-            // Si el usuario no ha interactuado, no hay cambios
-            if (!userHasInteracted) {
+            // Si el formulario no está inicializado o el usuario no ha interactuado, no hay cambios
+            if (!formInitialized || !userHasInteracted) {
+                console.log('⏸️ Formulario no modificado - Inicializado:', formInitialized, 'Usuario interactuó:', userHasInteracted);
                 return false;
             }
             
             const form = document.getElementById(formId);
             if (!form) return false;
             
-            const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            const inputs = form.querySelectorAll('input:not([type="hidden"]):not([name="entidad_autocomplete"]):not([name="selected_entidad_matricula"]):not([name="selected_entidad_nombre"]), select, textarea');
             
             for (let input of inputs) {
+                // Excluir campos auxiliares
+                if (input.name === 'entidad_autocomplete' || 
+                    input.name === 'entidad_selector' ||
+                    input.name === 'selected_entidad_matricula' ||
+                    input.name === 'selected_entidad_nombre') {
+                    continue;
+                }
+                
                 let currentValue;
                 let initialValue;
                 
@@ -3369,66 +3392,119 @@ let userHasInteracted = false; // Nueva variable para rastrear interacción real
             return false;
         }
         
-         // Función mejorada para configurar listeners SOLO para interacción del usuario
         function setupFormChangeListeners(formId) {
             const form = document.getElementById(formId);
             if (!form) return;
             
+            console.log('🔧 Configurando listeners para:', formId);
+            
             // Resetear estado
             formModified = false;
             userHasInteracted = false;
+            formInitialized = false; // Importante: aún no está inicializado
             
             // Capturar valores iniciales
             captureInitialFormValues(formId);
             
-            // Remover listeners anteriores para evitar duplicados
-            const inputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
+            // Obtener todos los inputs EXCEPTO los auxiliares
+            const inputs = form.querySelectorAll('input:not([type="hidden"]):not([name="entidad_autocomplete"]):not([name="selected_entidad_matricula"]):not([name="selected_entidad_nombre"]), select, textarea');
+            
+            // Agregar data-listener-attached para evitar duplicados
             inputs.forEach(input => {
-                // Clonar el elemento para remover todos los event listeners
-                const newInput = input.cloneNode(true);
-                input.parentNode.replaceChild(newInput, input);
-            });
-            
-            // Volver a obtener los inputs después de clonarlos
-            const cleanInputs = form.querySelectorAll('input:not([type="hidden"]), select, textarea');
-            
-            cleanInputs.forEach(input => {
-                // Para inputs de texto y textareas - usar 'input' event
-                if (input.tagName === 'INPUT' && (input.type === 'text' || input.type === 'number' || input.type === 'email' || input.type === 'tel' || input.type === 'date')) {
-                    input.addEventListener('input', handleUserInput);
-                    // También escuchar 'change' para detectar autocompletado del navegador
-                    input.addEventListener('change', handleUserChange);
+                // Excluir campos auxiliares
+                if (input.name === 'entidad_autocomplete' || 
+                    input.name === 'entidad_selector' ||
+                    input.name === 'selected_entidad_matricula' ||
+                    input.name === 'selected_entidad_nombre') {
+                    return;
                 }
-                // Para selects y radios - usar 'change' event
+                
+                // Si ya tiene listeners, no agregar de nuevo
+                if (input.dataset.listenerAttached === 'true') {
+                    return;
+                }
+                
+                // Marcar como que tiene listener
+                input.dataset.listenerAttached = 'true';
+                
+                // Para inputs de texto, número, email, tel, date - usar 'input' event
+                if (input.tagName === 'INPUT' && 
+                    ['text', 'number', 'email', 'tel', 'date', 'datetime-local'].includes(input.type)) {
+                    
+                    input.addEventListener('input', handleUserInput, { passive: true });
+                    input.addEventListener('change', handleUserChange, { passive: true });
+                }
+                // Para selects, radios y checkboxes - solo 'change'
                 else if (input.tagName === 'SELECT' || input.type === 'radio' || input.type === 'checkbox') {
-                    input.addEventListener('change', handleUserChange);
+                    input.addEventListener('change', handleUserChange, { passive: true });
                 }
                 // Para textareas
                 else if (input.tagName === 'TEXTAREA') {
-                    input.addEventListener('input', handleUserInput);
+                    input.addEventListener('input', handleUserInput, { passive: true });
                 }
             });
             
-            console.log('👂 Listeners de cambio configurados para el formulario:', formId);
+            // IMPORTANTE: Marcar como inicializado después de un delay
+            // Esto permite que los dropdowns se pueblen primero
+            setTimeout(() => {
+                formInitialized = true;
+                console.log('✅ Formulario inicializado - Ahora se detectarán cambios');
+            }, 500); // 500ms después de configurar listeners
+            
+            console.log('👂 Listeners configurados para', inputs.length, 'campos');
         }
-
-        // Handler para eventos 'input' (typing)
+        
+        // Handler para eventos 'input' - MEJORADO
         function handleUserInput(event) {
-            // Solo marcar si es un evento confiable (del usuario, no programático)
-            if (event.isTrusted) {
+            // Solo procesar si:
+            // 1. Es un evento del usuario (isTrusted)
+            // 2. El formulario ya está inicializado
+            // 3. No es un campo auxiliar
+            if (event.isTrusted && formInitialized) {
+                const input = event.target;
+                
+                // Verificar que no sea campo auxiliar
+                if (input.name === 'entidad_autocomplete' || 
+                    input.name === 'entidad_selector' ||
+                    input.name === 'selected_entidad_matricula' ||
+                    input.name === 'selected_entidad_nombre') {
+                    return;
+                }
+                
                 userHasInteracted = true;
-                formModified = hasFormBeenModified(event.target.closest('form').id);
-                console.log('⌨️ Usuario escribió en:', event.target.name, '- Modificado:', formModified);
+                
+                const form = input.closest('form');
+                if (form) {
+                    formModified = hasFormBeenModified(form.id);
+                    console.log('⌨️ Usuario escribió en:', input.name, '- Modificado:', formModified);
+                }
             }
         }
         
-        // Handler para eventos 'change' (select, radio, checkbox)
+        // Handler para eventos 'change' - MEJORADO
         function handleUserChange(event) {
-            // Solo marcar si es un evento confiable (del usuario, no programático)
-            if (event.isTrusted) {
+            // Solo procesar si:
+            // 1. Es un evento del usuario (isTrusted)
+            // 2. El formulario ya está inicializado
+            // 3. No es un campo auxiliar
+            if (event.isTrusted && formInitialized) {
+                const input = event.target;
+                
+                // Verificar que no sea campo auxiliar
+                if (input.name === 'entidad_autocomplete' || 
+                    input.name === 'entidad_selector' ||
+                    input.name === 'selected_entidad_matricula' ||
+                    input.name === 'selected_entidad_nombre') {
+                    return;
+                }
+                
                 userHasInteracted = true;
-                formModified = hasFormBeenModified(event.target.closest('form').id);
-                console.log('🔘 Usuario cambió:', event.target.name, '- Modificado:', formModified);
+                
+                const form = input.closest('form');
+                if (form) {
+                    formModified = hasFormBeenModified(form.id);
+                    console.log('🔘 Usuario cambió:', input.name, '- Modificado:', formModified);
+                }
             }
         }
 
@@ -4182,6 +4258,11 @@ let userHasInteracted = false; // Nueva variable para rastrear interacción real
         function showUpdateForm(record) {
             console.log('📋 showUpdateForm - Registro recibido:', record);
             
+            // Resetear estado ANTES de mostrar el formulario
+            userHasInteracted = false;
+            formInitialized = false;
+            formModified = false;
+            
             document.getElementById('update-form-container').style.display = 'block';
             document.getElementById('update-records-container').style.display = 'none';
             
@@ -4250,16 +4331,16 @@ let userHasInteracted = false; // Nueva variable para rastrear interacción real
             
             // Capturar datos originales después de un breve delay
             setTimeout(() => {
-                    captureOriginalFormData('updateForm');
-                    
-                    setTimeout(() => {
-                        setupFormChangeListeners('updateForm');
-                        userHasInteracted = false; // Asegurar que empieza en false
-                        console.log('✅ Formulario de actualización listo - Estado inicial limpio');
-                    }, 100);
+                captureOriginalFormData('updateForm');
+                
+                setTimeout(() => {
+                    console.log('🎯 Configurando listeners para formulario de actualización...');
+                    setupFormChangeListeners('updateForm');
+                    console.log('✅ Formulario de actualización listo');
                 }, 200);
-            }
-        
+            }, 300);
+        }
+                
         // Función para configurar listeners de cambios en formulario
         function setupFormChangeListeners(formId) {
             const form = document.getElementById(formId);
@@ -4473,8 +4554,9 @@ let userHasInteracted = false; // Nueva variable para rastrear interacción real
         }
 
         function hasCreateFormData() {
-            // Si el usuario no ha interactuado, no hay datos
-            if (!userHasInteracted) {
+            // Si el formulario no está inicializado o el usuario no ha interactuado, no hay datos
+            if (!formInitialized || !userHasInteracted) {
+                console.log('⏸️ No hay datos de creación - Inicializado:', formInitialized, 'Usuario interactuó:', userHasInteracted);
                 return false;
             }
             
@@ -4482,13 +4564,26 @@ let userHasInteracted = false; // Nueva variable para rastrear interacción real
             if (!form) return false;
             
             const formData = new FormData(form);
+            
+            // Excluir campos auxiliares
+            const auxiliaryFields = ['entidad_autocomplete', 'entidad_selector', 'selected_entidad_matricula', 'selected_entidad_nombre'];
+            
             for (let [key, value] of formData.entries()) {
+                // Saltar campos auxiliares
+                if (auxiliaryFields.includes(key)) {
+                    continue;
+                }
+                
                 if (value && value.trim() !== '') {
+                    console.log('📝 Hay datos en el formulario:', key, '=', value);
                     return true;
                 }
             }
+            
+            console.log('📝 No hay datos relevantes en el formulario');
             return false;
         }
+
         function viewAllRecords() {
             clearUnsavedChanges();
             showTab('search');
