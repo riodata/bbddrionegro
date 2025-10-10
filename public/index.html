@@ -2245,6 +2245,408 @@
             }
         }
 
+        // ========== BÚSQUEDA AVANZADA DE ENTIDADES ==========
+        
+        let advancedSearchData = {
+            nombre: [],
+            localidad: [],
+            tipo: []
+        };
+        
+        let advancedSearchResults = [];
+        let currentAdvancedEntityType = null; // 'cooperativas' o 'mutuales'
+        
+        // ========== BÚSQUEDA AVANZADA DE ENTIDADES ==========
+        
+        let advancedSearchData = {
+            nombre: [],
+            localidad: [],
+            tipo: []
+        };
+        
+        let advancedSearchResults = [];
+        let currentAdvancedEntityType = null; // 'cooperativas' o 'mutuales'
+        
+        // Cargar datos para búsqueda avanzada
+        async function loadAdvancedSearchData(entityType) {
+            try {
+                currentAdvancedEntityType = entityType;
+                
+                // Cargar entidades
+                const entidadesResponse = await authenticatedFetch(`${API_BASE}/api/entidades/${entityType}`);
+                const entidadesResult = await entidadesResponse.json();
+                
+                if (entidadesResult.success && entidadesResult.data) {
+                    const entidades = entidadesResult.data;
+                    
+                    // Extraer valores únicos
+                    advancedSearchData.nombre = [...new Set(entidades.map(e => e.nombre))].sort();
+                    advancedSearchData.localidad = [...new Set(entidades.map(e => e.localidad).filter(Boolean))].sort();
+                    advancedSearchData.tipo = [...new Set(entidades.map(e => e.tipo).filter(Boolean))].sort();
+                    
+                    console.log('✅ Datos de búsqueda avanzada cargados:', {
+                        nombres: advancedSearchData.nombre.length,
+                        localidades: advancedSearchData.localidad.length,
+                        tipos: advancedSearchData.tipo.length
+                    });
+                }
+            } catch (error) {
+                console.error('❌ Error cargando datos de búsqueda avanzada:', error);
+            }
+        }
+        
+        // Manejar autocompletado en campos de búsqueda avanzada
+        function handleAdvancedAutocomplete(field, value) {
+            const query = value.toLowerCase().trim();
+            const dropdown = document.getElementById(`advanced-dropdown-${field}`);
+            const input = document.getElementById(`advanced-search-${field}`);
+            const clearBtn = input.nextElementSibling;
+            
+            // Mostrar/ocultar botón de limpiar
+            if (clearBtn && clearBtn.classList.contains('clear-btn')) {
+                clearBtn.style.display = query ? 'block' : 'none';
+            }
+            
+            if (query.length < 2) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            // Filtrar opciones
+            const matches = advancedSearchData[field].filter(item => 
+                item.toLowerCase().includes(query)
+            );
+            
+            if (matches.length === 0) {
+                dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">No se encontraron coincidencias</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            // Mostrar resultados (limitar a 10)
+            dropdown.innerHTML = matches.slice(0, 10).map(item => `
+                <div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${item.replace(/'/g, "\\'")}')">
+                    ${highlightMatch(item, query)}
+                </div>
+            `).join('');
+            
+            dropdown.style.display = 'block';
+        }
+        
+        // Seleccionar opción del dropdown
+        function selectAdvancedOption(field, value) {
+            const input = document.getElementById(`advanced-search-${field}`);
+            const dropdown = document.getElementById(`advanced-dropdown-${field}`);
+            
+            input.value = value;
+            dropdown.style.display = 'none';
+        }
+        
+        // Limpiar campo individual
+        function clearAdvancedField(field) {
+            const input = document.getElementById(`advanced-search-${field}`);
+            const dropdown = document.getElementById(`advanced-dropdown-${field}`);
+            const clearBtn = input.nextElementSibling;
+            
+            input.value = '';
+            dropdown.style.display = 'none';
+            if (clearBtn) clearBtn.style.display = 'none';
+        }
+        
+        // Limpiar toda la búsqueda avanzada
+        function clearAdvancedSearch() {
+            ['nombre', 'localidad', 'tipo'].forEach(field => clearAdvancedField(field));
+            
+            document.getElementById('advanced-search-results').innerHTML = '';
+            document.getElementById('download-advanced-csv').style.display = 'none';
+            advancedSearchResults = [];
+        }
+        
+        // Realizar búsqueda avanzada
+        async function performAdvancedSearch() {
+            const nombre = document.getElementById('advanced-search-nombre').value.trim();
+            const localidad = document.getElementById('advanced-search-localidad').value.trim();
+            const tipo = document.getElementById('advanced-search-tipo').value.trim();
+            
+            if (!nombre && !localidad && !tipo) {
+                showStatus('Por favor, ingresa al menos un criterio de búsqueda', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('Buscando...', 'info');
+                
+                const params = new URLSearchParams();
+                if (nombre) params.append('nombre', nombre);
+                if (localidad) params.append('localidad', localidad);
+                if (tipo) params.append('tipo', tipo);
+                
+                const response = await authenticatedFetch(
+                    `${API_BASE}/api/entidades/${currentAdvancedEntityType}/search-advanced?${params.toString()}`
+                );
+                
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    advancedSearchResults = result.data;
+                    displayAdvancedSearchResults(result.data);
+                    
+                    // Mostrar botón de descarga
+                    document.getElementById('download-advanced-csv').style.display = result.data.length > 0 ? 'inline-block' : 'none';
+                    
+                    showStatus(`✅ Se encontraron ${result.data.length} resultado(s)`, 'success');
+                    setTimeout(clearStatus, 3000);
+                } else {
+                    throw new Error(result.message || 'Error en la búsqueda');
+                }
+            } catch (error) {
+                console.error('❌ Error en búsqueda avanzada:', error);
+                showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
+            }
+        }
+        
+        // Mostrar resultados de búsqueda avanzada
+        function displayAdvancedSearchResults(results) {
+            const container = document.getElementById('advanced-search-results');
+            
+            if (!results || results.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <h3>No se encontraron resultados</h3>
+                        <p>Intenta con otros criterios de búsqueda</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = results.map(entity => `
+                <div class="advanced-entity-card">
+                    <div class="advanced-entity-card-inner">
+                        <!-- Encabezado -->
+                        <div class="advanced-entity-header">
+                            <h2 style="color: #667eea; margin: 0 0 10px 0;">${entity.nombre_entidad || 'Sin nombre'}</h2>
+                            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                                <div style="background: #e9ecef; padding: 8px 16px; border-radius: 20px;">
+                                    <strong>Matrícula:</strong> <span style="color: #667eea; font-weight: bold;">${entity.matricula || 'N/A'}</span>
+                                </div>
+                                <div style="background: #e9ecef; padding: 8px 16px; border-radius: 20px;">
+                                    <strong>Legajo:</strong> <span style="color: #667eea; font-weight: bold;">${entity.legajo || 'N/A'}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Datos Generales -->
+                        <div class="advanced-entity-section">
+                            <h3>📋 Datos Generales</h3>
+                            <div class="advanced-entity-grid">
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Registro Provincial</div>
+                                    <div class="advanced-entity-field-value">${entity.registro_provincial || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Fecha de Inicio</div>
+                                    <div class="advanced-entity-field-value">${entity.fecha_inicio ? formatDateForDisplay(entity.fecha_inicio) : '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Domicilio</div>
+                                    <div class="advanced-entity-field-value">${entity.domicilio || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Localidad</div>
+                                    <div class="advanced-entity-field-value">${entity.localidad || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Código Postal</div>
+                                    <div class="advanced-entity-field-value">${entity.codigo_postal || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Teléfono</div>
+                                    <div class="advanced-entity-field-value">${entity.telefono || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">CUIT</div>
+                                    <div class="advanced-entity-field-value">${entity.cuit || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Tipo</div>
+                                    <div class="advanced-entity-field-value">${entity.tipo || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Subtipo</div>
+                                    <div class="advanced-entity-field-value">${entity.subtipo || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Consejo/Autoridades -->
+                        ${entity.presidente ? `
+                        <div class="advanced-entity-section">
+                            <h3>👥 Consejo Directivo</h3>
+                            <div class="advanced-entity-grid">
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Presidente</div>
+                                    <div class="advanced-entity-field-value">${entity.presidente}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Teléfono</div>
+                                    <div class="advanced-entity-field-value">${entity.telefono_presidente || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Email</div>
+                                    <div class="advanced-entity-field-value">${entity.email_presidente || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Asambleas -->
+                        ${entity.fecha_ultima_asamblea ? `
+                        <div class="advanced-entity-section">
+                            <h3>📅 Última Asamblea</h3>
+                            <div class="advanced-entity-grid">
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Fecha</div>
+                                    <div class="advanced-entity-field-value">${formatDateForDisplay(entity.fecha_ultima_asamblea)}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Tipo</div>
+                                    <div class="advanced-entity-field-value">${entity.tipo_asamblea || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Estado</div>
+                                    <div class="advanced-entity-field-value">${entity.estado_asamblea || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Renovación Autoridades</div>
+                                    <div class="advanced-entity-field-value">${entity.renovacion_autoridades || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Renovación Sindicatura</div>
+                                    <div class="advanced-entity-field-value">${entity.renovacion_sindicatura || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Ejercicio -->
+                        ${entity.cierre_ultimo_ejercicio || entity.cantidad_asociados ? `
+                        <div class="advanced-entity-section">
+                            <h3>📊 Datos Económicos</h3>
+                            <div class="advanced-entity-grid">
+                                ${entity.cierre_ultimo_ejercicio ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Cierre Último Ejercicio</div>
+                                    <div class="advanced-entity-field-value">${formatDateForDisplay(entity.cierre_ultimo_ejercicio)}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.cantidad_asociados ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Cantidad de Asociados</div>
+                                    <div class="advanced-entity-field-value">${entity.cantidad_asociados}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Descargar resultados como CSV
+        function downloadAdvancedSearchCSV() {
+            if (!advancedSearchResults || advancedSearchResults.length === 0) {
+                showStatus('No hay resultados para descargar', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('Generando CSV...', 'info');
+                
+                // Definir columnas en el orden deseado
+                const columns = [
+                    'matricula', 'legajo', 'nombre_entidad', 'registro_provincial', 'fecha_inicio',
+                    'domicilio', 'localidad', 'codigo_postal', 'telefono', 'cuit', 'tipo', 'subtipo',
+                    'presidente', 'telefono_presidente', 'email_presidente',
+                    'fecha_ultima_asamblea', 'tipo_asamblea', 'estado_asamblea',
+                    'renovacion_autoridades', 'renovacion_sindicatura',
+                    'cierre_ultimo_ejercicio', 'cantidad_asociados'
+                ];
+                
+                // Headers legibles
+                const headers = [
+                    'Matrícula', 'Legajo', 'Nombre', 'Registro Provincial', 'Fecha Inicio',
+                    'Domicilio', 'Localidad', 'Código Postal', 'Teléfono', 'CUIT', 'Tipo', 'Subtipo',
+                    'Presidente', 'Teléfono Presidente', 'Email Presidente',
+                    'Fecha Última Asamblea', 'Tipo Asamblea', 'Estado Asamblea',
+                    'Renovación Autoridades', 'Renovación Sindicatura',
+                    'Cierre Último Ejercicio', 'Cantidad Asociados'
+                ];
+                
+                // Crear CSV
+                const csvRows = [];
+                csvRows.push(headers.join(','));
+                
+                advancedSearchResults.forEach(record => {
+                    const row = columns.map(col => {
+                        let value = record[col] || '';
+                        
+                        // Formatear fechas
+                        if (col.includes('fecha') && value) {
+                            value = formatDateForDisplay(value);
+                        }
+                        
+                        // Escapar valores
+                        if (typeof value === 'string') {
+                            value = value.replace(/"/g, '""');
+                            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+                                value = `"${value}"`;
+                            }
+                        }
+                        
+                        return value;
+                    });
+                    csvRows.push(row.join(','));
+                });
+                
+                // Descargar
+                const csvContent = '\ufeff' + csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const filename = `busqueda_${currentAdvancedEntityType}_${timestamp}.csv`;
+                
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                showStatus(`✅ CSV descargado: ${filename}`, 'success');
+                setTimeout(clearStatus, 3000);
+                
+            } catch (error) {
+                console.error('Error generando CSV:', error);
+                showStatus('Error al generar CSV: ' + error.message, 'error');
+            }
+        }
+        
+        // Cerrar dropdowns al hacer click fuera
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('#advanced-entity-search')) {
+                ['nombre', 'localidad', 'tipo'].forEach(field => {
+                    const dropdown = document.getElementById(`advanced-dropdown-${field}`);
+                    if (dropdown) dropdown.style.display = 'none';
+                });
+            }
+        });
+        
+        // ========== FIN BÚSQUEDA AVANZADA ==========
+        
         // Mostrar tablas de una categoría
         function displayCategoryTables(tables, categoryName) {
             const container = document.getElementById('table-selection-content');
