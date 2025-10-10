@@ -2261,26 +2261,37 @@
             try {
                 currentAdvancedEntityType = entityType;
                 
-                // Cargar entidades
-                const entidadesResponse = await authenticatedFetch(`${API_BASE}/api/entidades/${entityType}`);
-                const entidadesResult = await entidadesResponse.json();
+                // ✅ USAR ENDPOINT CORRECTO QUE DEVUELVE TODOS LOS CAMPOS
+                const tableName = entityType === 'cooperativas' ? 'entidades_cooperativas' : 'entidades_mutuales';
                 
-                if (entidadesResult.success && entidadesResult.data) {
-                    const entidades = entidadesResult.data;
+                // Cargar todos los registros de la tabla con todos sus campos
+                const response = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/read`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    const entidades = result.data;
                     
-                    // Extraer valores únicos
-                    advancedSearchData.nombre = [...new Set(entidades.map(e => e.nombre))].sort();
-                    advancedSearchData.localidad = [...new Set(entidades.map(e => e.localidad).filter(Boolean))].sort();
-                    advancedSearchData.tipo = [...new Set(entidades.map(e => e.tipo).filter(Boolean))].sort();
+                    // Extraer valores únicos de TODOS los campos necesarios
+                    const nombreField = entityType === 'cooperativas' ? 'Nombre de la Entidad' : 'Entidad';
+                    
+                    advancedSearchData.nombre = [...new Set(entidades.map(e => e[nombreField]).filter(Boolean))].sort();
+                    advancedSearchData.localidad = [...new Set(entidades.map(e => e.Localidad || e.localidad).filter(Boolean))].sort();
+                    advancedSearchData.tipo = [...new Set(entidades.map(e => e.Tipo || e.tipo).filter(Boolean))].sort();
                     
                     console.log('✅ Datos de búsqueda avanzada cargados:', {
                         nombres: advancedSearchData.nombre.length,
                         localidades: advancedSearchData.localidad.length,
                         tipos: advancedSearchData.tipo.length
                     });
+                    
+                    console.log('📋 Ejemplos de datos:');
+                    console.log('Nombres:', advancedSearchData.nombre.slice(0, 3));
+                    console.log('Localidades:', advancedSearchData.localidad.slice(0, 3));
+                    console.log('Tipos:', advancedSearchData.tipo.slice(0, 3));
                 }
             } catch (error) {
                 console.error('❌ Error cargando datos de búsqueda avanzada:', error);
+                showStatus('Error cargando datos: ' + error.message, 'error');
             }
         }
         
@@ -2303,7 +2314,7 @@
             
             // Filtrar opciones
             const matches = advancedSearchData[field].filter(item => 
-                item.toLowerCase().includes(query)
+                item && item.toLowerCase().includes(query)
             );
             
             if (matches.length === 0) {
@@ -2312,12 +2323,15 @@
                 return;
             }
             
-            // Mostrar resultados (limitar a 10)
-            dropdown.innerHTML = matches.slice(0, 10).map(item => `
-                <div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${item.replace(/'/g, "\\'")}')">
-                    ${highlightMatch(item, query)}
-                </div>
-            `).join('');
+            // ✅ CORRECCIÓN: Escapar comillas correctamente y usar template literals seguros
+            dropdown.innerHTML = matches.slice(0, 10).map(item => {
+                const safeItem = item.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const highlightedText = highlightMatch(item, query);
+                
+                return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeItem}')">
+                    ${highlightedText}
+                </div>`;
+            }).join('');
             
             dropdown.style.display = 'block';
         }
