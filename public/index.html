@@ -680,6 +680,106 @@
                 cursor: not-allowed;
             }
         }
+
+        /* Estilos para búsqueda avanzada */
+        .advanced-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #4a90e2;
+            border-radius: 0 0 8px 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .advanced-dropdown-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        
+        .advanced-dropdown-item:hover {
+            background-color: #f0f8ff;
+        }
+        
+        .advanced-dropdown-item:last-child {
+            border-bottom: none;
+        }
+        
+        .advanced-entity-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 3px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .advanced-entity-card-inner {
+            background: white;
+            border-radius: 13px;
+            padding: 25px;
+        }
+        
+        .advanced-entity-header {
+            text-align: center;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .advanced-entity-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4a90e2;
+        }
+        
+        .advanced-entity-section h3 {
+            color: #4a90e2;
+            margin: 0 0 15px 0;
+            font-size: 1.2rem;
+        }
+        
+        .advanced-entity-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .advanced-entity-field {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .advanced-entity-field-label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+        
+        .advanced-entity-field-value {
+            color: #212529;
+            font-size: 1rem;
+        }
+        
+        .clear-btn {
+            display: none;
+        }
+        
+        .clear-btn.visible {
+            display: block;
+        }
+        
         .app-footer {
             background: linear-gradient(135deg, #2c3e50, #34495e);
             color: white;
@@ -864,6 +964,74 @@
                     </button>
                     <h2 id="category-title">Seleccionar Tabla</h2>
                     <p id="category-description">Elige la tabla con la que quieres trabajar</p>
+                </div>
+                
+                <!-- ✅ NUEVA BÚSQUEDA AVANZADA DE COOPERATIVAS/MUTUALES -->
+                <div id="advanced-entity-search" class="search-container" style="display: none; margin-bottom: 25px;">
+                    <h3 id="advanced-search-title">🔍 Búsqueda Avanzada de Cooperativas</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                        
+                        <!-- Campo: Nombre de la Entidad -->
+                        <div>
+                            <label for="advanced-search-nombre" style="font-weight: 500; margin-bottom: 5px; display: block;">Nombre de la Entidad:</label>
+                            <div style="position: relative;">
+                                <input 
+                                    type="text" 
+                                    id="advanced-search-nombre" 
+                                    placeholder="Escribe el nombre..."
+                                    autocomplete="off"
+                                    oninput="handleAdvancedAutocomplete('nombre', this.value)"
+                                    style="width: 100%; padding-right: 30px;"
+                                />
+                                <div class="clear-btn" onclick="clearAdvancedField('nombre')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;">✕</div>
+                                <div id="advanced-dropdown-nombre" class="advanced-dropdown"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Campo: Localidad -->
+                        <div>
+                            <label for="advanced-search-localidad" style="font-weight: 500; margin-bottom: 5px; display: block;">Localidad:</label>
+                            <div style="position: relative;">
+                                <input 
+                                    type="text" 
+                                    id="advanced-search-localidad" 
+                                    placeholder="Escribe la localidad..."
+                                    autocomplete="off"
+                                    oninput="handleAdvancedAutocomplete('localidad', this.value)"
+                                    style="width: 100%; padding-right: 30px;"
+                                />
+                                <div class="clear-btn" onclick="clearAdvancedField('localidad')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;">✕</div>
+                                <div id="advanced-dropdown-localidad" class="advanced-dropdown"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Campo: Tipo -->
+                        <div>
+                            <label for="advanced-search-tipo" style="font-weight: 500; margin-bottom: 5px; display: block;">Tipo:</label>
+                            <div style="position: relative;">
+                                <input 
+                                    type="text" 
+                                    id="advanced-search-tipo" 
+                                    placeholder="Escribe el tipo..."
+                                    autocomplete="off"
+                                    oninput="handleAdvancedAutocomplete('tipo', this.value)"
+                                    style="width: 100%; padding-right: 30px;"
+                                />
+                                <div class="clear-btn" onclick="clearAdvancedField('tipo')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;">✕</div>
+                                <div id="advanced-dropdown-tipo" class="advanced-dropdown"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Botones de acción -->
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button onclick="performAdvancedSearch()" class="btn">🔍 Buscar</button>
+                        <button onclick="clearAdvancedSearch()" class="btn btn-clear">🧹 Limpiar</button>
+                        <button onclick="downloadAdvancedSearchCSV()" class="btn btn-success" id="download-advanced-csv" style="display: none;">📊 Descargar CSV</button>
+                    </div>
+                    
+                    <!-- Contenedor de resultados -->
+                    <div id="advanced-search-results" style="margin-top: 20px;"></div>
                 </div>
                 
                 <div id="table-selection-content" class="table-grid">
