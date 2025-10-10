@@ -2250,11 +2250,28 @@
             const container = document.getElementById('table-selection-content');
             const titleElement = document.getElementById('category-title');
             const descriptionElement = document.getElementById('category-description');
+            const advancedSearch = document.getElementById('advanced-entity-search');
+            const advancedSearchTitle = document.getElementById('advanced-search-title');
+            
             showScreen('table-selection');
+            
+            // ✅ MOSTRAR BÚSQUEDA AVANZADA SI ES COOPERATIVAS O MUTUALES
+            if (categoryName === 'cooperativas' || categoryName === 'mutuales') {
+                advancedSearch.style.display = 'block';
+                advancedSearchTitle.textContent = categoryName === 'cooperativas' 
+                    ? '🔍 Búsqueda Avanzada de Cooperativas'
+                    : '🔍 Búsqueda Avanzada de Mutuales';
+                
+                // Cargar datos para autocompletado
+                loadAdvancedSearchData(categoryName);
+            } else {
+                advancedSearch.style.display = 'none';
+            }
+            
             // Actualizar títulos
             titleElement.textContent = `Tablas - ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)}`;
             descriptionElement.textContent = 'Selecciona la tabla con la que quieres trabajar';
-
+        
             // Actualizar breadcrumb
             updateBreadcrumb([
                 { text: 'Inicio', onclick: 'showMainMenu()' },
