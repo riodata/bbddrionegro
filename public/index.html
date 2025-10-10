@@ -969,6 +969,9 @@
                 <!-- ✅ NUEVA BÚSQUEDA AVANZADA DE COOPERATIVAS/MUTUALES -->
                 <div id="advanced-entity-search" class="search-container" style="display: none; margin-bottom: 25px;">
                     <h3 id="advanced-search-title">🔍 Búsqueda Avanzada de Cooperativas</h3>
+                    <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95rem;">
+                        💡 <strong>Tip:</strong> Puedes buscar usando uno, dos o los tres campos. No es necesario completarlos todos.
+                    </p>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 15px;">
                         
                         <!-- Campo: Nombre de la Entidad -->
@@ -4751,6 +4754,57 @@
             showStatus('Campos actualizados', 'info');
         }
 
+        // Realizar búsqueda avanzada
+        async function performAdvancedSearch() {
+            const nombre = document.getElementById('advanced-search-nombre').value.trim();
+            const localidad = document.getElementById('advanced-search-localidad').value.trim();
+            const tipo = document.getElementById('advanced-search-tipo').value.trim();
+            
+            // ✅ CAMBIO: Ya no es obligatorio usar los 3 campos
+            if (!nombre && !localidad && !tipo) {
+                showStatus('Por favor, ingresa al menos un criterio de búsqueda (nombre, localidad o tipo)', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('Buscando...', 'info');
+                
+                // ✅ Construir params solo con campos que tienen valor
+                const params = new URLSearchParams();
+                if (nombre) params.append('nombre', nombre);
+                if (localidad) params.append('localidad', localidad);
+                if (tipo) params.append('tipo', tipo);
+                
+                const response = await authenticatedFetch(
+                    `${API_BASE}/api/entidades/${currentAdvancedEntityType}/search-advanced?${params.toString()}`
+                );
+                
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    advancedSearchResults = result.data;
+                    displayAdvancedSearchResults(result.data);
+                    
+                    // Mostrar botón de descarga
+                    document.getElementById('download-advanced-csv').style.display = result.data.length > 0 ? 'inline-block' : 'none';
+                    
+                    // ✅ Mensaje más descriptivo
+                    const criterios = [];
+                    if (nombre) criterios.push(`nombre: "${nombre}"`);
+                    if (localidad) criterios.push(`localidad: "${localidad}"`);
+                    if (tipo) criterios.push(`tipo: "${tipo}"`);
+                    
+                    showStatus(`✅ Se encontraron ${result.data.length} resultado(s) para ${criterios.join(', ')}`, 'success');
+                    setTimeout(clearStatus, 4000);
+                } else {
+                    throw new Error(result.message || 'Error en la búsqueda');
+                }
+            } catch (error) {
+                console.error('❌ Error en búsqueda avanzada:', error);
+                showStatus('Error al realizar la búsqueda: ' + error.message, 'error');
+            }
+        }
+        
         // UPDATE FUNCTIONS
         function editRecord(primaryKeyValue) {
             console.log('🔍 Editando registro con clave primaria:', primaryKeyValue);
@@ -5415,6 +5469,191 @@
         
             // Actualizar records globales para otras operaciones
             currentRecords = records;
+        }
+
+        // Mostrar resultados de búsqueda avanzada
+        function displayAdvancedSearchResults(results) {
+            const container = document.getElementById('advanced-search-results');
+            
+            if (!results || results.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <h3>No se encontraron resultados</h3>
+                        <p>Intenta con otros criterios de búsqueda</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = results.map(entity => `
+                <div class="advanced-entity-card">
+                    <div class="advanced-entity-card-inner">
+                        <!-- Encabezado -->
+                        <div class="advanced-entity-header">
+                            <h2 style="color: #667eea; margin: 0 0 10px 0;">${entity.nombre_entidad || 'Sin nombre'}</h2>
+                            <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                                <div style="background: #e9ecef; padding: 8px 16px; border-radius: 20px;">
+                                    <strong>Matrícula:</strong> <span style="color: #667eea; font-weight: bold;">${entity.matricula || 'N/A'}</span>
+                                </div>
+                                ${entity.legajo ? `
+                                <div style="background: #e9ecef; padding: 8px 16px; border-radius: 20px;">
+                                    <strong>Legajo:</strong> <span style="color: #667eea; font-weight: bold;">${entity.legajo}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <!-- Datos Generales -->
+                        <div class="advanced-entity-section">
+                            <h3>📋 Datos Generales</h3>
+                            <div class="advanced-entity-grid">
+                                ${entity.registro_provincial ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Registro Provincial</div>
+                                    <div class="advanced-entity-field-value">${entity.registro_provincial}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.fecha_inicio ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Fecha de Inicio</div>
+                                    <div class="advanced-entity-field-value">${formatDateForDisplay(entity.fecha_inicio)}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.domicilio ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Domicilio</div>
+                                    <div class="advanced-entity-field-value">${entity.domicilio}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.localidad ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Localidad</div>
+                                    <div class="advanced-entity-field-value">${entity.localidad}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.codigo_postal ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Código Postal</div>
+                                    <div class="advanced-entity-field-value">${entity.codigo_postal}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.telefono ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Teléfono</div>
+                                    <div class="advanced-entity-field-value">${entity.telefono}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.cuit ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">CUIT</div>
+                                    <div class="advanced-entity-field-value">${entity.cuit}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.tipo ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Tipo</div>
+                                    <div class="advanced-entity-field-value">${entity.tipo}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.subtipo ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Subtipo</div>
+                                    <div class="advanced-entity-field-value">${entity.subtipo}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        
+                        <!-- Consejo/Autoridades (solo si hay datos) -->
+                        ${entity.presidente || entity.telefono_presidente || entity.email_presidente ? `
+                        <div class="advanced-entity-section">
+                            <h3>👥 Consejo Directivo</h3>
+                            <div class="advanced-entity-grid">
+                                ${entity.presidente ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Presidente</div>
+                                    <div class="advanced-entity-field-value">${entity.presidente}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.telefono_presidente ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">DNI Presidente</div>
+                                    <div class="advanced-entity-field-value">${entity.telefono_presidente}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.email_presidente ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Email</div>
+                                    <div class="advanced-entity-field-value">${entity.email_presidente}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Asambleas (solo si hay datos) -->
+                        ${entity.fecha_ultima_asamblea || entity.tipo_asamblea || entity.estado_asamblea ? `
+                        <div class="advanced-entity-section">
+                            <h3>📅 Última Asamblea</h3>
+                            <div class="advanced-entity-grid">
+                                ${entity.fecha_ultima_asamblea ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Fecha</div>
+                                    <div class="advanced-entity-field-value">${formatDateForDisplay(entity.fecha_ultima_asamblea)}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.tipo_asamblea ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Tipo</div>
+                                    <div class="advanced-entity-field-value">${entity.tipo_asamblea}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.estado_asamblea ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Estado</div>
+                                    <div class="advanced-entity-field-value">${entity.estado_asamblea}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.renovacion_autoridades ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Renovación Autoridades</div>
+                                    <div class="advanced-entity-field-value">${entity.renovacion_autoridades}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.renovacion_sindicatura ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Renovación Sindicatura</div>
+                                    <div class="advanced-entity-field-value">${entity.renovacion_sindicatura}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        <!-- Ejercicio (solo si hay datos) -->
+                        ${entity.cierre_ultimo_ejercicio || entity.cantidad_asociados ? `
+                        <div class="advanced-entity-section">
+                            <h3>📊 Datos Económicos</h3>
+                            <div class="advanced-entity-grid">
+                                ${entity.cierre_ultimo_ejercicio ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Cierre Último Ejercicio</div>
+                                    <div class="advanced-entity-field-value">${formatDateForDisplay(entity.cierre_ultimo_ejercicio)}</div>
+                                </div>
+                                ` : ''}
+                                ${entity.cantidad_asociados ? `
+                                <div class="advanced-entity-field">
+                                    <div class="advanced-entity-field-label">Cantidad de Asociados</div>
+                                    <div class="advanced-entity-field-value">${entity.cantidad_asociados}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
         }
         
         function displayUpdateResults(records) {
