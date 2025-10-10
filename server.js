@@ -2115,6 +2115,161 @@ app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
   }
 });
 
+// ========== BÚSQUEDA AVANZADA DE ENTIDADES ==========
+app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (req, res) => {
+    try {
+        const { entityType } = req.params; // 'cooperativas' o 'mutuales'
+        const { nombre, localidad, tipo } = req.query;
+        
+        if (!nombre && !localidad && !tipo) {
+            return res.status(400).json({
+                success: false,
+                message: 'Debe proporcionar al menos un criterio de búsqueda'
+            });
+        }
+        
+        const tableName = entityType === 'cooperativas' ? 'entidades_cooperativas' : 'entidades_mutuales';
+        const matriculaField = entityType === 'cooperativas' ? 'Matricula' : 'Matricula Nacional';
+        const nombreField = entityType === 'cooperativas' ? 'Nombre de la Entidad' : 'Entidad';
+        
+        // ✅ Nombres correctos de tablas relacionadas
+        const consejoTable = entityType === 'cooperativas' ? 'consejo_cooperativas' : 'consejo_mutuales';
+        const asambleasTable = entityType === 'cooperativas' ? 'asambleas_cooperativas' : 'asambleas_mutuales';
+        const ejercicioTable = entityType === 'cooperativas' ? 'ejercicio_cooperativas' : 'ejercicio_mutuales';
+        
+        // Construir condiciones WHERE dinámicamente
+        let whereConditions = [];
+        let params = [];
+        let paramIndex = 1;
+        
+        if (nombre) {
+            whereConditions.push(`e."${nombreField}" ILIKE $${paramIndex}`);
+            params.push(`%${nombre}%`);
+            paramIndex++;
+        }
+        
+        if (localidad) {
+            whereConditions.push(`e."Localidad" ILIKE $${paramIndex}`);
+            params.push(`%${localidad}%`);
+            paramIndex++;
+        }
+        
+        if (tipo) {
+            whereConditions.push(`e."Tipo" ILIKE $${paramIndex}`);
+            params.push(`%${tipo}%`);
+            paramIndex++;
+        }
+        
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+        
+        // ✅ Query con NOMBRES CORRECTOS según las tablas
+        const query = `
+            SELECT 
+                e."${matriculaField}" as matricula,
+                e."Legajo" as legajo,
+                e."${nombreField}" as nombre_entidad,
+                e."Registro Provincial" as registro_provincial,
+                e."Fecha de inicio" as fecha_inicio,
+                e."Domicilio" as domicilio,
+                e."Localidad" as localidad,
+                e."Codigo Postal" as codigo_postal,
+                e."Tefefono" as telefono,
+                e."CUIT" as cuit,
+                e."Tipo" as tipo,
+                e."Subtipo" as subtipo,
+                
+                -- ✅ Presidente del consejo (más reciente y con mandato activo)
+                (SELECT c."Nombre" 
+                 FROM "${consejoTable}" c
+                 WHERE c."${matriculaField}" = e."${matriculaField}" 
+                 AND LOWER(c."Autoridad"::text) = 'presidente'
+                 AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
+                 ORDER BY c."Fecha inicio" DESC 
+                 LIMIT 1) as presidente,
+                 
+                (SELECT c."DNI"::text
+                 FROM "${consejoTable}" c
+                 WHERE c."${matriculaField}" = e."${matriculaField}" 
+                 AND LOWER(c."Autoridad"::text) = 'presidente'
+                 AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
+                 ORDER BY c."Fecha inicio" DESC 
+                 LIMIT 1) as telefono_presidente,
+                
+                -- ✅ Email (no existe en tabla consejo, usar el de entidad)
+                e."Email" as email_presidente,
+                
+                -- ✅ Última asamblea (usar fecha_asamblea en lugar de Fecha)
+                (SELECT a."fecha_asamblea" 
+                 FROM "${asambleasTable}" a
+                 WHERE a."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY a."fecha_asamblea" DESC 
+                 LIMIT 1) as fecha_ultima_asamblea,
+                 
+                (SELECT a."tipo asamblea"::text
+                 FROM "${asambleasTable}" a
+                 WHERE a."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY a."fecha_asamblea" DESC 
+                 LIMIT 1) as tipo_asamblea,
+                 
+                (SELECT a."Estado Asamblea"::text
+                 FROM "${asambleasTable}" a
+                 WHERE a."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY a."fecha_asamblea" DESC 
+                 LIMIT 1) as estado_asamblea,
+                 
+                (SELECT a."renovacion autoridades"::text
+                 FROM "${asambleasTable}" a
+                 WHERE a."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY a."fecha_asamblea" DESC 
+                 LIMIT 1) as renovacion_autoridades,
+                 
+                (SELECT a."renovacion sindicatura"::text
+                 FROM "${asambleasTable}" a
+                 WHERE a."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY a."fecha_asamblea" DESC 
+                 LIMIT 1) as renovacion_sindicatura,
+                
+                -- ✅ Último ejercicio (usar "cierre ejercicio")
+                (SELECT ej."cierre ejercicio" 
+                 FROM "${ejercicioTable}" ej
+                 WHERE ej."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY ej."cierre ejercicio" DESC 
+                 LIMIT 1) as cierre_ultimo_ejercicio,
+                 
+                (SELECT ej."cantidad asociados"
+                 FROM "${ejercicioTable}" ej
+                 WHERE ej."${matriculaField}" = e."${matriculaField}"
+                 ORDER BY ej."cierre ejercicio" DESC 
+                 LIMIT 1) as cantidad_asociados
+            FROM "${tableName}" e
+            ${whereClause}
+            ORDER BY e."${nombreField}" ASC
+            LIMIT 100
+        `;
+        
+        console.log('📋 Query búsqueda avanzada:', query);
+        console.log('📋 Params:', params);
+        
+        const result = await pool.query(query, params);
+        
+        logOperation('ADVANCED SEARCH SUCCESS', `${result.rows.length} resultados para ${entityType}`);
+        
+        res.json({
+            success: true,
+            data: result.rows,
+            total: result.rows.length
+        });
+        
+    } catch (error) {
+        console.error('❌ Error en búsqueda avanzada:', error);
+        const errorInfo = handlePostgresError(error, 'búsqueda avanzada de entidades');
+        res.status(errorInfo.status).json({
+            success: false,
+            message: errorInfo.message
+        });
+    }
+});
+
 // UPDATE - Actualizar registro con auditoría
 app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
   try {
