@@ -1239,6 +1239,7 @@
         // Variables globales para sistema dinámico
         let currentTable = null;
         let currentTableSchema = null;
+        let enumOptions = {}; // Guardar opciones de enums
         let currentRecords = [];
         let availableFields = [];
         let currentEditingRow = null;
@@ -2751,6 +2752,31 @@
             }
         }
 
+        async function loadEnumOptions() {
+            try {
+                const response = await fetch(`${API_BASE}/api/enum-options`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+        
+                if (!response.ok) {
+                    console.warn('⚠️ No se pudieron cargar las opciones de enum');
+                    return;
+                }
+        
+                const result = await response.json();
+                
+                if (result.success) {
+                    enumOptions = result.data;
+                    console.log('✅ Opciones de enum cargadas:', Object.keys(enumOptions));
+                }
+            } catch (error) {
+                console.error('❌ Error cargando opciones de enum:', error);
+            }
+        }
+        
         // Cargar esquema de tabla específica
         async function loadTableSchema(tableName) {
             try {
@@ -2761,6 +2787,10 @@
                 
                 if (result.success) {
                     currentTableSchema = result.schema;
+                    
+                    // ✅ AGREGAR ESTA LÍNEA: Cargar enums después de cargar esquema
+                    await loadEnumOptions();
+                    
                     setupDynamicCrudInterface();
                     clearStatus();
                 } else {
@@ -4166,8 +4196,15 @@
                         .filter(column => !excludedFields.includes(column.column_name.toLowerCase()))
                         .forEach(column => {
                             const displayName = column.column_name;
-                            // Agregar data-type para detectar campos de fecha
-                            select.innerHTML += `<option value="${column.column_name}" data-type="${column.data_type}">${displayName}</option>`;
+                            const option = document.createElement('option');
+                            option.value = column.column_name;
+                            option.textContent = displayName;
+                            
+                            // ✅ AGREGAR ATRIBUTOS PARA DETECCIÓN DE TIPO
+                            option.setAttribute('data-type', column.data_type);
+                            option.setAttribute('data-udt-name', column.udt_name || ''); // ✅ NUEVO: nombre del enum
+                            
+                            select.appendChild(option);
                         });
                     
                     console.log('✅ Campos cargados (excluidos: id, created_at, updated_at, orden)');
@@ -4701,17 +4738,21 @@
             const tabs = { 'create': 1, 'search': 2, 'update': 3, 'delete': 4 };
             return tabs[tabName] || 1;
         }
-
+        
         // Variables globales para autocompletado de entidad en búsqueda
         let globalEntityMatches = [];
         let globalEntitySelectedIndex = -1;
-        
+
         // Manejar cambio de campo de búsqueda
         async function handleSearchFieldChange() {
             const select = document.getElementById('globalSearchField');
             const selectedOption = select.options[select.selectedIndex];
             const fieldType = selectedOption.getAttribute('data-type');
             const fieldName = select.value;
+            
+            // ✅ AGREGAR ESTAS LÍNEAS: Atributos para detectar ENUM
+            const udtName = selectedOption.getAttribute('data-udt-name');
+            const isUserDefined = fieldType && (fieldType.toLowerCase() === 'user-defined' || fieldType.toLowerCase().includes('enum'));
             
             // Contenedores
             const textContainer = document.getElementById('search-text-container');
@@ -4731,17 +4772,35 @@
             // Determinar tipo de búsqueda
             const lowerFieldName = fieldName.toLowerCase();
             
-            // ✅ SI ES CAMPO DE ENTIDAD O NOMBRE DE ENTIDAD
-            if (lowerFieldName.includes('entidad') || 
+            // ✅ 1. SI ES CAMPO ENUM (PRIORIDAD ALTA)
+            if (isUserDefined && udtName && enumOptions[udtName]) {
+                console.log('🔽 Campo ENUM detectado:', udtName, 'Opciones:', enumOptions[udtName]);
+                
+                textContainer.style.display = 'block';
+                
+                // Reemplazar input por select con opciones del enum
+                const searchTextInput = document.getElementById('globalSearchText');
+                const parent = searchTextInput.parentElement;
+                
+                // Crear select con opciones
+                parent.innerHTML = `
+                    <select id="globalSearchText" style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1rem;">
+                        <option value="">-- Seleccione una opción --</option>
+                        ${enumOptions[udtName].map(opt => `<option value="${opt}">${opt}</option>`).join('')}
+                    </select>
+                `;
+                
+            // ✅ 2. SI ES CAMPO DE ENTIDAD O NOMBRE DE ENTIDAD
+            } else if (lowerFieldName.includes('entidad') || 
                 lowerFieldName === 'nombre de la entidad' ||
-                lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales')) {
+                (lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales'))) {
                 
                 entityContainer.style.display = 'block';
                 
                 // Cargar entidades según el tipo de tabla
                 await loadGlobalEntityData();
                 
-            // ✅ SI ES CAMPO DE FECHA
+            // ✅ 3. SI ES CAMPO DE FECHA
             } else if (isDateField(fieldType)) {
                 dateContainer.style.display = 'block';
                 
@@ -4749,10 +4808,47 @@
                 document.getElementById('globalSearchDateFrom').value = '';
                 document.getElementById('globalSearchDateTo').value = '';
                 
-            // ✅ BÚSQUEDA DE TEXTO NORMAL
+            // ✅ 4. BÚSQUEDA DE TEXTO NORMAL
             } else {
                 textContainer.style.display = 'block';
-                document.getElementById('globalSearchText').value = '';
+                
+                // Restaurar input de texto normal si estaba como select
+                const searchTextElement = document.getElementById('globalSearchText');
+                if (searchTextElement && searchTextElement.tagName === 'SELECT') {
+                    const parent = searchTextElement.parentElement;
+                    parent.innerHTML = `
+                        <input type="text" id="globalSearchText" placeholder="Ingrese texto a buscar" 
+                               style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1rem;">
+                    `;
+                } else if (searchTextElement) {
+                    searchTextElement.value = '';
+                }
+            }
+        }
+        
+        // ✅ NUEVA FUNCIÓN: Cargar opciones de enums desde el backend
+        async function loadEnumOptions() {
+            try {
+                const response = await fetch(`${API_BASE}/api/enum-options`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+        
+                if (!response.ok) {
+                    console.warn('⚠️ No se pudieron cargar las opciones de enum');
+                    return;
+                }
+        
+                const result = await response.json();
+                
+                if (result.success) {
+                    enumOptions = result.data;
+                    console.log('✅ Opciones de enum cargadas:', Object.keys(enumOptions));
+                }
+            } catch (error) {
+                console.error('❌ Error cargando opciones de enum:', error);
             }
         }
         
@@ -4930,6 +5026,26 @@
             
             globalEntitySelectedIndex = -1;
             globalEntityMatches = [];
+        }
+
+        function populateSearchFields() {
+            const searchFieldDropdown = document.getElementById('globalSearchField');
+            
+            if (!searchFieldDropdown || !currentTableSchema) return;
+        
+            searchFieldDropdown.innerHTML = '<option value="">-- Seleccione un campo --</option>';
+        
+            currentTableSchema.columns.forEach(column => {
+                const option = document.createElement('option');
+                option.value = column.column_name;
+                option.textContent = column.column_name;
+                
+                // ✅ AGREGAR ATRIBUTOS NECESARIOS
+                option.setAttribute('data-type', column.data_type);
+                option.setAttribute('data-udt-name', column.udt_name || '');
+                
+                searchFieldDropdown.appendChild(option);
+            });
         }
         
         // GLOBAL SEARCH - VERSIÓN MEJORADA
