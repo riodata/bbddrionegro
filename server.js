@@ -1718,6 +1718,7 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
 });
 
 // Nueva función que recibe el esquema como parámetro
+// Nueva función que recibe el esquema como parámetro
 function generateCSVWithSchema(data, tableName, tableSchema) {
   if (!data || data.length === 0) {
     return '';
@@ -1726,8 +1727,18 @@ function generateCSVWithSchema(data, tableName, tableSchema) {
   let orderedColumns = [];
   
   if (tableSchema && tableSchema.columns) {
-    // Usar orden del esquema de la tabla, excluyendo campos internos
-    orderedColumns = tableSchema.columns
+    // ✅ PASO 1: Identificar columna de matrícula
+    let matriculaColumn = null;
+    
+    // Buscar columna de matrícula según el tipo de tabla
+    if (tableName.toLowerCase().includes('cooperativa') || tableName === 'entidades_cooperativas') {
+      matriculaColumn = 'Matricula';
+    } else if (tableName.toLowerCase().includes('mutual') || tableName === 'entidades_mutuales') {
+      matriculaColumn = 'Matricula Nacional';
+    }
+    
+    // ✅ PASO 2: Construir lista de columnas con matrícula primero
+    const allColumns = tableSchema.columns
       .map(col => col.column_name)
       .filter(colName => {
         // Verificar que la columna existe en los datos
@@ -1735,7 +1746,15 @@ function generateCSVWithSchema(data, tableName, tableSchema) {
                !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName);
       });
     
-    // Agregar campos de JOIN al final si existen en los datos
+    // ✅ PASO 3: Si hay matrícula, ponerla primero
+    if (matriculaColumn && allColumns.includes(matriculaColumn)) {
+      orderedColumns = [matriculaColumn, ...allColumns.filter(col => col !== matriculaColumn)];
+      console.log(`✅ CSV: Columna '${matriculaColumn}' colocada como primera columna`);
+    } else {
+      orderedColumns = allColumns;
+    }
+    
+    // ✅ PASO 4: Agregar campos de JOIN al final si existen
     if (data[0] && data[0].entidad_nombre) {
       orderedColumns.push('entidad_nombre');
     }
@@ -1747,6 +1766,29 @@ function generateCSVWithSchema(data, tableName, tableSchema) {
     orderedColumns = Object.keys(data[0]);
   }
 
+  // Función para escapar valores CSV
+  function escapeCSV(value) {
+    if (value === null || value === undefined) return '';
+    
+    const str = String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }
+
+  // Crear header CON ORDEN PRESERVADO
+  const csvLines = [];
+  csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
+
+  // Agregar datos EN EL MISMO ORDEN
+  data.forEach(row => {
+    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
+    csvLines.push(csvRow);
+  });
+
+  return csvLines.join('\n');
+}
   // Función para escapar valores CSV
   function escapeCSV(value) {
     if (value === null || value === undefined) return '';
