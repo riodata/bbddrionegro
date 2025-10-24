@@ -2568,9 +2568,13 @@
             try {
                 showStatus('Generando CSV...', 'info');
                 
-                // Definir columnas en el orden deseado
+                // ✅ DETERMINAR COLUMNA DE MATRÍCULA SEGÚN TIPO
+                const matriculaColumn = currentAdvancedEntityType === 'cooperativas' ? 'matricula' : 'matricula';
+                
+                // ✅ DEFINIR COLUMNAS CON MATRÍCULA PRIMERO
                 const columns = [
-                    'matricula', 'legajo', 'nombre_entidad', 'registro_provincial', 'fecha_inicio',
+                    matriculaColumn, // ✅ MATRÍCULA SIEMPRE PRIMERA
+                    'legajo', 'nombre_entidad', 'registro_provincial', 'fecha_inicio',
                     'domicilio', 'localidad', 'codigo_postal', 'telefono', 'cuit', 'tipo', 'subtipo',
                     'presidente', 'telefono_presidente', 'email_presidente',
                     'fecha_ultima_asamblea', 'tipo_asamblea', 'estado_asamblea',
@@ -2580,14 +2584,15 @@
                 
                 // Headers legibles
                 const headers = [
-                    'Matrícula', 'Legajo', 'Nombre', 'Registro Provincial', 'Fecha Inicio',
+                    currentAdvancedEntityType === 'cooperativas' ? 'Matrícula' : 'Matrícula Nacional', // ✅ AJUSTAR HEADER
+                    'Legajo', 'Nombre', 'Registro Provincial', 'Fecha Inicio',
                     'Domicilio', 'Localidad', 'Código Postal', 'Teléfono', 'CUIT', 'Tipo', 'Subtipo',
                     'Presidente', 'Teléfono Presidente', 'Email Presidente',
                     'Fecha Última Asamblea', 'Tipo Asamblea', 'Estado Asamblea',
                     'Renovación Autoridades', 'Renovación Sindicatura',
                     'Cierre Último Ejercicio', 'Cantidad Asociados'
                 ];
-                
+       
                 // Crear CSV
                 const csvRows = [];
                 csvRows.push(headers.join(','));
@@ -6278,43 +6283,57 @@
                 showStatus('Error al generar el archivo CSV: ' + error.message, 'error');
             }
         }
-        
-        // Función auxiliar para generar CSV desde datos JavaScript
-        function generateCSVFromData(data) {
-            if (!data || data.length === 0) {
+    
+        // Función para generar CSV del lado del cliente (si aplica)
+        function generateCSVFromRecords(records, tableName) {
+            if (!records || records.length === 0) {
                 return '';
             }
-        
-            // Obtener todas las columnas
-            const allColumns = new Set();
-            data.forEach(row => {
-                Object.keys(row).forEach(key => allColumns.add(key));
-            });
-        
-            const columns = Array.from(allColumns).sort();
+            
+            // ✅ PASO 1: Identificar columna de matrícula
+            let matriculaColumn = null;
+            
+            if (currentTable.toLowerCase().includes('cooperativa') || currentTable === 'entidades_cooperativas') {
+                matriculaColumn = 'Matricula';
+            } else if (currentTable.toLowerCase().includes('mutual') || currentTable === 'entidades_mutuales') {
+                matriculaColumn = 'Matricula Nacional';
+            }
+            
+            // ✅ PASO 2: Obtener todas las columnas
+            const allColumns = Object.keys(records[0]).filter(col => 
+                !['_primaryKey', '_rowIndex'].includes(col)
+            );
+            
+            // ✅ PASO 3: Ordenar con matrícula primero
+            let orderedColumns;
+            if (matriculaColumn && allColumns.includes(matriculaColumn)) {
+                orderedColumns = [matriculaColumn, ...allColumns.filter(col => col !== matriculaColumn)];
+                console.log(`✅ CSV Frontend: '${matriculaColumn}' colocada como primera columna`);
+            } else {
+                orderedColumns = allColumns;
+            }
             
             // Función para escapar valores CSV
             function escapeCSV(value) {
                 if (value === null || value === undefined) return '';
                 
                 const str = String(value);
-                // Si contiene comas, comillas o saltos de línea, escapar
                 if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
                     return `"${str.replace(/"/g, '""')}"`;
                 }
                 return str;
             }
-        
+            
             // Crear header
             const csvLines = [];
-            csvLines.push(columns.map(col => escapeCSV(col)).join(','));
-        
+            csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
+            
             // Agregar datos
-            data.forEach(row => {
-                const csvRow = columns.map(col => escapeCSV(row[col] || '')).join(',');
+            records.forEach(record => {
+                const csvRow = orderedColumns.map(col => escapeCSV(record[col] || '')).join(',');
                 csvLines.push(csvRow);
             });
-        
+            
             return csvLines.join('\n');
         }
         
