@@ -1717,10 +1717,17 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
   }
 });
 
-// Helper: escapar valores CSV (una sola definición reutilizable)
+// Helper: escape CSV cell
 function escapeCSV(value) {
   if (value === null || value === undefined) return '';
-  
+  // If it's an object/array, stringify it
+  if (typeof value === 'object') {
+    try {
+      value = JSON.stringify(value);
+    } catch (e) {
+      value = String(value);
+    }
+  }
   const str = String(value);
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
@@ -1728,99 +1735,57 @@ function escapeCSV(value) {
   return str;
 }
 
-// Nueva función que recibe el esquema como parámetro
-function generateCSVWithSchema(data, tableName, tableSchema) {
-  if (!data || data.length === 0) {
-    return '';
-  }
+function generateCSV(data, tableName, tableSchema) {
+  if (!data || data.length === 0) return '';
 
+  // Determine ordered columns
   let orderedColumns = [];
-  
+
   if (tableSchema && tableSchema.columns) {
-    // ✅ PRIORIZAR MATRÍCULA COMO PRIMERA COLUMNA
-    const matriculaColumn = tableSchema.columns.find(col => 
-      col.column_name === 'Matricula' || col.column_name === 'Matricula Nacional'
-    );
-    
-    // Si existe matrícula, agregarla primero
-    if (matriculaColumn && data[0].hasOwnProperty(matriculaColumn.column_name)) {
-      orderedColumns.push(matriculaColumn.column_name);
+    // start from schema order but only keep those present in the first row (to avoid headers with no data)
+    const firstRow = data[0];
+    orderedColumns = tableSchema.columns
+      .map(col => col.column_name)
+      .filter(colName =>
+        !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName) &&
+        Object.prototype.hasOwnProperty.call(firstRow, colName)
+      );
+
+    // Optionally prioritize Matricula columns like other helper does
+    const matriculaIdx = orderedColumns.findIndex(c => c === 'Matricula' || c === 'Matricula Nacional');
+    if (matriculaIdx > 0) {
+      const [m] = orderedColumns.splice(matriculaIdx, 1);
+      orderedColumns.unshift(m);
     }
-    
-    // Luego agregar el resto de columnas (excluyendo la matrícula que ya agregamos)
-    orderedColumns = orderedColumns.concat(
-      tableSchema.columns
-        .map(col => col.column_name)
-        .filter(colName => {
-          // Verificar que la columna existe en los datos
-          return data[0].hasOwnProperty(colName) && 
-                 !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName) &&
-                 colName !== 'Matricula' && 
-                 colName !== 'Matricula Nacional'; // Excluir porque ya la agregamos
-        })
-    );
-    
-    // Agregar campos de JOIN al final si existen en los datos
-    if (data[0] && data[0].entidad_nombre && !orderedColumns.includes('entidad_nombre')) {
+
+    // Add joined fields if present in data but not in schema
+    if (Object.prototype.hasOwnProperty.call(firstRow, 'entidad_nombre') && !orderedColumns.includes('entidad_nombre')) {
       orderedColumns.push('entidad_nombre');
     }
-    if (data[0] && data[0].entidad_localidad && !orderedColumns.includes('entidad_localidad')) {
+    if (Object.prototype.hasOwnProperty.call(firstRow, 'entidad_localidad') && !orderedColumns.includes('entidad_localidad')) {
       orderedColumns.push('entidad_localidad');
     }
   } else {
-    // Fallback: usar todas las columnas del primer registro
+    // fallback: use keys from first record, stable order
+    orderedColumns = Object.keys(data[0]).filter(k => !['_primaryKey', '_rowIndex'].includes(k));
+  }
+
+  // Ensure we don't produce empty header if orderedColumns ended up empty
+  if (orderedColumns.length === 0) {
     orderedColumns = Object.keys(data[0]);
   }
 
-  // Crear header CON ORDEN PRESERVADO
   const csvLines = [];
+  // header
   csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
 
-  // Agregar datos EN EL MISMO ORDEN
+  // rows
   data.forEach(row => {
-    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
-    csvLines.push(csvRow);
-  });
-
-  return csvLines.join('\n');
-}
-
-// Función auxiliar para generar CSV - alternativa que acepta esquema opcional
-function generateCSV(data, tableName, tableSchema) {
-  if (!data || data.length === 0) {
-    return '';
-  }
-
-  // DEFINIR ORDEN DE COLUMNAS basado en el esquema y lógica de display
-  let orderedColumns = [];
-  
-  // Usar el tableSchema si se proporciona
-  if (tableSchema && tableSchema.columns) {
-    // Usar orden del esquema de la tabla, excluyendo campos internos
-    orderedColumns = tableSchema.columns
-      .map(col => col.column_name)
-      .filter(colName => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName));
-    
-    // Agregar campos de JOIN al final si existen en los datos
-    if (data[0] && data[0].entidad_nombre) {
-      if (!orderedColumns.includes('entidad_nombre')) orderedColumns.push('entidad_nombre');
-    }
-    if (data[0] && data[0].entidad_localidad) {
-      if (!orderedColumns.includes('entidad_localidad')) orderedColumns.push('entidad_localidad');
-    }
-  } else {
-    // Fallback: usar todas las columnas del primer registro
-    const firstRecord = data[0];
-    orderedColumns = Object.keys(firstRecord);
-  }
-
-  // Crear header CON ORDEN PRESERVADO
-  const csvLines = [];
-  csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
-
-  // Agregar datos EN EL MISMO ORDEN
-  data.forEach(row => {
-    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
+    const csvRow = orderedColumns.map(col => {
+      // Use explicit null/undefined check so 0 and false are preserved
+      const raw = (row[col] === null || row[col] === undefined) ? '' : row[col];
+      return escapeCSV(raw);
+    }).join(',');
     csvLines.push(csvRow);
   });
 
