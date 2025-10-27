@@ -377,14 +377,33 @@ async function validateTableAccess(tableName) {
 async function getTableFields(tableName) {
   try {
     const query = `
-      SELECT column_name, data_type, is_primary_key 
-      FROM app_information_schema 
-      WHERE table_name = $1
-      ORDER BY ordinal_position
+      SELECT 
+        c.column_name,
+        c.data_type,
+        c.udt_name,
+        c.ordinal_position,
+        -- detectar si es primary key
+        EXISTS (
+          SELECT 1
+          FROM pg_index i
+          JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+          WHERE i.indrelid = ($1)::regclass
+            AND i.indisprimary
+            AND a.attname = c.column_name
+        ) AS is_primary_key
+      FROM information_schema.columns c
+      WHERE c.table_name = $1
+      ORDER BY c.ordinal_position
     `;
     
     const result = await pool.query(query, [tableName]);
-    return result.rows;
+    // Mapear a la estructura que usa el frontend
+    return result.rows.map(row => ({
+      column_name: row.column_name,
+      data_type: row.data_type,
+      udt_name: row.udt_name,        // nombre del tipo (útil para enums)
+      is_primary_key: row.is_primary_key
+    }));
   } catch (error) {
     console.error(`Error obteniendo campos de ${tableName}:`, error);
     throw error;
