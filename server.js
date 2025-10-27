@@ -2116,14 +2116,17 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
             paramIndex++;
         }
         
+        // CORRECCIÓN: Algunas columnas (p. ej. 'Localidad' o 'Tipo') pueden no ser text (enum/user-defined),
+        // por lo tanto usamos CAST a text antes de usar ILIKE para evitar el error:
+        // "operator does not exist: <type> ~~* unknown"
         if (localidad) {
-            whereConditions.push(`e."Localidad" ILIKE $${paramIndex}`);
+            whereConditions.push(`CAST(e."Localidad" AS TEXT) ILIKE $${paramIndex}`);
             params.push(`%${localidad}%`);
             paramIndex++;
         }
         
         if (tipo) {
-            whereConditions.push(`e."Tipo" ILIKE $${paramIndex}`);
+            whereConditions.push(`CAST(e."Tipo" AS TEXT) ILIKE $${paramIndex}`);
             params.push(`%${tipo}%`);
             paramIndex++;
         }
