@@ -1078,7 +1078,7 @@ app.get('/estadisticas-mutuales', (req, res) => {
     <body>
       <div class="header">
         <h1>📈 Estadísticas Mutuales</h1>
-        <p>Análisis de datos y métricas del sector mutual</p>
+        <p>Análisis de datos del sector mutual</p>
       </div>
       <a href="/" class="back-btn">← Volver al inicio</a>
       <iframe src="https://lookerstudio.google.com/embed/reporting/5162eea8-8691-4e71-8a8d-5bbaa7e276a2/page/62DPE"></iframe>
@@ -1294,7 +1294,7 @@ app.post('/api/password-reset/request', async (req, res) => {
     console.error("📋 Stack trace:", error.stack);
     
     return res.status(500).json({ 
-      success: false, 
+      success: false,
       message: "Error interno del servidor",
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
@@ -1717,6 +1717,17 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
   }
 });
 
+// Helper: escapar valores CSV (una sola definición reutilizable)
+function escapeCSV(value) {
+  if (value === null || value === undefined) return '';
+  
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 // Nueva función que recibe el esquema como parámetro
 function generateCSVWithSchema(data, tableName, tableSchema) {
   if (!data || data.length === 0) {
@@ -1761,63 +1772,6 @@ function generateCSVWithSchema(data, tableName, tableSchema) {
     orderedColumns = Object.keys(data[0]);
   }
 
-  // Función para escapar valores CSV
-  function escapeCSV(value) {
-    if (value === null || value === undefined) return '';
-    
-    const str = String(value);
-    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  }
-
-  // Crear header CON ORDEN PRESERVADO
-  const csvLines = [];
-  csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
-
-  // Agregar datos EN EL MISMO ORDEN
-  data.forEach(row => {
-    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
-    csvLines.push(csvRow);
-  });
-
-  return csvLines.join('\n');
-}
-  // Función para escapar valores CSV
-  function escapeCSV(value) {
-    if (value === null || value === undefined) return '';
-    
-    const str = String(value);
-    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  }
-
-  // Crear header CON ORDEN PRESERVADO
-  const csvLines = [];
-  csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
-
-  // Agregar datos EN EL MISMO ORDEN
-  data.forEach(row => {
-    const csvRow = orderedColumns.map(col => escapeCSV(row[col] || '')).join(',');
-    csvLines.push(csvRow);
-  });
-
-  return csvLines.join('\n');
-}
-  // Función para escapar valores CSV
-  function escapeCSV(value) {
-    if (value === null || value === undefined) return '';
-    
-    const str = String(value);
-    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  }
-
   // Crear header CON ORDEN PRESERVADO
   const csvLines = [];
   csvLines.push(orderedColumns.map(col => escapeCSV(col)).join(','));
@@ -1831,8 +1785,8 @@ function generateCSVWithSchema(data, tableName, tableSchema) {
   return csvLines.join('\n');
 }
 
-// Función auxiliar para generar CSV - CORREGIDA
-function generateCSV(data, tableName) {
+// Función auxiliar para generar CSV - alternativa que acepta esquema opcional
+function generateCSV(data, tableName, tableSchema) {
   if (!data || data.length === 0) {
     return '';
   }
@@ -1840,36 +1794,24 @@ function generateCSV(data, tableName) {
   // DEFINIR ORDEN DE COLUMNAS basado en el esquema y lógica de display
   let orderedColumns = [];
   
-  // Intentar obtener esquema de la tabla actual
-  if (currentTableSchema && currentTableSchema.columns) {
+  // Usar el tableSchema si se proporciona
+  if (tableSchema && tableSchema.columns) {
     // Usar orden del esquema de la tabla, excluyendo campos internos
-    orderedColumns = currentTableSchema.columns
+    orderedColumns = tableSchema.columns
       .map(col => col.column_name)
       .filter(colName => !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName));
     
     // Agregar campos de JOIN al final si existen en los datos
     if (data[0] && data[0].entidad_nombre) {
-      orderedColumns.push('entidad_nombre');
+      if (!orderedColumns.includes('entidad_nombre')) orderedColumns.push('entidad_nombre');
     }
     if (data[0] && data[0].entidad_localidad) {
-      orderedColumns.push('entidad_localidad');
+      if (!orderedColumns.includes('entidad_localidad')) orderedColumns.push('entidad_localidad');
     }
   } else {
     // Fallback: usar todas las columnas del primer registro
     const firstRecord = data[0];
     orderedColumns = Object.keys(firstRecord);
-  }
-
-  // Función para escapar valores CSV
-  function escapeCSV(value) {
-    if (value === null || value === undefined) return '';
-    
-    const str = String(value);
-    // Si contiene comas, comillas o saltos de línea, escapar
-    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
   }
 
   // Crear header CON ORDEN PRESERVADO
@@ -1884,6 +1826,7 @@ function generateCSV(data, tableName) {
 
   return csvLines.join('\n');
 }
+
 // READ - Leer todos los registros
 app.get('/api/tables/:tableName/read', auth.requireAuth, async (req, res) => {
   try {
