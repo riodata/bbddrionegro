@@ -6409,6 +6409,15 @@
             try {
                 showStatus('Generando archivo CSV...', 'info');
         
+                // ✅ PASO 1: Identificar columna de matrícula
+                let matriculaColumn = null;
+                
+                if (currentTable.toLowerCase().includes('cooperativa') || currentTable === 'entidades_cooperativas') {
+                    matriculaColumn = 'Matricula';
+                } else if (currentTable.toLowerCase().includes('mutual') || currentTable === 'entidades_mutuales') {
+                    matriculaColumn = 'Matricula Nacional';
+                }
+                
                 // DEFINIR ORDEN DE COLUMNAS basado en el esquema de la tabla
                 let orderedColumns = [];
                 
@@ -6438,6 +6447,12 @@
                     const firstRecord = currentRecords[0];
                     orderedColumns = Object.keys(firstRecord)
                         .filter(key => !['_primaryKey', '_rowIndex'].includes(key));
+                }
+                
+                // ✅ PASO 2: Reordenar para poner matrícula primero
+                if (matriculaColumn && orderedColumns.includes(matriculaColumn)) {
+                    orderedColumns = [matriculaColumn, ...orderedColumns.filter(col => col !== matriculaColumn)];
+                    console.log(`✅ CSV Frontend: '${matriculaColumn}' colocada como primera columna`);
                 }
         
                 // CREAR HEADERS manteniendo el orden exacto
