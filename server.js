@@ -1823,6 +1823,28 @@ function escapeCSV(value) {
   return str;
 }
 
+// Helper: get matricula column name based on table name
+function getMatriculaColumnName(tableName) {
+  if (!tableName) return null;
+  
+  if (tableName.toLowerCase().includes('cooperativa') || tableName === 'entidades_cooperativas') {
+    return 'Matricula';
+  } else if (tableName.toLowerCase().includes('mutual') || tableName === 'entidades_mutuales') {
+    return 'Matricula Nacional';
+  }
+  return null;
+}
+
+// Helper: reorder columns with matricula first
+function reorderColumnsWithMatriculaFirst(columns, matriculaColumn) {
+  if (matriculaColumn && columns.includes(matriculaColumn)) {
+    const filtered = columns.filter(col => col !== matriculaColumn);
+    console.log(`✅ CSV Backend: '${matriculaColumn}' colocada como primera columna`);
+    return [matriculaColumn, ...filtered];
+  }
+  return columns;
+}
+
 function generateCSV(data, tableName, tableSchema) {
   if (!data || data.length === 0) return '';
 
@@ -1838,13 +1860,6 @@ function generateCSV(data, tableName, tableSchema) {
         !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName) &&
         Object.prototype.hasOwnProperty.call(firstRow, colName)
       );
-
-    // Optionally prioritize Matricula columns like other helper does
-    const matriculaIdx = orderedColumns.findIndex(c => c === 'Matricula' || c === 'Matricula Nacional');
-    if (matriculaIdx > 0) {
-      const [m] = orderedColumns.splice(matriculaIdx, 1);
-      orderedColumns.unshift(m);
-    }
 
     // Add joined fields if present in data but not in schema
     if (Object.prototype.hasOwnProperty.call(firstRow, 'entidad_nombre') && !orderedColumns.includes('entidad_nombre')) {
@@ -1862,6 +1877,10 @@ function generateCSV(data, tableName, tableSchema) {
   if (orderedColumns.length === 0) {
     orderedColumns = Object.keys(data[0]);
   }
+
+  // ✅ Prioritize matricula column as first column using helper
+  const matriculaColumn = getMatriculaColumnName(tableName);
+  orderedColumns = reorderColumnsWithMatriculaFirst(orderedColumns, matriculaColumn);
 
   const csvLines = [];
   // header
