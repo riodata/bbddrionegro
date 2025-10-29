@@ -6409,15 +6409,6 @@
             try {
                 showStatus('Generando archivo CSV...', 'info');
         
-                // ✅ PASO 1: Identificar columna de matrícula
-                let matriculaColumn = null;
-                
-                if (currentTable.toLowerCase().includes('cooperativa') || currentTable === 'entidades_cooperativas') {
-                    matriculaColumn = 'Matricula';
-                } else if (currentTable.toLowerCase().includes('mutual') || currentTable === 'entidades_mutuales') {
-                    matriculaColumn = 'Matricula Nacional';
-                }
-                
                 // DEFINIR ORDEN DE COLUMNAS basado en el esquema de la tabla
                 let orderedColumns = [];
                 
@@ -6449,11 +6440,9 @@
                         .filter(key => !['_primaryKey', '_rowIndex'].includes(key));
                 }
                 
-                // ✅ PASO 2: Reordenar para poner matrícula primero
-                if (matriculaColumn && orderedColumns.includes(matriculaColumn)) {
-                    orderedColumns = [matriculaColumn, ...orderedColumns.filter(col => col !== matriculaColumn)];
-                    console.log(`✅ CSV Frontend: '${matriculaColumn}' colocada como primera columna`);
-                }
+                // ✅ Reordenar para poner matrícula primero usando helper
+                const matriculaColumn = getMatriculaColumnName(currentTable);
+                orderedColumns = reorderColumnsWithMatriculaFirst(orderedColumns, matriculaColumn);
         
                 // CREAR HEADERS manteniendo el orden exacto
                 const headers = orderedColumns; // Mantener nombres originales
@@ -6517,28 +6506,16 @@
                 return '';
             }
             
-            // ✅ PASO 1: Identificar columna de matrícula
-            let matriculaColumn = null;
+            // ✅ Obtener columna de matrícula usando helper
+            const matriculaColumn = getMatriculaColumnName(tableName || currentTable);
             
-            if (currentTable.toLowerCase().includes('cooperativa') || currentTable === 'entidades_cooperativas') {
-                matriculaColumn = 'Matricula';
-            } else if (currentTable.toLowerCase().includes('mutual') || currentTable === 'entidades_mutuales') {
-                matriculaColumn = 'Matricula Nacional';
-            }
-            
-            // ✅ PASO 2: Obtener todas las columnas
+            // ✅ Obtener todas las columnas
             const allColumns = Object.keys(records[0]).filter(col => 
                 !['_primaryKey', '_rowIndex'].includes(col)
             );
             
-            // ✅ PASO 3: Ordenar con matrícula primero
-            let orderedColumns;
-            if (matriculaColumn && allColumns.includes(matriculaColumn)) {
-                orderedColumns = [matriculaColumn, ...allColumns.filter(col => col !== matriculaColumn)];
-                console.log(`✅ CSV Frontend: '${matriculaColumn}' colocada como primera columna`);
-            } else {
-                orderedColumns = allColumns;
-            }
+            // ✅ Ordenar con matrícula primero usando helper
+            const orderedColumns = reorderColumnsWithMatriculaFirst(allColumns, matriculaColumn);
             
             // Función para escapar valores CSV
             function escapeCSV(value) {
@@ -6564,7 +6541,30 @@
             return csvLines.join('\n');
         }
         
-        // Función helper para obtener el campo matrícula actual
+        // Función helper para obtener el campo matrícula según tipo de tabla
+        function getMatriculaColumnName(tableName = null) {
+            const table = tableName || currentTable;
+            if (!table) return null;
+            
+            if (table.toLowerCase().includes('cooperativa') || table === 'entidades_cooperativas') {
+                return 'Matricula';
+            } else if (table.toLowerCase().includes('mutual') || table === 'entidades_mutuales') {
+                return 'Matricula Nacional';
+            }
+            return null;
+        }
+        
+        // Función helper para reordenar columnas con matrícula primero
+        function reorderColumnsWithMatriculaFirst(columns, matriculaColumn) {
+            if (matriculaColumn && columns.includes(matriculaColumn)) {
+                const filtered = columns.filter(col => col !== matriculaColumn);
+                console.log(`✅ CSV: '${matriculaColumn}' colocada como primera columna`);
+                return [matriculaColumn, ...filtered];
+            }
+            return columns;
+        }
+        
+        // Función helper para obtener el campo matrícula actual (basado en esquema)
         function getCurrentMatriculaField() {
             if (!currentTableSchema || !currentTableSchema.columns) return null;
             
