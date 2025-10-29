@@ -1781,7 +1781,7 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
     }
 
     // PASAR EL ESQUEMA A LA FUNCIÓN generateCSV
-    const csvData = generateCSVWithSchema(result.rows, tableName, tableSchema);
+    const csvData = generateCSV(result.rows, tableName, tableSchema);
     
     // Configurar headers para descarga
     const fileName = `${tableName}_${new Date().toISOString().split('T')[0]}.csv`;
@@ -1823,6 +1823,27 @@ function escapeCSV(value) {
   return str;
 }
 
+// Helper: get matricula column name based on table name
+function getMatriculaColumnName(tableName) {
+  if (!tableName) return null;
+  
+  if (tableName.toLowerCase().includes('cooperativa') || tableName === 'entidades_cooperativas') {
+    return 'Matricula';
+  } else if (tableName.toLowerCase().includes('mutual') || tableName === 'entidades_mutuales') {
+    return 'Matricula Nacional';
+  }
+  return null;
+}
+
+// Helper: reorder columns with matricula first
+function reorderColumnsWithMatriculaFirst(columns, matriculaColumn) {
+  if (matriculaColumn && columns.includes(matriculaColumn)) {
+    const filtered = columns.filter(col => col !== matriculaColumn);
+    return [matriculaColumn, ...filtered];
+  }
+  return columns;
+}
+
 function generateCSV(data, tableName, tableSchema) {
   if (!data || data.length === 0) return '';
 
@@ -1838,13 +1859,6 @@ function generateCSV(data, tableName, tableSchema) {
         !['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'].includes(colName) &&
         Object.prototype.hasOwnProperty.call(firstRow, colName)
       );
-
-    // Optionally prioritize Matricula columns like other helper does
-    const matriculaIdx = orderedColumns.findIndex(c => c === 'Matricula' || c === 'Matricula Nacional');
-    if (matriculaIdx > 0) {
-      const [m] = orderedColumns.splice(matriculaIdx, 1);
-      orderedColumns.unshift(m);
-    }
 
     // Add joined fields if present in data but not in schema
     if (Object.prototype.hasOwnProperty.call(firstRow, 'entidad_nombre') && !orderedColumns.includes('entidad_nombre')) {
@@ -1862,6 +1876,10 @@ function generateCSV(data, tableName, tableSchema) {
   if (orderedColumns.length === 0) {
     orderedColumns = Object.keys(data[0]);
   }
+
+  // ✅ Prioritize matricula column as first column using helper
+  const matriculaColumn = getMatriculaColumnName(tableName);
+  orderedColumns = reorderColumnsWithMatriculaFirst(orderedColumns, matriculaColumn);
 
   const csvLines = [];
   // header
@@ -2188,11 +2206,6 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
         const matriculaField = entityType === 'cooperativas' ? 'Matricula' : 'Matricula Nacional';
         const nombreField = entityType === 'cooperativas' ? 'Nombre de la Entidad' : 'Entidad';
         
-        // ✅ Nombres correctos de tablas relacionadas
-        const consejoTable = entityType === 'cooperativas' ? 'consejo_cooperativas' : 'consejo_mutuales';
-        const asambleasTable = entityType === 'cooperativas' ? 'asambleas_cooperativas' : 'asambleas_mutuales';
-        const ejercicioTable = entityType === 'cooperativas' ? 'ejercicio_cooperativas' : 'ejercicio_mutuales';
-        
         // Construir condiciones WHERE dinámicamente
         let whereConditions = [];
         let params = [];
@@ -2221,90 +2234,154 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
         
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
-        // ✅ Query con NOMBRES CORRECTOS según las tablas
-        const query = `
-            SELECT 
-                e."${matriculaField}" as matricula,
-                e."Legajo" as legajo,
-                e."${nombreField}" as nombre_entidad,
-                e."Registro Provincial" as registro_provincial,
-                e."Fecha de inicio" as fecha_inicio,
-                e."Domicilio" as domicilio,
-                e."Localidad" as localidad,
-                e."Codigo Postal" as codigo_postal,
-                e."Tefefono" as telefono,
-                e."CUIT" as cuit,
-                e."Tipo" as tipo,
-                e."Subtipo" as subtipo,
-                
-                -- ✅ Presidente del consejo (más reciente y con mandato activo)
-                (SELECT c."Nombre" 
-                 FROM "${consejoTable}" c
-                 WHERE c."${matriculaField}" = e."${matriculaField}" 
-                 AND LOWER(c."Autoridad"::text) = 'presidente'
-                 AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
-                 ORDER BY c."Fecha inicio" DESC 
-                 LIMIT 1) as presidente,
-                 
-                (SELECT c."DNI"::text
-                 FROM "${consejoTable}" c
-                 WHERE c."${matriculaField}" = e."${matriculaField}" 
-                 AND LOWER(c."Autoridad"::text) = 'presidente'
-                 AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
-                 ORDER BY c."Fecha inicio" DESC 
-                 LIMIT 1) as telefono_presidente,
-                
-                -- ✅ Email (no existe en tabla consejo, usar el de entidad)
-                e."Email" as email_presidente,
-                
-                -- ✅ Última asamblea (usar fecha_asamblea en lugar de Fecha)
-                (SELECT a."fecha_asamblea" 
-                 FROM "${asambleasTable}" a
-                 WHERE a."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY a."fecha_asamblea" DESC 
-                 LIMIT 1) as fecha_ultima_asamblea,
-                 
-                (SELECT a."tipo asamblea"::text
-                 FROM "${asambleasTable}" a
-                 WHERE a."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY a."fecha_asamblea" DESC 
-                 LIMIT 1) as tipo_asamblea,
-                 
-                (SELECT a."Estado Asamblea"::text
-                 FROM "${asambleasTable}" a
-                 WHERE a."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY a."fecha_asamblea" DESC 
-                 LIMIT 1) as estado_asamblea,
-                 
-                (SELECT a."renovacion autoridades"::text
-                 FROM "${asambleasTable}" a
-                 WHERE a."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY a."fecha_asamblea" DESC 
-                 LIMIT 1) as renovacion_autoridades,
-                 
-                (SELECT a."renovacion sindicatura"::text
-                 FROM "${asambleasTable}" a
-                 WHERE a."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY a."fecha_asamblea" DESC 
-                 LIMIT 1) as renovacion_sindicatura,
-                
-                -- ✅ Último ejercicio (usar "cierre ejercicio")
-                (SELECT ej."cierre ejercicio" 
-                 FROM "${ejercicioTable}" ej
-                 WHERE ej."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY ej."cierre ejercicio" DESC 
-                 LIMIT 1) as cierre_ultimo_ejercicio,
-                 
-                (SELECT ej."cantidad asociados"
-                 FROM "${ejercicioTable}" ej
-                 WHERE ej."${matriculaField}" = e."${matriculaField}"
-                 ORDER BY ej."cierre ejercicio" DESC 
-                 LIMIT 1) as cantidad_asociados
-            FROM "${tableName}" e
-            ${whereClause}
-            ORDER BY e."${nombreField}" ASC
-            LIMIT 100
-        `;
+        let query;
+        
+        // ✅ MUTUALES: Query específica según requerimientos
+        if (entityType === 'mutuales') {
+            query = `
+                SELECT 
+                    e."Matricula Nacional" as matricula,
+                    e."Entidad" as nombre_entidad,
+                    e."Registro Provincial" as registro_provincial,
+                    e."Domicilio" as domicilio,
+                    e."Localidad" as localidad,
+                    e."Tefefono" as telefono,
+                    e."Email" as email,
+                    
+                    -- Presidente desde autoridades_mutuales
+                    (SELECT a."nombre" 
+                     FROM "autoridades_mutuales" a
+                     WHERE a."Matricula Nacional" = e."Matricula Nacional" 
+                     AND LOWER(a."autoridad"::text) = 'presidente'
+                     AND LOWER(a."mandato activo"::text) = 'si'
+                     LIMIT 1) as presidente_nombre,
+                     
+                    (SELECT a."email" 
+                     FROM "autoridades_mutuales" a
+                     WHERE a."Matricula Nacional" = e."Matricula Nacional" 
+                     AND LOWER(a."autoridad"::text) = 'presidente'
+                     AND LOWER(a."mandato activo"::text) = 'si'
+                     LIMIT 1) as presidente_email,
+                    
+                    -- Última asamblea desde asambleas_mutuales
+                    (SELECT am."cierre ejercicio" 
+                     FROM "asambleas_mutuales" am
+                     WHERE am."Matricula Nacional" = e."Matricula Nacional"
+                     ORDER BY am."cierre ejercicio" DESC 
+                     LIMIT 1) as cierre_ejercicio,
+                     
+                    (SELECT am."fecha asamblea" 
+                     FROM "asambleas_mutuales" am
+                     WHERE am."Matricula Nacional" = e."Matricula Nacional"
+                     ORDER BY am."fecha asamblea" DESC 
+                     LIMIT 1) as fecha_asamblea,
+                    
+                    -- Reglamentos vigentes desde reglamentosservicio_mutuales
+                    (SELECT STRING_AGG(r."Nombre del Reglamento", '; ' ORDER BY r."vigente hasta" DESC)
+                     FROM "reglamentosservicio_mutuales" r
+                     WHERE r."Matricula Nacional" = e."Matricula Nacional"
+                     AND r."vigente hasta" < CURRENT_DATE) as reglamentos_nombre,
+                     
+                    (SELECT STRING_AGG(r."vigente hasta"::text, '; ' ORDER BY r."vigente hasta" DESC)
+                     FROM "reglamentosservicio_mutuales" r
+                     WHERE r."Matricula Nacional" = e."Matricula Nacional"
+                     AND r."vigente hasta" < CURRENT_DATE) as reglamentos_vigente_hasta
+                     
+                FROM "entidades_mutuales" e
+                ${whereClause}
+                ORDER BY e."Entidad" ASC
+                LIMIT 100
+            `;
+        } else {
+            // ✅ COOPERATIVAS: Query original
+            const consejoTable = 'consejo_cooperativas';
+            const asambleasTable = 'asambleas_cooperativas';
+            const ejercicioTable = 'ejercicio_cooperativas';
+            
+            query = `
+                SELECT 
+                    e."${matriculaField}" as matricula,
+                    e."Legajo" as legajo,
+                    e."${nombreField}" as nombre_entidad,
+                    e."Registro Provincial" as registro_provincial,
+                    e."Fecha de inicio" as fecha_inicio,
+                    e."Domicilio" as domicilio,
+                    e."Localidad" as localidad,
+                    e."Codigo Postal" as codigo_postal,
+                    e."Tefefono" as telefono,
+                    e."CUIT" as cuit,
+                    e."Tipo" as tipo,
+                    e."Subtipo" as subtipo,
+                    
+                    -- ✅ Presidente del consejo (más reciente y con mandato activo)
+                    (SELECT c."Nombre" 
+                     FROM "${consejoTable}" c
+                     WHERE c."${matriculaField}" = e."${matriculaField}" 
+                     AND LOWER(c."Autoridad"::text) = 'presidente'
+                     AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
+                     ORDER BY c."Fecha inicio" DESC 
+                     LIMIT 1) as presidente,
+                     
+                    (SELECT c."DNI"::text
+                     FROM "${consejoTable}" c
+                     WHERE c."${matriculaField}" = e."${matriculaField}" 
+                     AND LOWER(c."Autoridad"::text) = 'presidente'
+                     AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
+                     ORDER BY c."Fecha inicio" DESC 
+                     LIMIT 1) as telefono_presidente,
+                    
+                    -- ✅ Email (no existe en tabla consejo, usar el de entidad)
+                    e."Email" as email_presidente,
+                    
+                    -- ✅ Última asamblea (usar fecha_asamblea en lugar de Fecha)
+                    (SELECT a."fecha_asamblea" 
+                     FROM "${asambleasTable}" a
+                     WHERE a."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY a."fecha_asamblea" DESC 
+                     LIMIT 1) as fecha_ultima_asamblea,
+                     
+                    (SELECT a."tipo asamblea"::text
+                     FROM "${asambleasTable}" a
+                     WHERE a."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY a."fecha_asamblea" DESC 
+                     LIMIT 1) as tipo_asamblea,
+                     
+                    (SELECT a."Estado Asamblea"::text
+                     FROM "${asambleasTable}" a
+                     WHERE a."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY a."fecha_asamblea" DESC 
+                     LIMIT 1) as estado_asamblea,
+                     
+                    (SELECT a."renovacion autoridades"::text
+                     FROM "${asambleasTable}" a
+                     WHERE a."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY a."fecha_asamblea" DESC 
+                     LIMIT 1) as renovacion_autoridades,
+                     
+                    (SELECT a."renovacion sindicatura"::text
+                     FROM "${asambleasTable}" a
+                     WHERE a."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY a."fecha_asamblea" DESC 
+                     LIMIT 1) as renovacion_sindicatura,
+                    
+                    -- ✅ Último ejercicio (usar "cierre ejercicio")
+                    (SELECT ej."cierre ejercicio" 
+                     FROM "${ejercicioTable}" ej
+                     WHERE ej."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY ej."cierre ejercicio" DESC 
+                     LIMIT 1) as cierre_ultimo_ejercicio,
+                     
+                    (SELECT ej."cantidad asociados"
+                     FROM "${ejercicioTable}" ej
+                     WHERE ej."${matriculaField}" = e."${matriculaField}"
+                     ORDER BY ej."cierre ejercicio" DESC 
+                     LIMIT 1) as cantidad_asociados
+                FROM "${tableName}" e
+                ${whereClause}
+                ORDER BY e."${nombreField}" ASC
+                LIMIT 100
+            `;
+        }
         
         console.log('📋 Query búsqueda avanzada:', query);
         console.log('📋 Params:', params);

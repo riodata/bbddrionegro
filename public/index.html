@@ -2568,30 +2568,94 @@
             try {
                 showStatus('Generando CSV...', 'info');
                 
-                // ✅ DETERMINAR COLUMNA DE MATRÍCULA SEGÚN TIPO
-                const matriculaColumn = currentAdvancedEntityType === 'cooperativas' ? 'matricula' : 'matricula';
+                // ✅ DEFINIR COLUMNAS Y HEADERS SEGÚN TIPO DE ENTIDAD
+                let columns, headers;
                 
-                // ✅ DEFINIR COLUMNAS CON MATRÍCULA PRIMERO
-                const columns = [
-                    matriculaColumn, // ✅ MATRÍCULA SIEMPRE PRIMERA
-                    'legajo', 'nombre_entidad', 'registro_provincial', 'fecha_inicio',
-                    'domicilio', 'localidad', 'codigo_postal', 'telefono', 'cuit', 'tipo', 'subtipo',
-                    'presidente', 'telefono_presidente', 'email_presidente',
-                    'fecha_ultima_asamblea', 'tipo_asamblea', 'estado_asamblea',
-                    'renovacion_autoridades', 'renovacion_sindicatura',
-                    'cierre_ultimo_ejercicio', 'cantidad_asociados'
-                ];
-                
-                // Headers legibles
-                const headers = [
-                    currentAdvancedEntityType === 'cooperativas' ? 'Matrícula' : 'Matrícula Nacional', // ✅ AJUSTAR HEADER
-                    'Legajo', 'Nombre', 'Registro Provincial', 'Fecha Inicio',
-                    'Domicilio', 'Localidad', 'Código Postal', 'Teléfono', 'CUIT', 'Tipo', 'Subtipo',
-                    'Presidente', 'Teléfono Presidente', 'Email Presidente',
-                    'Fecha Última Asamblea', 'Tipo Asamblea', 'Estado Asamblea',
-                    'Renovación Autoridades', 'Renovación Sindicatura',
-                    'Cierre Último Ejercicio', 'Cantidad Asociados'
-                ];
+                if (currentAdvancedEntityType === 'mutuales') {
+                    // Columnas específicas para mutuales según requerimientos
+                    columns = [
+                        'matricula',
+                        'nombre_entidad',
+                        'registro_provincial',
+                        'domicilio',
+                        'localidad',
+                        'telefono',
+                        'email',
+                        'presidente_nombre',
+                        'presidente_email',
+                        'cierre_ejercicio',
+                        'fecha_asamblea',
+                        'reglamentos_nombre',
+                        'reglamentos_vigente_hasta'
+                    ];
+                    
+                    headers = [
+                        'Matrícula Nacional',
+                        'Entidad',
+                        'Registro Provincial',
+                        'Domicilio',
+                        'Localidad',
+                        'Teléfono',
+                        'Email',
+                        'Presidente',
+                        'Email Presidente',
+                        'Cierre Ejercicio',
+                        'Fecha Asamblea',
+                        'Reglamentos',
+                        'Vigente Hasta'
+                    ];
+                } else {
+                    // Columnas para cooperativas
+                    columns = [
+                        'matricula',
+                        'legajo',
+                        'nombre_entidad',
+                        'registro_provincial',
+                        'fecha_inicio',
+                        'domicilio',
+                        'localidad',
+                        'codigo_postal',
+                        'telefono',
+                        'cuit',
+                        'tipo',
+                        'subtipo',
+                        'presidente',
+                        'telefono_presidente',
+                        'email_presidente',
+                        'fecha_ultima_asamblea',
+                        'tipo_asamblea',
+                        'estado_asamblea',
+                        'renovacion_autoridades',
+                        'renovacion_sindicatura',
+                        'cierre_ultimo_ejercicio',
+                        'cantidad_asociados'
+                    ];
+                    
+                    headers = [
+                        'Matrícula',
+                        'Legajo',
+                        'Nombre',
+                        'Registro Provincial',
+                        'Fecha Inicio',
+                        'Domicilio',
+                        'Localidad',
+                        'Código Postal',
+                        'Teléfono',
+                        'CUIT',
+                        'Tipo',
+                        'Subtipo',
+                        'Presidente',
+                        'Teléfono Presidente',
+                        'Email Presidente',
+                        'Fecha Última Asamblea',
+                        'Tipo Asamblea',
+                        'Estado Asamblea',
+                        'Renovación Autoridades',
+                        'Renovación Sindicatura',
+                        'Cierre Último Ejercicio',
+                        'Cantidad Asociados'
+                    ];
+                }
        
                 // Crear CSV
                 const csvRows = [];
@@ -6375,6 +6439,10 @@
                     orderedColumns = Object.keys(firstRecord)
                         .filter(key => !['_primaryKey', '_rowIndex'].includes(key));
                 }
+                
+                // ✅ Reordenar para poner matrícula primero usando helper
+                const matriculaColumn = getMatriculaColumnName(currentTable);
+                orderedColumns = reorderColumnsWithMatriculaFirst(orderedColumns, matriculaColumn);
         
                 // CREAR HEADERS manteniendo el orden exacto
                 const headers = orderedColumns; // Mantener nombres originales
@@ -6438,28 +6506,16 @@
                 return '';
             }
             
-            // ✅ PASO 1: Identificar columna de matrícula
-            let matriculaColumn = null;
+            // ✅ Obtener columna de matrícula usando helper
+            const matriculaColumn = getMatriculaColumnName(tableName || currentTable);
             
-            if (currentTable.toLowerCase().includes('cooperativa') || currentTable === 'entidades_cooperativas') {
-                matriculaColumn = 'Matricula';
-            } else if (currentTable.toLowerCase().includes('mutual') || currentTable === 'entidades_mutuales') {
-                matriculaColumn = 'Matricula Nacional';
-            }
-            
-            // ✅ PASO 2: Obtener todas las columnas
+            // ✅ Obtener todas las columnas
             const allColumns = Object.keys(records[0]).filter(col => 
                 !['_primaryKey', '_rowIndex'].includes(col)
             );
             
-            // ✅ PASO 3: Ordenar con matrícula primero
-            let orderedColumns;
-            if (matriculaColumn && allColumns.includes(matriculaColumn)) {
-                orderedColumns = [matriculaColumn, ...allColumns.filter(col => col !== matriculaColumn)];
-                console.log(`✅ CSV Frontend: '${matriculaColumn}' colocada como primera columna`);
-            } else {
-                orderedColumns = allColumns;
-            }
+            // ✅ Ordenar con matrícula primero usando helper
+            const orderedColumns = reorderColumnsWithMatriculaFirst(allColumns, matriculaColumn);
             
             // Función para escapar valores CSV
             function escapeCSV(value) {
@@ -6485,7 +6541,29 @@
             return csvLines.join('\n');
         }
         
-        // Función helper para obtener el campo matrícula actual
+        // Función helper para obtener el campo matrícula según tipo de tabla
+        function getMatriculaColumnName(tableName = null) {
+            const table = tableName || currentTable;
+            if (!table) return null;
+            
+            if (table.toLowerCase().includes('cooperativa') || table === 'entidades_cooperativas') {
+                return 'Matricula';
+            } else if (table.toLowerCase().includes('mutual') || table === 'entidades_mutuales') {
+                return 'Matricula Nacional';
+            }
+            return null;
+        }
+        
+        // Función helper para reordenar columnas con matrícula primero
+        function reorderColumnsWithMatriculaFirst(columns, matriculaColumn) {
+            if (matriculaColumn && columns.includes(matriculaColumn)) {
+                const filtered = columns.filter(col => col !== matriculaColumn);
+                return [matriculaColumn, ...filtered];
+            }
+            return columns;
+        }
+        
+        // Función helper para obtener el campo matrícula actual (basado en esquema)
         function getCurrentMatriculaField() {
             if (!currentTableSchema || !currentTableSchema.columns) return null;
             
