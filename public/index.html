@@ -4747,30 +4747,59 @@
         // Variables globales para autocompletado de entidad en búsqueda
         let globalEntityMatches = [];
         let globalEntitySelectedIndex = -1;
-
-        // Manejar cambio de campo de búsqueda
+        
+        // ✅ FUNCIÓN CORREGIDA Y MEJORADA
         async function handleSearchFieldChange() {
             const select = document.getElementById('globalSearchField');
+            if (!select) {
+                console.error('❌ No se encontró el elemento globalSearchField');
+                return;
+            }
+            
             const selectedOption = select.options[select.selectedIndex];
+            if (!selectedOption) {
+                console.warn('⚠️ No hay opción seleccionada');
+                return;
+            }
+            
             const fieldType = selectedOption.getAttribute('data-type');
             const fieldName = select.value;
             
-            // ✅ AGREGAR ESTAS LÍNEAS: Atributos para detectar ENUM
+            // ✅ Atributos para detectar ENUM
             const udtName = selectedOption.getAttribute('data-udt-name');
-            const isUserDefined = fieldType && (fieldType.toLowerCase() === 'user-defined' || fieldType.toLowerCase().includes('enum'));
+            const isUserDefined = fieldType && (
+                fieldType.toLowerCase() === 'user-defined' || 
+                fieldType.toLowerCase().includes('enum') ||
+                udtName // Si tiene udt_name, es probablemente un enum
+            );
+            
+            console.log('🔍 Campo seleccionado:', {
+                fieldName,
+                fieldType,
+                udtName,
+                isUserDefined
+            });
             
             // Contenedores
             const textContainer = document.getElementById('search-text-container');
             const dateContainer = document.getElementById('search-date-container');
             const entityContainer = document.getElementById('search-entity-container');
             
+            // Validar que los contenedores existen
+            if (!textContainer || !dateContainer || !entityContainer) {
+                console.error('❌ No se encontraron todos los contenedores necesarios');
+                return;
+            }
+            
             // Ocultar todos
             textContainer.style.display = 'none';
             dateContainer.style.display = 'none';
             entityContainer.style.display = 'none';
             
+            // Si no hay campo seleccionado, mostrar input de texto por defecto
             if (!fieldName) {
                 textContainer.style.display = 'block';
+                resetSearchInputToText();
                 return;
             }
             
@@ -4778,62 +4807,150 @@
             const lowerFieldName = fieldName.toLowerCase();
             
             // ✅ 1. SI ES CAMPO ENUM (PRIORIDAD ALTA)
-            if (isUserDefined && udtName && enumOptions[udtName]) {
-                console.log('🔽 Campo ENUM detectado:', udtName, 'Opciones:', enumOptions[udtName]);
+            if (isUserDefined && udtName) {
+                console.log('🔽 Campo ENUM detectado:', udtName);
+                
+                // Verificar si tenemos las opciones del enum cargadas
+                if (!enumOptions[udtName] || enumOptions[udtName].length === 0) {
+                    console.warn(`⚠️ No hay opciones cargadas para el enum: ${udtName}`);
+                    console.log('🔄 Intentando cargar opciones de enum...');
+                    
+                    // Intentar cargar opciones del enum específico
+                    await loadSpecificEnumOptions(udtName);
+                }
+                
+                // Si después de intentar cargar aún no hay opciones, usar input de texto
+                if (!enumOptions[udtName] || enumOptions[udtName].length === 0) {
+                    console.warn(`⚠️ No se pudieron cargar opciones para ${udtName}, usando input de texto`);
+                    textContainer.style.display = 'block';
+                    resetSearchInputToText();
+                    return;
+                }
+                
+                console.log('✅ Opciones disponibles:', enumOptions[udtName]);
                 
                 textContainer.style.display = 'block';
-                
-                // Reemplazar input por select con opciones del enum
-                const searchTextInput = document.getElementById('globalSearchText');
-                const parent = searchTextInput.parentElement;
-                
-                // Crear select con opciones
-                parent.innerHTML = `
-                    <select id="globalSearchText" style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1rem;">
-                        <option value="">-- Seleccione una opción --</option>
-                        ${enumOptions[udtName].map(opt => `<option value="${opt}">${opt}</option>`).join('')}
-                    </select>
-                `;
+                convertSearchInputToEnumSelect(udtName, enumOptions[udtName]);
                 
             // ✅ 2. SI ES CAMPO DE ENTIDAD O NOMBRE DE ENTIDAD
             } else if (lowerFieldName.includes('entidad') || 
-                lowerFieldName === 'nombre de la entidad' ||
-                (lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales'))) {
+                       lowerFieldName === 'nombre de la entidad' ||
+                       lowerFieldName === 'entidad' ||
+                       (lowerFieldName === 'nombre' && window.currentTable && 
+                        (window.currentTable.includes('entidades_cooperativas') || 
+                         window.currentTable.includes('entidades_mutuales')))) {
                 
+                console.log('🏢 Campo de entidad detectado');
                 entityContainer.style.display = 'block';
                 
                 // Cargar entidades según el tipo de tabla
                 await loadGlobalEntityData();
                 
             // ✅ 3. SI ES CAMPO DE FECHA
-            } else if (isDateField(fieldType)) {
+            } else if (isDateField(fieldType, fieldName)) {
+                console.log('📅 Campo de fecha detectado');
                 dateContainer.style.display = 'block';
                 
                 // Limpiar campos de fecha
-                document.getElementById('globalSearchDateFrom').value = '';
-                document.getElementById('globalSearchDateTo').value = '';
+                const dateFrom = document.getElementById('globalSearchDateFrom');
+                const dateTo = document.getElementById('globalSearchDateTo');
+                if (dateFrom) dateFrom.value = '';
+                if (dateTo) dateTo.value = '';
                 
             // ✅ 4. BÚSQUEDA DE TEXTO NORMAL
             } else {
+                console.log('📝 Campo de texto normal detectado');
                 textContainer.style.display = 'block';
-                
-                // Restaurar input de texto normal si estaba como select
-                const searchTextElement = document.getElementById('globalSearchText');
-                if (searchTextElement && searchTextElement.tagName === 'SELECT') {
-                    const parent = searchTextElement.parentElement;
-                    parent.innerHTML = `
-                        <input type="text" id="globalSearchText" placeholder="Ingrese texto a buscar" 
-                               style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1rem;">
-                    `;
-                } else if (searchTextElement) {
-                    searchTextElement.value = '';
-                }
+                resetSearchInputToText();
             }
         }
         
-        // ✅ NUEVA FUNCIÓN: Cargar opciones de enums desde el backend
+        // ✅ FUNCIÓN AUXILIAR: Convertir input a select de enum
+        function convertSearchInputToEnumSelect(udtName, options) {
+            const searchTextElement = document.getElementById('globalSearchText');
+            if (!searchTextElement) {
+                console.error('❌ No se encontró globalSearchText');
+                return;
+            }
+            
+            const parent = searchTextElement.parentElement;
+            const currentValue = searchTextElement.value || '';
+            
+            // Crear HTML del select
+            const selectHTML = `
+                <select id="globalSearchText" 
+                        data-enum-type="${udtName}"
+                        style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1rem; background-color: white; cursor: pointer;">
+                    <option value="">-- Seleccione una opción --</option>
+                    ${options.map(opt => `
+                        <option value="${escapeHtml(opt)}" ${opt === currentValue ? 'selected' : ''}>
+                            ${escapeHtml(opt)}
+                        </option>
+                    `).join('')}
+                </select>
+            `;
+            
+            parent.innerHTML = selectHTML;
+            console.log(`✅ Select creado con ${options.length} opciones para enum: ${udtName}`);
+        }
+        
+        // ✅ FUNCIÓN AUXILIAR: Resetear a input de texto
+        function resetSearchInputToText() {
+            const searchTextElement = document.getElementById('globalSearchText');
+            if (!searchTextElement) {
+                console.error('❌ No se encontró globalSearchText');
+                return;
+            }
+            
+            // Si ya es un input de texto, solo limpiar
+            if (searchTextElement.tagName === 'INPUT') {
+                searchTextElement.value = '';
+                searchTextElement.placeholder = 'Ingrese texto a buscar';
+                return;
+            }
+            
+            // Si es un select, convertir a input
+            const parent = searchTextElement.parentElement;
+            const currentValue = searchTextElement.value || '';
+            
+            parent.innerHTML = `
+                <input type="text" 
+                       id="globalSearchText" 
+                       placeholder="Ingrese texto a buscar" 
+                       value="${escapeHtml(currentValue)}"
+                       style="width: 100%; padding: 12px; border: 2px solid #e9ecef; border-radius: 8px; font-size: 1rem;">
+            `;
+            
+            console.log('🔄 Input reseteado a texto normal');
+        }
+        
+        // ✅ FUNCIÓN AUXILIAR: Detectar si es campo de fecha
+        function isDateField(fieldType, fieldName) {
+            if (!fieldType && !fieldName) return false;
+            
+            const lowerType = (fieldType || '').toLowerCase();
+            const lowerName = (fieldName || '').toLowerCase();
+            
+            return lowerType.includes('date') || 
+                   lowerType.includes('timestamp') || 
+                   lowerType.includes('time') ||
+                   lowerName.includes('fecha') ||
+                   lowerName.includes('date');
+        }
+        
+        // ✅ FUNCIÓN AUXILIAR: Escapar HTML para prevenir XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // ✅ FUNCIÓN MEJORADA: Cargar opciones de enums desde el backend
         async function loadEnumOptions() {
             try {
+                console.log('🔄 Cargando opciones de enum desde el backend...');
+                
                 const response = await fetch(`${API_BASE}/api/enum-options`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`,
@@ -4842,18 +4959,49 @@
                 });
         
                 if (!response.ok) {
-                    console.warn('⚠️ No se pudieron cargar las opciones de enum');
+                    console.warn('⚠️ No se pudieron cargar las opciones de enum:', response.status);
                     return;
                 }
         
                 const result = await response.json();
                 
-                if (result.success) {
+                if (result.success && result.data) {
                     enumOptions = result.data;
                     console.log('✅ Opciones de enum cargadas:', Object.keys(enumOptions));
+                    console.log('📊 Total de enums:', Object.keys(enumOptions).length);
+                } else {
+                    console.warn('⚠️ Respuesta sin éxito al cargar enums');
                 }
             } catch (error) {
                 console.error('❌ Error cargando opciones de enum:', error);
+            }
+        }
+        
+        // ✅ NUEVA FUNCIÓN: Cargar opciones de un enum específico
+        async function loadSpecificEnumOptions(enumName) {
+            try {
+                console.log(`🔄 Cargando opciones específicas del enum: ${enumName}`);
+                
+                const response = await fetch(`${API_BASE}/api/enum-options/${enumName}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+        
+                if (!response.ok) {
+                    console.warn(`⚠️ No se pudieron cargar opciones del enum ${enumName}:`, response.status);
+                    return;
+                }
+        
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    enumOptions[enumName] = result.data;
+                    console.log(`✅ Opciones cargadas para ${enumName}:`, result.data);
+                }
+            } catch (error) {
+                console.error(`❌ Error cargando enum ${enumName}:`, error);
             }
         }
         
