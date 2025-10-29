@@ -897,6 +897,75 @@ app.get('/api/enum-options/:enumName', auth.requireAuth, async (req, res) => {
   }
 });
 
+
+// Nuevo endpoint para obtener información de campo específico incluyendo si es enum
+app.get('/api/tables/:tableName/field-info/:fieldName', auth.requireAuth, async (req, res) => {
+  try {
+    const { tableName, fieldName } = req.params;
+    
+    await validateTableAccess(tableName);
+    
+    // Obtener información del campo desde information_schema
+    const fieldQuery = `
+      SELECT 
+        c.column_name,
+        c.data_type,
+        c.udt_name,
+        c.is_nullable
+      FROM information_schema.columns c
+      WHERE c.table_name = $1 AND c.column_name = $2
+      LIMIT 1
+    `;
+    
+    const fieldResult = await pool.query(fieldQuery, [tableName, fieldName]);
+    
+    if (fieldResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `Campo '${fieldName}' no encontrado en tabla '${tableName}'`
+      });
+    }
+    
+    const fieldInfo = fieldResult.rows[0];
+    
+    // Verificar si es un tipo USER-DEFINED (enum)
+    const isEnum = fieldInfo.data_type === 'USER-DEFINED';
+    let enumValues = [];
+    
+    if (isEnum) {
+      // Obtener valores del enum
+      try {
+        const enumQuery = `
+          SELECT unnest(enum_range(NULL::${fieldInfo.udt_name})) as enum_value
+        `;
+        const enumResult = await pool.query(enumQuery);
+        enumValues = enumResult.rows.map(row => row.enum_value);
+      } catch (enumError) {
+        console.error(`Error obteniendo valores de enum ${fieldInfo.udt_name}:`, enumError);
+      }
+    }
+    
+    res.json({
+      success: true,
+      fieldInfo: {
+        columnName: fieldInfo.column_name,
+        dataType: fieldInfo.data_type,
+        udtName: fieldInfo.udt_name,
+        isNullable: fieldInfo.is_nullable,
+        isEnum: isEnum,
+        enumValues: enumValues
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error obteniendo información de campo:', error);
+    const errorInfo = handlePostgresError(error, 'obtención de información de campo');
+    res.status(errorInfo.status).json({
+      success: false,
+      message: errorInfo.message
+    });
+  }
+});
 // Endpoint para obtener datos de foreign keys
 app.get('/api/tables/:tableName/foreign-key-data', auth.requireAuth, async (req, res) => {
   try {
