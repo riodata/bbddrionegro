@@ -1,0 +1,11 @@
+# Ignorar la carpeta de dependencias de Node
+node_modules/
+
+# Archivos/artefactos comunes
+.DS_Store
+.env
+dist/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
