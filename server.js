@@ -1839,7 +1839,6 @@ function getMatriculaColumnName(tableName) {
 function reorderColumnsWithMatriculaFirst(columns, matriculaColumn) {
   if (matriculaColumn && columns.includes(matriculaColumn)) {
     const filtered = columns.filter(col => col !== matriculaColumn);
-    console.log(`✅ CSV Backend: '${matriculaColumn}' colocada como primera columna`);
     return [matriculaColumn, ...filtered];
   }
   return columns;
