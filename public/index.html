@@ -2568,30 +2568,94 @@
             try {
                 showStatus('Generando CSV...', 'info');
                 
-                // ✅ DETERMINAR COLUMNA DE MATRÍCULA SEGÚN TIPO
-                const matriculaColumn = currentAdvancedEntityType === 'cooperativas' ? 'matricula' : 'matricula';
+                // ✅ DEFINIR COLUMNAS Y HEADERS SEGÚN TIPO DE ENTIDAD
+                let columns, headers;
                 
-                // ✅ DEFINIR COLUMNAS CON MATRÍCULA PRIMERO
-                const columns = [
-                    matriculaColumn, // ✅ MATRÍCULA SIEMPRE PRIMERA
-                    'legajo', 'nombre_entidad', 'registro_provincial', 'fecha_inicio',
-                    'domicilio', 'localidad', 'codigo_postal', 'telefono', 'cuit', 'tipo', 'subtipo',
-                    'presidente', 'telefono_presidente', 'email_presidente',
-                    'fecha_ultima_asamblea', 'tipo_asamblea', 'estado_asamblea',
-                    'renovacion_autoridades', 'renovacion_sindicatura',
-                    'cierre_ultimo_ejercicio', 'cantidad_asociados'
-                ];
-                
-                // Headers legibles
-                const headers = [
-                    currentAdvancedEntityType === 'cooperativas' ? 'Matrícula' : 'Matrícula Nacional', // ✅ AJUSTAR HEADER
-                    'Legajo', 'Nombre', 'Registro Provincial', 'Fecha Inicio',
-                    'Domicilio', 'Localidad', 'Código Postal', 'Teléfono', 'CUIT', 'Tipo', 'Subtipo',
-                    'Presidente', 'Teléfono Presidente', 'Email Presidente',
-                    'Fecha Última Asamblea', 'Tipo Asamblea', 'Estado Asamblea',
-                    'Renovación Autoridades', 'Renovación Sindicatura',
-                    'Cierre Último Ejercicio', 'Cantidad Asociados'
-                ];
+                if (currentAdvancedEntityType === 'mutuales') {
+                    // Columnas específicas para mutuales según requerimientos
+                    columns = [
+                        'matricula',
+                        'nombre_entidad',
+                        'registro_provincial',
+                        'domicilio',
+                        'localidad',
+                        'telefono',
+                        'email',
+                        'presidente_nombre',
+                        'presidente_email',
+                        'cierre_ejercicio',
+                        'fecha_asamblea',
+                        'reglamentos_nombre',
+                        'reglamentos_vigente_hasta'
+                    ];
+                    
+                    headers = [
+                        'Matrícula Nacional',
+                        'Entidad',
+                        'Registro Provincial',
+                        'Domicilio',
+                        'Localidad',
+                        'Teléfono',
+                        'Email',
+                        'Presidente',
+                        'Email Presidente',
+                        'Cierre Ejercicio',
+                        'Fecha Asamblea',
+                        'Reglamentos',
+                        'Vigente Hasta'
+                    ];
+                } else {
+                    // Columnas para cooperativas
+                    columns = [
+                        'matricula',
+                        'legajo',
+                        'nombre_entidad',
+                        'registro_provincial',
+                        'fecha_inicio',
+                        'domicilio',
+                        'localidad',
+                        'codigo_postal',
+                        'telefono',
+                        'cuit',
+                        'tipo',
+                        'subtipo',
+                        'presidente',
+                        'telefono_presidente',
+                        'email_presidente',
+                        'fecha_ultima_asamblea',
+                        'tipo_asamblea',
+                        'estado_asamblea',
+                        'renovacion_autoridades',
+                        'renovacion_sindicatura',
+                        'cierre_ultimo_ejercicio',
+                        'cantidad_asociados'
+                    ];
+                    
+                    headers = [
+                        'Matrícula',
+                        'Legajo',
+                        'Nombre',
+                        'Registro Provincial',
+                        'Fecha Inicio',
+                        'Domicilio',
+                        'Localidad',
+                        'Código Postal',
+                        'Teléfono',
+                        'CUIT',
+                        'Tipo',
+                        'Subtipo',
+                        'Presidente',
+                        'Teléfono Presidente',
+                        'Email Presidente',
+                        'Fecha Última Asamblea',
+                        'Tipo Asamblea',
+                        'Estado Asamblea',
+                        'Renovación Autoridades',
+                        'Renovación Sindicatura',
+                        'Cierre Último Ejercicio',
+                        'Cantidad Asociados'
+                    ];
+                }
        
                 // Crear CSV
                 const csvRows = [];
