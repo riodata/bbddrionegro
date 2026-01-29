@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mapa Interactivo</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+
+<style>
+body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+#map { height: 100vh; width: 100%; }
+
+.popup-title { font-weight: bold; font-size: 16px; margin-bottom: 8px; color: #2c3e50; }
+.popup-field { font-size: 13px; margin: 4px 0; line-height: 1.4; }
+.popup-label { font-weight: 600; color: #555; }
+.category-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; margin-bottom: 5px; }
+</style>
+</head>
+
+<body>
+<div id="map"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+
+<script>
+const DATA = [
+  {
+    "lat": -38.9226376,
+    "lon": -67.9940574,
+    "colorField": "Cipolletti",
+    "titleField": "Asociacion Española de Socorro Mutuo y Cultural",
+    "fields": {
+      "matricula_nacional": "1",
+      "nombre_entidad": "Asociacion Española de Socorro Mutuo y Cultural",
+      "registro_provincial": "1007",
+      "domicilio": "España, pta:254",
+      "localidad": "Cipolletti",
+      "telefono": "0299-4781713 fax-4981343",
+      "email": "espacipolletti@yahoo.com.ar",
+      "presidente_nombre": "Alonso Maria Alejandra",
+      "presidente_email": "espacipolletti@yahoo.com.ar",
+      "fecha_creacion": "2025-12-03T00:00:00.000Z",
+      "fecha_actualizacion": "2025-12-03T00:00:00.000Z",
+      "Latitud": "-38.9226376",
+      "Longitud": "-67.9940574"
+    }
+  },
+  {
+    "lat": -40.817283,
+    "lon": -62.9837027,
+    "colorField": "Viedma",
+    "titleField": "Asociación Española Socorros Mutuos de Viedma",
+    "fields": {
+      "matricula_nacional": "2",
+      "nombre_entidad": "Asociación Española Socorros Mutuos de Viedma",
+      "registro_provincial": "1015",
+      "domicilio": "Garrone N° 96",
+      "localidad": "Viedma",
+      "telefono": "02920 476437",
+      "email": "asocepviedma@hotmail.com",
+      "fecha_creacion": "2025-10-30T00:00:00.000Z",
+      "fecha_actualizacion": "2025-10-30T00:00:00.000Z",
+      "Latitud": "-40.817283",
+      "Longitud": "-62.9837027"
+    }
+  },
+  {
+    "lat": -39.0058823,
+    "lon": -67.5695087,
+    "colorField": "General Roca",
+    "titleField": "Asoc.Italiana d Soc.Mut.y Dept.Italia Unida.",
+    "fields": {
+      "matricula_nacional": "3",
+      "nombre_entidad": "Asoc.Italiana d Soc.Mut.y Dept.Italia Unida.",
+      "registro_provincial": "1006",
+      "domicilio": "Sarmiento Nº 1742",
+      "localidad": "General Roca",
+      "telefono": "0298-423596/436132",
+      "email": "secretaria@italiaunidaroca.online",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0058823",
+      "Longitud": "-67.5695087"
+    }
+  },
+  {
+    "lat": -40.8183059,
+    "lon": -62.9878529,
+    "colorField": "Viedma",
+    "titleField": "Asociación Obrero Socorros Mutuos de Viedma",
+    "fields": {
+      "matricula_nacional": "4",
+      "nombre_entidad": "Asociación Obrero Socorros Mutuos de Viedma",
+      "registro_provincial": "1013",
+      "domicilio": "Tucuman N°149",
+      "localidad": "Viedma",
+      "telefono": "02920 401399",
+      "email": "javierzotta@yahoo.com.ar",
+      "fecha_creacion": "2025-10-30T00:00:00.000Z",
+      "fecha_actualizacion": "2025-10-30T00:00:00.000Z",
+      "Latitud": "-40.8183059",
+      "Longitud": "-62.9878529"
+    }
+  },
+  {
+    "lat": -39.0159108,
+    "lon": -67.5788691,
+    "colorField": "General Roca",
+    "titleField": "Asoc.libanesa de Socorros Mutuos.",
+    "fields": {
+      "matricula_nacional": "10",
+      "nombre_entidad": "Asoc.libanesa de Socorros Mutuos.",
+      "registro_provincial": "1011",
+      "domicilio": "Neuquén Nº 1427",
+      "localidad": "General Roca",
+      "telefono": "0298-4423032-Julia 501523",
+      "email": "asociacionlibanesaroca@ibap.com.ar",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0159108",
+      "Longitud": "-67.5788691"
+    }
+  },
+  {
+    "lat": -38.998822,
+    "lon": -67.5704364,
+    "colorField": "General Roca",
+    "titleField": "Asoc.Esp.Mut.y Cult.del Alt.Valle d Río Negro.",
+    "fields": {
+      "matricula_nacional": "11",
+      "nombre_entidad": "Asoc.Esp.Mut.y Cult.del Alt.Valle d Río Negro.",
+      "registro_provincial": "1014",
+      "domicilio": "España Nº1341",
+      "localidad": "General Roca",
+      "telefono": "0298-437005/423990",
+      "email": "asocespan@gmail.com",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-38.998822",
+      "Longitud": "-67.5704364"
+    }
+  },
+  {
+    "lat": -38.9306453,
+    "lon": -67.9904654,
+    "colorField": "Cipolletti",
+    "titleField": "Asoc.Mut.d-los Obrs Empadrs d Fruta.Rn y Neq.",
+    "fields": {
+      "matricula_nacional": "23",
+      "nombre_entidad": "Asoc.Mut.d-los Obrs Empadrs d Fruta.Rn y Neq.",
+      "registro_provincial": "1021",
+      "domicilio": "Brazil y Jorge Newbery Nº535",
+      "localidad": "Cipolletti",
+      "telefono": "0299-4783344",
+      "email": "mutualdelafruta@cipolletti.com.ar",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-38.9306453",
+      "Longitud": "-67.9904654"
+    }
+  },
+  {
+    "lat": -38.9226376,
+    "lon": -67.9940574,
+    "colorField": "Cipolletti",
+    "titleField": "Asoc.Mut Evangélica de Rn.",
+    "fields": {
+      "matricula_nacional": "44",
+      "nombre_entidad": "Asoc.Mut Evangélica de Rn.",
+      "registro_provincial": "1041",
+      "domicilio": "España Nº 460",
+      "localidad": "Cipolletti",
+      "telefono": "0299-4785166",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-38.9226376",
+      "Longitud": "-67.9940574"
+    }
+  },
+  {
+    "lat": -39.0261611,
+    "lon": -67.5834729,
+    "colorField": "General Roca",
+    "titleField": "Asoc.Mut.Empl.d.Comerc.y Serv. \"AMECyS\".",
+    "fields": {
+      "matricula_nacional": "55",
+      "nombre_entidad": "Asoc.Mut.Empl.d.Comerc.y Serv. \"AMECyS\".",
+      "registro_provincial": "1050",
+      "domicilio": "Bartolomé Mitre Nº1381",
+      "localidad": "General Roca",
+      "telefono": "0298-4423954",
+      "email": "fiscalizacion@cecgroca.com.ar",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0261611",
+      "Longitud": "-67.5834729"
+    }
+  },
+  {
+    "lat": -39.0311547,
+    "lon": -67.5797244,
+    "colorField": "General Roca",
+    "titleField": "Mut.Médica de Rio Negro.",
+    "fields": {
+      "matricula_nacional": "62",
+      "nombre_entidad": "Mut.Médica de Rio Negro.",
+      "registro_provincial": "1072",
+      "domicilio": "Isidro Lobo Nº1036",
+      "localidad": "General Roca",
+      "telefono": "0298-4431238",
+      "email": "mutualmedica@speedy.com.ar - cfreser@hotmail.com ",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0311547",
+      "Longitud": "-67.5797244"
+    }
+  },
+  {
+    "lat": -39.0254487,
+    "lon": -67.574579,
+    "colorField": "General Roca",
+    "titleField": "Asoc.Mut.Bancarios de RN.AMBAR.",
+    "fields": {
+      "matricula_nacional": "89",
+      "nombre_entidad": "Asoc.Mut.Bancarios de RN.AMBAR.",
+      "registro_provincial": "1103",
+      "domicilio": "Villegas Nº 754",
+      "localidad": "General Roca",
+      "telefono": "0298-4428757",
+      "email": "mutualambar@hotmail.com",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0254487",
+      "Longitud": "-67.574579"
+    }
+  },
+  {
+    "lat": -39.0229258,
+    "lon": -67.5677646,
+    "colorField": "General Roca",
+    "titleField": "Asoc.Mut.Perl.Unidad Cinco del Serv.Penitenciario Federal",
+    "fields": {
+      "matricula_nacional": "115",
+      "nombre_entidad": "Asoc.Mut.Perl.Unidad Cinco del Serv.Penitenciario Federal",
+      "registro_provincial": "1134",
+      "domicilio": "Gelonch Nº313",
+      "localidad": "General Roca",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0229258",
+      "Longitud": "-67.5677646"
+    }
+  },
+  {
+    "lat": -39.0387268,
+    "lon": -67.5675572,
+    "colorField": "General Roca",
+    "titleField": "Asoc.Mut. De Trabajadores y Trabdres Agrupados Rionegrinos",
+    "fields": {
+      "matricula_nacional": "117",
+      "nombre_entidad": "Asoc.Mut. De Trabajadores y Trabdres Agrupados Rionegrinos",
+      "registro_provincial": "1137",
+      "domicilio": "Chile N°1145",
+      "localidad": "General Roca",
+      "telefono": "2944-911993",
+      "email": "silviotrueque@gmail.com",
+      "fecha_actualizacion": "2025-06-30T00:00:00.000Z",
+      "Latitud": "-39.0387268",
+      "Longitud": "-67.5675572"
+    }
+  }
+];
+
+const map = L.map('map').setView([-51.693, -62.4463], 6); // Centrado en Malvinas, zoom 6
+
+L.control.scale().addTo(map);
+
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+    minZoom: 0
+});
+
+const ignLayer = L.tileLayer(
+  'https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/' +
+  'capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png',
+  {
+    attribution: 'Instituto Geográfico Nacional (IGN)',
+    maxZoom: 18,
+    minZoom: 0,
+    tms: true
+  }
+);
+
+const baseMaps = {
+    "IGN Argentina (Argenmap Base)": ignLayer,
+    "OpenStreetMap": osmLayer
+};
+
+// Add IGN layer to the map directly as the default base layer
+ignLayer.addTo(map);
+
+// Add the layer control with both base maps
+L.control.layers(baseMaps).addTo(map);
+
+const CATEGORY_COLORS = {};
+
+function getColor(value) {
+    if (!CATEGORY_COLORS[value]) {
+        let hash = 0;
+        for (let i = 0; i < value.length; i++) {
+            hash = value.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        CATEGORY_COLORS[value] = `hsl(${hash % 360}, 70%, 50%)`;
+    }
+    return CATEGORY_COLORS[value];
+}
+
+const clusters = {};
+
+DATA.forEach(point => {
+    const cat = point.colorField || "Sin categoría";
+
+    if (!clusters[cat]) {
+        clusters[cat] = L.markerClusterGroup();
+        map.addLayer(clusters[cat]);
+    }
+
+    const color = getColor(cat);
+    const marker = L.circleMarker([point.lat, point.lon], {
+        radius: 7,
+        color: color,
+        fillOpacity: 0.9
+    });
+
+    let popup = `<div class="popup-title">${point.titleField}</div>`;
+    if (point.colorField) {
+        popup = `<div class="category-badge" style="background-color:${color}">${point.colorField}</div>` + popup;
+    }
+
+    for (const [key, value] of Object.entries(point.fields)) {
+        popup += `<div class="popup-field">
+                    <span class="popup-label">${key}:</span> ${value}
+                  </div>`;
+    }
+
+    marker.bindPopup(popup);
+    clusters[cat].addLayer(marker);
+});
+
+</script>
+</body>
+</html>
