@@ -265,7 +265,7 @@ const DATA = [
   }
 ];
 
-const map = L.map('map').setView([-51.693, -62.4463], 6); // Centrado en Malvinas, zoom 6
+const map = L.map('map');
 
 L.control.scale().addTo(map);
 
@@ -311,8 +311,12 @@ function getColor(value) {
 }
 
 const clusters = {};
-
+const bounds = [];
+  
 DATA.forEach(point => {
+    if (point.lat && point.lon) {
+        bounds.push([point.lat, point.lon]);
+    }
     const cat = point.colorField || "Sin categoría";
 
     if (!clusters[cat]) {
@@ -326,6 +330,10 @@ DATA.forEach(point => {
         color: color,
         fillOpacity: 0.9
     });
+    
+    if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [40, 40] });
+    }
 
     let popup = `<div class="popup-title">${point.titleField}</div>`;
     if (point.colorField) {
