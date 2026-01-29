@@ -52,6 +52,9 @@ app.use(express.urlencoded({ extended: true }));
 // Servir archivos estáticos del frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 🗺️ Servir archivos de mapas desde la carpeta docs
+app.use('/docs', express.static(path.join(__dirname, 'docs')));
+
 // Middleware de debugging para autenticación
 app.use('/api', (req, res, next) => {
   console.log(`🌐 ${req.method} ${req.url}`);
