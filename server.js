@@ -1114,19 +1114,78 @@ app.get('/estadisticas-cooperativas', (req, res) => {
     <head>
       <title>Estadísticas Cooperativas</title>
       <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-        .header { background: #007bff; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        body { 
+          font-family: Arial, sans-serif; 
+          margin: 0; 
+          padding: 20px; 
+          background-color: #f5f5f5;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          min-height: 100vh;
+        }
+        .header { 
+          background: #28a745; 
+          color: white; 
+          padding: 20px; 
+          border-radius: 10px; 
+          margin-bottom: 30px; 
+          text-align: center;
+          width: 100%;
+          max-width: 800px;
+        }
         .back-btn { 
           margin-bottom: 20px; 
           padding: 10px 20px; 
-          background: #28a745; 
+          background: #6c757d; 
           color: white; 
           text-decoration: none; 
           border-radius: 5px; 
           display: inline-block;
         }
-        .back-btn:hover { background: #218838; }
-        iframe { width: 100%; height: 80vh; border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .back-btn:hover { background: #5a6268; }
+        .button-container {
+          display: flex;
+          gap: 20px;
+          justify-content: center;
+          flex-wrap: wrap;
+          margin-top: 20px;
+          width: 100%;
+          max-width: 800px;
+        }
+        .option-btn {
+          flex: 1;
+          min-width: 300px;
+          padding: 30px;
+          border: none;
+          border-radius: 10px;
+          font-size: 18px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .map-btn {
+          background: linear-gradient(135deg, #007bff, #0056b3);
+          color: white;
+        }
+        .map-btn:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 6px 12px rgba(0,123,255,0.3);
+        }
+        .panel-btn {
+          background: linear-gradient(135deg, #28a745, #1e7e34);
+          color: white;
+        }
+        .panel-btn:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 6px 12px rgba(40,167,69,0.3);
+        }
+        .icon {
+          font-size: 3rem;
+          display: block;
+          margin-bottom: 10px;
+        }
       </style>
     </head>
     <body>
@@ -1135,7 +1194,17 @@ app.get('/estadisticas-cooperativas', (req, res) => {
         <p>Análisis de datos y métricas del sector cooperativo</p>
       </div>
       <a href="/" class="back-btn">← Volver al inicio</a>
-      <iframe src="https://lookerstudio.google.com/embed/reporting/504cccff-eab4-4a50-a957-ccf7a3c6eb4d/page/p_dq1i8cr4md"></iframe>
+      
+      <div class="button-container">
+        <button class="option-btn map-btn" onclick="window.open('/docs/mapa-cooperativas-2026.html', '_blank')">
+          <span class="icon">🗺️</span>
+          Mapa
+        </button>
+        <button class="option-btn panel-btn" onclick="window.open('https://lookerstudio.google.com/embed/reporting/504cccff-eab4-4a50-a957-ccf7a3c6eb4d/page/p_dq1i8cr4md', '_blank')">
+          <span class="icon">📈</span>
+          Panel Interactivo
+        </button>
+      </div>
     </body>
     </html>
   `);
@@ -1148,19 +1217,78 @@ app.get('/estadisticas-mutuales', (req, res) => {
     <head>
       <title>Estadísticas Mutuales</title>
       <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
-        .header { background: #17a2b8; color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        body { 
+          font-family: Arial, sans-serif; 
+          margin: 0; 
+          padding: 20px; 
+          background-color: #f5f5f5;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          min-height: 100vh;
+        }
+        .header { 
+          background: #17a2b8; 
+          color: white; 
+          padding: 20px; 
+          border-radius: 10px; 
+          margin-bottom: 30px; 
+          text-align: center;
+          width: 100%;
+          max-width: 800px;
+        }
         .back-btn { 
           margin-bottom: 20px; 
           padding: 10px 20px; 
-          background: #28a745; 
+          background: #6c757d; 
           color: white; 
           text-decoration: none; 
           border-radius: 5px; 
           display: inline-block;
         }
-        .back-btn:hover { background: #218838; }
-        iframe { width: 100%; height: 80vh; border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .back-btn:hover { background: #5a6268; }
+        .button-container {
+          display: flex;
+          gap: 20px;
+          justify-content: center;
+          flex-wrap: wrap;
+          margin-top: 20px;
+          width: 100%;
+          max-width: 800px;
+        }
+        .option-btn {
+          flex: 1;
+          min-width: 300px;
+          padding: 30px;
+          border: none;
+          border-radius: 10px;
+          font-size: 18px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .map-btn {
+          background: linear-gradient(135deg, #007bff, #0056b3);
+          color: white;
+        }
+        .map-btn:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 6px 12px rgba(0,123,255,0.3);
+        }
+        .panel-btn {
+          background: linear-gradient(135deg, #17a2b8, #117a8b);
+          color: white;
+        }
+        .panel-btn:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 6px 12px rgba(23,162,184,0.3);
+        }
+        .icon {
+          font-size: 3rem;
+          display: block;
+          margin-bottom: 10px;
+        }
       </style>
     </head>
     <body>
@@ -1169,7 +1297,17 @@ app.get('/estadisticas-mutuales', (req, res) => {
         <p>Análisis de datos del sector mutual</p>
       </div>
       <a href="/" class="back-btn">← Volver al inicio</a>
-      <iframe src="https://lookerstudio.google.com/embed/reporting/5162eea8-8691-4e71-8a8d-5bbaa7e276a2/page/62DPE"></iframe>
+      
+      <div class="button-container">
+        <button class="option-btn map-btn" onclick="window.open('/docs/mapa-mutuales-2026.html', '_blank')">
+          <span class="icon">🗺️</span>
+          Mapa
+        </button>
+        <button class="option-btn panel-btn" onclick="window.open('https://lookerstudio.google.com/embed/reporting/5162eea8-8691-4e71-8a8d-5bbaa7e276a2/page/62DPE', '_blank')">
+          <span class="icon">📈</span>
+          Panel Interactivo
+        </button>
+      </div>
     </body>
     </html>
   `);
