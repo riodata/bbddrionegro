@@ -2334,50 +2334,55 @@ app.get('/api/tables/:tableName/fields', auth.requireAuth, async (req, res) => {
 app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (req, res) => {
     try {
         const { entityType } = req.params; // 'cooperativas' o 'mutuales'
-        const { nombre, localidad, tipo } = req.query;
-        
-        if (!nombre && !localidad && !tipo) {
+
+        // ✅ nuevo: matricula
+        const { matricula, nombre, localidad, tipo } = req.query;
+
+        if (!matricula && !nombre && !localidad && !tipo) {
             return res.status(400).json({
                 success: false,
                 message: 'Debe proporcionar al menos un criterio de búsqueda'
             });
         }
-        
+
         const tableName = entityType === 'cooperativas' ? 'entidades_cooperativas' : 'entidades_mutuales';
         const matriculaField = entityType === 'cooperativas' ? 'Matricula' : 'Matricula Nacional';
         const nombreField = entityType === 'cooperativas' ? 'Nombre de la Entidad' : 'Entidad';
-        
-        // Construir condiciones WHERE dinámicamente
+
         let whereConditions = [];
         let params = [];
         let paramIndex = 1;
-        
+
+        // ✅ Filtro por matrícula (prioritario)
+        if (matricula) {
+            whereConditions.push(`CAST(e."${matriculaField}" AS TEXT) ILIKE $${paramIndex}`);
+            params.push(`${String(matricula).trim()}%`);
+            paramIndex++;
+        }
+
+        // (compat/extra) si llega nombre, también filtra por nombre
         if (nombre) {
             whereConditions.push(`e."${nombreField}" ILIKE $${paramIndex}`);
             params.push(`%${nombre}%`);
             paramIndex++;
         }
-        
-        // CORRECCIÓN: Algunas columnas (p. ej. 'Localidad' o 'Tipo') pueden no ser text (enum/user-defined),
-        // por lo tanto usamos CAST a text antes de usar ILIKE para evitar el error:
-        // "operator does not exist: <type> ~~* unknown"
+
         if (localidad) {
             whereConditions.push(`CAST(e."Localidad" AS TEXT) ILIKE $${paramIndex}`);
             params.push(`%${localidad}%`);
             paramIndex++;
         }
-        
+
         if (tipo) {
             whereConditions.push(`CAST(e."Tipo" AS TEXT) ILIKE $${paramIndex}`);
             params.push(`%${tipo}%`);
             paramIndex++;
         }
-        
+
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
-        
+
         let query;
-        
-        // ✅ MUTUALES: Query específica según requerimientos
+
         if (entityType === 'mutuales') {
             query = `
                 SELECT 
@@ -2386,9 +2391,13 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
                     e."Registro Provincial" as registro_provincial,
                     e."Domicilio" as domicilio,
                     e."Localidad" as localidad,
-                    e."Tefefono" as telefono,
-                    e."Email" as email,
-                    
+
+                    -- ⚠️ en mutuales la columna es "Teléfono" (con tilde), NO "Tefefono"
+                    e."Teléfono" as telefono,
+
+                    -- ✅ Mail de la entidad (punto 2)
+                    e."Email" as email_entidad,
+
                     -- Presidente desde autoridades_mutuales
                     (SELECT a."nombre" 
                      FROM "autoridades_mutuales" a
@@ -2396,49 +2405,51 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
                      AND LOWER(a."autoridad"::text) = 'presidente'
                      AND LOWER(a."mandato activo"::text) = 'si'
                      LIMIT 1) as presidente_nombre,
-                     
+
                     (SELECT a."email" 
                      FROM "autoridades_mutuales" a
                      WHERE a."Matricula Nacional" = e."Matricula Nacional" 
                      AND LOWER(a."autoridad"::text) = 'presidente'
                      AND LOWER(a."mandato activo"::text) = 'si'
                      LIMIT 1) as presidente_email,
-                    
-                    -- Última asamblea desde asambleas_mutuales
+
+                    -- Última asamblea
                     (SELECT am."cierre ejercicio" 
                      FROM "asambleas_mutuales" am
                      WHERE am."Matricula Nacional" = e."Matricula Nacional"
                      ORDER BY am."cierre ejercicio" DESC 
                      LIMIT 1) as cierre_ejercicio,
-                     
+
                     (SELECT am."fecha asamblea" 
                      FROM "asambleas_mutuales" am
                      WHERE am."Matricula Nacional" = e."Matricula Nacional"
                      ORDER BY am."fecha asamblea" DESC 
                      LIMIT 1) as fecha_asamblea,
-                    
-                    -- Reglamentos vigentes desde reglamentosservicio_mutuales
+
+                    -- ✅ No existe ejercicio_mutuales -> devolvemos null
+                    NULL as estado_situacion_patrimonial_ultimo_ejercicio,
+
+                    -- Reglamentos vigentes
                     (SELECT STRING_AGG(r."Nombre del Reglamento", '; ' ORDER BY r."vigente hasta" DESC)
                      FROM "reglamentosservicio_mutuales" r
                      WHERE r."Matricula Nacional" = e."Matricula Nacional"
                      AND r."vigente hasta" < CURRENT_DATE) as reglamentos_nombre,
-                     
+
                     (SELECT STRING_AGG(r."vigente hasta"::text, '; ' ORDER BY r."vigente hasta" DESC)
                      FROM "reglamentosservicio_mutuales" r
                      WHERE r."Matricula Nacional" = e."Matricula Nacional"
                      AND r."vigente hasta" < CURRENT_DATE) as reglamentos_vigente_hasta
-                     
+
                 FROM "entidades_mutuales" e
                 ${whereClause}
                 ORDER BY e."Entidad" ASC
                 LIMIT 100
             `;
         } else {
-            // ✅ COOPERATIVAS: Query original
             const consejoTable = 'consejo_cooperativas';
             const asambleasTable = 'asambleas_cooperativas';
             const ejercicioTable = 'ejercicio_cooperativas';
-            
+
             query = `
                 SELECT 
                     e."${matriculaField}" as matricula,
@@ -2450,11 +2461,13 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
                     e."Localidad" as localidad,
                     e."Codigo Postal" as codigo_postal,
                     e."Tefefono" as telefono,
+                    -- ✅ Mail de la entidad (punto 2)
+                    e."Email" as email_entidad,
                     e."CUIT" as cuit,
                     e."Tipo" as tipo,
                     e."Subtipo" as subtipo,
                     
-                    -- ✅ Presidente del consejo (más reciente y con mandato activo)
+                    -- Presidente
                     (SELECT c."Nombre" 
                      FROM "${consejoTable}" c
                      WHERE c."${matriculaField}" = e."${matriculaField}" 
@@ -2462,81 +2475,43 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
                      AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
                      ORDER BY c."Fecha inicio" DESC 
                      LIMIT 1) as presidente,
-                     
-                    (SELECT c."DNI"::text
-                     FROM "${consejoTable}" c
-                     WHERE c."${matriculaField}" = e."${matriculaField}" 
-                     AND LOWER(c."Autoridad"::text) = 'presidente'
-                     AND (c."Mandato activo" IS NULL OR c."Mandato activo" = 'true' OR c."Mandato activo" = 't')
-                     ORDER BY c."Fecha inicio" DESC 
-                     LIMIT 1) as telefono_presidente,
-                    
-                    -- ✅ Email (no existe en tabla consejo, usar el de entidad)
-                    e."Email" as email_presidente,
-                    
-                    -- ✅ Última asamblea (usar fecha_asamblea en lugar de Fecha)
+
+                    -- Última asamblea
                     (SELECT a."fecha_asamblea" 
                      FROM "${asambleasTable}" a
                      WHERE a."${matriculaField}" = e."${matriculaField}"
                      ORDER BY a."fecha_asamblea" DESC 
                      LIMIT 1) as fecha_ultima_asamblea,
-                     
-                    (SELECT a."tipo asamblea"::text
-                     FROM "${asambleasTable}" a
-                     WHERE a."${matriculaField}" = e."${matriculaField}"
-                     ORDER BY a."fecha_asamblea" DESC 
-                     LIMIT 1) as tipo_asamblea,
-                     
-                    (SELECT a."Estado Asamblea"::text
-                     FROM "${asambleasTable}" a
-                     WHERE a."${matriculaField}" = e."${matriculaField}"
-                     ORDER BY a."fecha_asamblea" DESC 
-                     LIMIT 1) as estado_asamblea,
-                     
-                    (SELECT a."renovacion autoridades"::text
-                     FROM "${asambleasTable}" a
-                     WHERE a."${matriculaField}" = e."${matriculaField}"
-                     ORDER BY a."fecha_asamblea" DESC 
-                     LIMIT 1) as renovacion_autoridades,
-                     
-                    (SELECT a."renovacion sindicatura"::text
-                     FROM "${asambleasTable}" a
-                     WHERE a."${matriculaField}" = e."${matriculaField}"
-                     ORDER BY a."fecha_asamblea" DESC 
-                     LIMIT 1) as renovacion_sindicatura,
-                    
-                    -- ✅ Último ejercicio (usar "cierre ejercicio")
+
+                    -- Último ejercicio (ya existente)
                     (SELECT ej."cierre ejercicio" 
                      FROM "${ejercicioTable}" ej
                      WHERE ej."${matriculaField}" = e."${matriculaField}"
                      ORDER BY ej."cierre ejercicio" DESC 
                      LIMIT 1) as cierre_ultimo_ejercicio,
-                     
-                    (SELECT ej."cantidad asociados"
+
+                    -- ✅ “resultado último ejercicio” según lo que me pasaste:
+                    (SELECT ej."estado situacion patrimonial"
                      FROM "${ejercicioTable}" ej
                      WHERE ej."${matriculaField}" = e."${matriculaField}"
                      ORDER BY ej."cierre ejercicio" DESC 
-                     LIMIT 1) as cantidad_asociados
+                     LIMIT 1) as estado_situacion_patrimonial_ultimo_ejercicio
+
                 FROM "${tableName}" e
                 ${whereClause}
                 ORDER BY e."${nombreField}" ASC
                 LIMIT 100
             `;
         }
-        
-        console.log('📋 Query búsqueda avanzada:', query);
-        console.log('📋 Params:', params);
-        
+
         const result = await pool.query(query, params);
-        
-        logOperation('ADVANCED SEARCH SUCCESS', `${result.rows.length} resultados para ${entityType}`);
-        
+
         res.json({
             success: true,
             data: result.rows,
             total: result.rows.length
         });
-        
+
     } catch (error) {
         console.error('❌ Error en búsqueda avanzada:', error);
         const errorInfo = handlePostgresError(error, 'búsqueda avanzada de entidades');
