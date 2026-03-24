@@ -3658,6 +3658,7 @@
                 setTimeout(() => {
                     console.log('🎯 Configurando listeners DESPUÉS de poblar dropdowns...');
                     setupFormChangeListeners('createForm');
+                    setupEjercicioCooperativasAutoResultado('createForm');
                     console.log('✅ Configuración completa');
                 }, 50); // Delay adicional para asegurar que dropdowns estén listos
                 
@@ -4843,6 +4844,7 @@
                 // Configurar listeners de cambios después de mostrar el formulario
                 setTimeout(() => {
                     setupFormChangeListeners('createForm');
+                    setupEjercicioCooperativasAutoResultado('createForm');
                     hasUnsavedChanges = false;
                 }, 100);
             }
@@ -5727,7 +5729,9 @@
                 setTimeout(() => {
                     console.log('🎯 Configurando listeners para formulario de actualización...');
                     setupFormChangeListeners('updateForm');
+                    setupEjercicioCooperativasAutoResultado('updateForm');
                     console.log('✅ Formulario de actualización listo');
+                    
                 }, 100);
             }, 200);
         }
@@ -5909,7 +5913,80 @@
             showTab('search');
             showStatus('Eliminación cancelada', 'info');
         }
-
+        
+        function parseNumericInput(value) {
+          if (value === null || value === undefined) return null;
+          const s = String(value).trim().replace(',', '.');
+          if (s === '') return null;
+          const n = Number(s);
+          return Number.isFinite(n) ? n : null;
+        }
+        
+        function roundTo2(n) {
+          return Math.round((n + Number.EPSILON) * 100) / 100;
+        }
+        
+        function formatFixed2(n) {
+          return n.toFixed(2);
+        }
+        
+        function setupEjercicioCooperativasAutoResultado(formId) {
+          if (currentTable !== 'ejercicio_cooperativas') return;
+        
+          const form = document.getElementById(formId);
+          if (!form) return;
+        
+          const ingresosName = 'total ingresos';
+          const egresosName = 'total egresos';
+          const resultadoName = 'estado situacion patrimonial';
+        
+          // CSS.escape para nombres con espacios
+          const ingresosEl = form.querySelector(`[name="${CSS.escape(ingresosName)}"]`);
+          const egresosEl = form.querySelector(`[name="${CSS.escape(egresosName)}"]`);
+          const resultadoEl = form.querySelector(`[name="${CSS.escape(resultadoName)}"]`);
+        
+          if (!ingresosEl || !egresosEl || !resultadoEl) {
+            console.warn('P6: No se encontraron inputs para autocalcular resultado', {
+              formId,
+              ingresos: !!ingresosEl,
+              egresos: !!egresosEl,
+              resultado: !!resultadoEl
+            });
+            return;
+          }
+        
+          // Evitar duplicar listeners si se vuelve a abrir el form
+          if (form.dataset.autoResultadoAttached === 'true') return;
+          form.dataset.autoResultadoAttached = 'true';
+        
+          // Readonly (recomendado)
+          resultadoEl.readOnly = true;
+          resultadoEl.style.backgroundColor = '#f8f9fa';
+          resultadoEl.style.cursor = 'not-allowed';
+        
+          const recompute = () => {
+            const ingresos = parseNumericInput(ingresosEl.value);
+            const egresos = parseNumericInput(egresosEl.value);
+        
+            if (ingresos === null || egresos === null) {
+              resultadoEl.value = '';
+              return;
+            }
+        
+            const resultado = roundTo2(ingresos - egresos);
+            resultadoEl.value = formatFixed2(resultado);
+            resultadoEl.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+        
+          ingresosEl.addEventListener('input', recompute);
+          egresosEl.addEventListener('input', recompute);
+          ingresosEl.addEventListener('change', recompute);
+          egresosEl.addEventListener('change', recompute);
+        
+          // Calcular al cargar (por si ya venía con valores en edición)
+          recompute();
+        }
+       
         // UTILITY FUNCTIONS
         function showStatus(message, type) {
             const statusDiv = document.getElementById('status-message');
@@ -6130,6 +6207,7 @@
             
             // Reconfigurar listeners
             setTimeout(() => setupFormChangeListeners('createForm'), 100);
+            setTimeout(() => setupEjercicioCooperativasAutoResultado('createForm'), 180);
         }
         
         function hasCreateFormData() {
@@ -6461,7 +6539,8 @@
             });
     
             currentRecords = records;
-        }
+        }     
+        
         // Función para descargar resultados como CSV
         async function downloadCSV() {
             if (!currentRecords || currentRecords.length === 0) {
