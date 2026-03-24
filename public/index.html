@@ -1256,6 +1256,25 @@
         let initialFormValues = {}; // Para almacenar los valores iniciales del formulario
         let userHasInteracted = false;
         let formInitialized = false;
+
+        function formatBooleanForDisplay(value) {
+            // Aceptar boolean real o string 'true'/'false'
+            if (value === true || value === 'true') return 'Si';
+            if (value === false || value === 'false') return 'No';
+            return value; // no es boolean
+        }
+
+        function isEmailFieldName(fieldName) {
+            if (!fieldName) return false;
+            const f = fieldName.toLowerCase().trim();
+            return f === 'email' || f.includes('email') || f === 'mail' || f.includes('mail');
+        }
+        
+        function toUpperDisplay(value) {
+            if (value === null || value === undefined) return value;
+            if (typeof value !== 'string') return value;
+            return value.toUpperCase();
+        }
         
         // ========== FUNCIONES DE FORMATEO DE FECHAS ==========
 
@@ -5271,68 +5290,119 @@
             globalEntityMatches = [];
         }
 
+                // Helper: detectar si la tabla actual pertenece a COOPERATIVAS
+        function isCooperativasTable() {
+            return currentTable === 'entidades_cooperativas' || (currentTable && currentTable.endsWith('_cooperativas'));
+        }
+    
+        // Helper: devuelve el nombre de columna "matrícula" según el sistema
+        // (para este cambio solo forzamos cooperativas -> Matricula)
+        function getPreferredSearchFieldForCurrentTable() {
+            if (isCooperativasTable()) return 'Matricula';
+            return null;
+        }
+    
+        // Helper: ordena las keys para mostrar "Matricula" primero
+        function reorderKeysForDisplay(keys) {
+            if (!keys || keys.length === 0) return keys;
+    
+            // Solo regla cooperativas: Matricula primero
+            if (isCooperativasTable()) {
+                const matricula = 'Matricula';
+                if (keys.includes(matricula)) {
+                    return [matricula, ...keys.filter(k => k !== matricula)];
+                }
+            }
+            return keys;
+        }
+    
         function populateSearchFields() {
             const searchFieldDropdown = document.getElementById('globalSearchField');
-            
+    
             if (!searchFieldDropdown || !currentTableSchema) return;
-        
+    
             searchFieldDropdown.innerHTML = '<option value="">-- Seleccione un campo --</option>';
-        
+    
             currentTableSchema.columns.forEach(column => {
                 const option = document.createElement('option');
                 option.value = column.column_name;
                 option.textContent = column.column_name;
-                
+    
                 // ✅ AGREGAR ATRIBUTOS NECESARIOS
                 option.setAttribute('data-type', column.data_type);
                 option.setAttribute('data-udt-name', column.udt_name || '');
-                
+    
                 searchFieldDropdown.appendChild(option);
             });
+    
+            // ✅ PUNTO 3: en cooperativas, seleccionar Matricula por defecto (si existe)
+            const preferred = getPreferredSearchFieldForCurrentTable();
+            if (preferred) {
+                const hasPreferred = Array.from(searchFieldDropdown.options).some(opt => opt.value === preferred);
+                if (hasPreferred) {
+                    searchFieldDropdown.value = preferred;
+    
+                    // Si existe una función que reacciona al cambio de campo (para mostrar input fecha/texto/entidad)
+                    // la llamamos para evitar estados inconsistentes.
+                    if (typeof handleSearchFieldChange === 'function') {
+                        handleSearchFieldChange();
+                    }
+                }
+            }
         }
         
-        // GLOBAL SEARCH - VERSIÓN MEJORADA
         async function performGlobalSearch() {
-            const searchField = document.getElementById('globalSearchField').value;
-            
+            const searchFieldEl = document.getElementById('globalSearchField');
+            const searchField = searchFieldEl.value;
+    
             if (!searchField) {
                 showStatus('Por favor, selecciona un campo para buscar', 'error');
                 return;
             }
-            
+    
+            // ✅ PUNTO 3: en cooperativas forzar búsqueda por Matricula
+            if (isCooperativasTable() && searchField !== 'Matricula') {
+                // Forzar selector a Matricula y reintentar
+                showStatus('En COOPERATIVAS la búsqueda se realiza por MATRÍCULA. Se seleccionó "Matricula" automáticamente.', 'info');
+                searchFieldEl.value = 'Matricula';
+                if (typeof handleSearchFieldChange === 'function') handleSearchFieldChange();
+                return; // el usuario vuelve a apretar buscar o escribe ya en el campo correcto
+            }
+    
             // Determinar tipo de búsqueda
-            const selectedOption = document.getElementById('globalSearchField').options[document.getElementById('globalSearchField').selectedIndex];
+            const selectedOption = searchFieldEl.options[searchFieldEl.selectedIndex];
             const fieldType = selectedOption.getAttribute('data-type');
             const lowerFieldName = searchField.toLowerCase();
-            
+    
             let searchText = '';
             let searchParams = {};
-            
-            // ✅ BÚSQUEDA POR ENTIDAD
-            if (lowerFieldName.includes('entidad') || 
+    
+            // ✅ BÚSQUEDA POR ENTIDAD (queda igual, pero en cooperativas ya no entramos porque forzamos Matricula)
+            if (
+                lowerFieldName.includes('entidad') ||
                 lowerFieldName === 'nombre de la entidad' ||
-                (lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales'))) {
-                
+                (lowerFieldName === 'nombre' && (currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales'))
+            ) {
                 const entityInput = document.getElementById('globalSearchEntity').value.trim();
                 const selectedEntityId = document.getElementById('selected_global_entity_id').value;
-                
+    
                 searchText = selectedEntityId || entityInput;
-                
+    
                 if (!searchText) {
                     showStatus('Por favor, selecciona o escribe el nombre de una entidad', 'error');
                     return;
                 }
-                
+    
             // ✅ BÚSQUEDA POR RANGO DE FECHAS
             } else if (isDateField(fieldType)) {
                 const dateFrom = document.getElementById('globalSearchDateFrom').value;
                 const dateTo = document.getElementById('globalSearchDateTo').value;
-                
+    
                 if (!dateFrom && !dateTo) {
                     showStatus('Por favor, selecciona al menos una fecha', 'error');
                     return;
                 }
-                
+    
                 // Construir búsqueda de rango
                 searchParams = {
                     searchField: searchField,
@@ -5340,22 +5410,22 @@
                     dateTo: dateTo,
                     searchType: 'date-range'
                 };
-                
+    
             // ✅ BÚSQUEDA DE TEXTO NORMAL
             } else {
                 searchText = document.getElementById('globalSearchText').value.trim();
-                
+    
                 if (!searchText) {
                     showStatus('Por favor, ingresa texto para buscar', 'error');
                     return;
                 }
             }
-        
+    
             try {
                 showStatus('Buscando...', 'info');
-                
+    
                 let url;
-                
+    
                 if (searchParams.searchType === 'date-range') {
                     // Búsqueda por rango de fechas
                     const params = new URLSearchParams({
@@ -5369,16 +5439,16 @@
                     // Búsqueda normal
                     url = `${getDynamicApiUrl('search')}?searchText=${encodeURIComponent(searchText)}&searchField=${encodeURIComponent(searchField)}`;
                 }
-                
+    
                 const response = await authenticatedFetch(url);
                 const result = await response.json();
-        
+    
                 if (result.success) {
                     currentRecords = result.data;
-                    
+    
                     // Actualizar TODAS las pestañas con los resultados
                     updateAllTabsWithSearchResults(result.data);
-                    
+    
                     showStatus(`Se encontraron ${result.total} registro(s)`, 'success');
                 } else {
                     throw new Error(result.message);
@@ -5956,9 +6026,7 @@
                     }
                     
                     // Formatear booleanos
-                    if (typeof value === 'boolean' || value === 'true' || value === 'false') {
-                        displayValue = value === true || value === 'true' ? '✅ Sí' : '❌ No';
-                    }
+                    displayValue = formatBooleanForDisplay(displayValue);
                     
                     cardHTML += `
                         <div style="background: white; padding: 15px; border-radius: 8px; border-left: 3px solid #667eea;">
@@ -6104,7 +6172,7 @@
         function displaySearchResults(records) {
             const container = document.getElementById('search-records-container');
             container.innerHTML = '';
-        
+    
             // Agregar título con nombre de tabla
             const tableName = currentTableSchema?.displayName || currentTable || 'Tabla';
             const tableHeader = document.createElement('div');
@@ -6114,7 +6182,7 @@
                 <p style="margin: 5px 0 0 0; color: #6c757d; font-size: 0.9rem;">Total de registros encontrados: ${records?.length || 0}</p>
             `;
             container.appendChild(tableHeader);
-        
+    
             if (!records || records.length === 0) {
                 const emptyState = document.createElement('div');
                 emptyState.className = 'empty-state';
@@ -6122,52 +6190,63 @@
                 container.appendChild(emptyState);
                 return;
             }
-        
-            records.forEach((record, index) => {
+    
+            records.forEach((record) => {
                 const recordElement = document.createElement('div');
                 recordElement.className = 'record';
-        
+    
                 // SOLO mostrar entidad asociada si NO es tabla principal y existe
                 let entidadHtml = '';
                 const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
-                
+    
                 if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
                     entidadHtml = `
                         <div style="background: #e9ecef; border-radius: 5px; padding: 8px; margin-bottom: 8px;">
-                            <strong>Entidad:</strong> ${record.entidad_nombre || '-'}<br>
-                            <strong>Localidad:</strong> ${record.entidad_localidad || '-'}
+                            <strong>Entidad:</strong> ${toUpperDisplay(record.entidad_nombre) || '-'}<br>
+                            <strong>Localidad:</strong> ${toUpperDisplay(record.entidad_localidad) || '-'}
                         </div>
                     `;
                 }
-        
-                // Campos normales (excluir campos internos y de entidad si no es tabla principal)
+    
                 const fieldsToExclude = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'];
                 if (!isEntidadPrincipal) {
                     fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
                 }
+    
+                // ✅ PUNTO 3: ordenar campos para mostrar Matricula primero en cooperativas
+                const visibleKeys = Object.keys(record).filter(k => !fieldsToExclude.includes(k));
+                const orderedKeys = reorderKeysForDisplay(visibleKeys);
+                    
+                const recordContent = orderedKeys
+                  .map((key) => {
+                    const value = record[key];
+                    const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
                 
-                const recordContent = Object.entries(record)
-                    .filter(([key]) => !fieldsToExclude.includes(key))
-                    .map(([key, value]) => {
-                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        
-                        // FORMATEAR FECHAS
-                        let displayValue = value;
-                        if (currentTableSchema && currentTableSchema.columns) {
-                            const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
-                            if (columnInfo && isDateField(columnInfo.data_type)) {
-                                displayValue = formatDateForDisplay(value);
-                            }
-                        }
-                        
-                        return `<strong>${displayKey}:</strong> ${displayValue || 'N/A'}`;
-                    })
-                    .join('<br>');
-                        
+                    // 1) Fechas
+                    let displayValue = value;
+                    if (currentTableSchema && currentTableSchema.columns) {
+                      const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
+                      if (columnInfo && isDateField(columnInfo.data_type)) {
+                        displayValue = formatDateForDisplay(value);
+                      }
+                    }
+                
+                    // 2) Booleanos Si/No
+                    displayValue = formatBooleanForDisplay(displayValue);
+                
+                    // 3) Mayúsculas (excepto email)
+                    if (!isEmailFieldName(key)) {
+                      displayValue = toUpperDisplay(displayValue);
+                    }
+                
+                    return `<strong>${displayKey}:</strong> ${displayValue || 'N/A'}`;
+                  })
+                  .join('<br>');
+    
                 // Determinar qué botones mostrar según la pestaña activa
                 const activeTab = document.querySelector('.tab-content.active').id;
                 let buttonHtml = '';
-        
+    
                 if (activeTab === 'search') {
                     buttonHtml = `
                         <button class="btn btn-warning" onclick="editRecord('${record._primaryKey}')">✏️ Ver/Editar</button>
@@ -6178,7 +6257,7 @@
                 } else if (activeTab === 'delete') {
                     buttonHtml = `<button class="btn btn-danger" onclick="deleteRecord('${record._primaryKey}')">🗑️ Eliminar</button>`;
                 }
-        
+    
                 recordElement.innerHTML = `
                     <div class="record-header">
                         <div>
@@ -6193,19 +6272,17 @@
                         ${recordContent}
                     </div>
                 `;
-        
+    
                 container.appendChild(recordElement);
             });
-        
-            // Actualizar records globales para otras operaciones
+    
             currentRecords = records;
-        }
+        }        
         
         function displayUpdateResults(records) {
             const container = document.getElementById('update-records-container');
             container.innerHTML = '';
-        
-            // Título
+    
             const tableName = currentTableSchema?.displayName || currentTable || 'Tabla';
             const tableHeader = document.createElement('div');
             tableHeader.style.cssText = 'background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f39c12;';
@@ -6214,7 +6291,7 @@
                 <p style="margin: 5px 0 0 0; color: #6c757d; font-size: 0.9rem;">Selecciona un registro para editarlo. Total: ${records?.length || 0}</p>
             `;
             container.appendChild(tableHeader);
-        
+    
             if (!records || records.length === 0) {
                 const emptyState = document.createElement('div');
                 emptyState.className = 'empty-state';
@@ -6222,44 +6299,58 @@
                 container.appendChild(emptyState);
                 return;
             }
-        
+    
             records.forEach(record => {
                 const recordElement = document.createElement('div');
                 recordElement.className = 'record';
-        
-                // SOLO mostrar entidad si NO es tabla principal
+    
                 let entidadHtml = '';
                 const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
-                
+    
                 if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
                     entidadHtml = `
                         <div style="background: #e9ecef; border-radius: 5px; padding: 8px; margin-bottom: 8px;">
-                            <strong>Entidad:</strong> ${record.entidad_nombre || '-'}<br>
-                            <strong>Localidad:</strong> ${record.entidad_localidad || '-'}
+                            <strong>Entidad:</strong> ${toUpperDisplay(record.entidad_nombre) || '-'}<br>
+                            <strong>Localidad:</strong> ${toUpperDisplay(record.entidad_localidad) || '-'}
                         </div>
                     `;
                 }
-        
+    
                 const fieldsToExclude = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'];
                 if (!isEntidadPrincipal) {
                     fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
                 }
-        
-                const recordContent = Object.entries(record)
-                    .filter(([key]) => !fieldsToExclude.includes(key))
-                    .map(([key, value]) => {
-                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        let displayValue = value;
-                        if (currentTableSchema && currentTableSchema.columns) {
-                            const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
-                            if (columnInfo && isDateField(columnInfo.data_type)) {
-                                displayValue = formatDateForDisplay(value);
-                            }
-                        }
-                        return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
-                    })
-                    .join('<br>');
-        
+    
+                const visibleKeys = Object.keys(record).filter(k => !fieldsToExclude.includes(k));
+                const orderedKeys = reorderKeysForDisplay(visibleKeys);
+    
+
+                const recordContent = orderedKeys
+                  .map((key) => {
+                    const value = record[key];
+                    const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                
+                    // 1) Fechas
+                    let displayValue = value;
+                    if (currentTableSchema && currentTableSchema.columns) {
+                      const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
+                      if (columnInfo && isDateField(columnInfo.data_type)) {
+                        displayValue = formatDateForDisplay(value);
+                      }
+                    }
+                
+                    // 2) Booleanos Si/No
+                    displayValue = formatBooleanForDisplay(displayValue);
+                
+                    // 3) Mayúsculas (excepto email)
+                    if (!isEmailFieldName(key)) {
+                      displayValue = toUpperDisplay(displayValue);
+                    }
+                
+                    return `<strong>${displayKey}:</strong> ${displayValue || 'N/A'}`;
+                  })
+                  .join('<br>');
+                
                 recordElement.innerHTML = `
                     <div class="record-header">
                         <div>
@@ -6276,15 +6367,14 @@
                 `;
                 container.appendChild(recordElement);
             });
-        
+    
             currentRecords = records;
         }
-        
+    
         function displayDeleteResults(records) {
             const container = document.getElementById('delete-records');
             container.innerHTML = '';
-        
-            // Título
+    
             const tableName = currentTableSchema?.displayName || currentTable || 'Tabla';
             const tableHeader = document.createElement('div');
             tableHeader.style.cssText = 'background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e74c3c;';
@@ -6293,7 +6383,7 @@
                 <p style="margin: 5px 0 0 0; color: #6c757d; font-size: 0.9rem;">⚠️ Selecciona un registro para eliminarlo. Total: ${records?.length || 0}</p>
             `;
             container.appendChild(tableHeader);
-        
+    
             if (!records || records.length === 0) {
                 const emptyState = document.createElement('div');
                 emptyState.className = 'empty-state';
@@ -6301,44 +6391,58 @@
                 container.appendChild(emptyState);
                 return;
             }
-        
+    
             records.forEach(record => {
                 const recordElement = document.createElement('div');
                 recordElement.className = 'record';
-        
-                // SOLO mostrar entidad si NO es tabla principal
+    
                 let entidadHtml = '';
                 const isEntidadPrincipal = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
-                
+    
                 if (!isEntidadPrincipal && (record.entidad_nombre || record.entidad_localidad)) {
                     entidadHtml = `
                         <div style="background: #e9ecef; border-radius: 5px; padding: 8px; margin-bottom: 8px;">
-                            <strong>Entidad:</strong> ${record.entidad_nombre || '-'}<br>
-                            <strong>Localidad:</strong> ${record.entidad_localidad || '-'}
+                            <strong>Entidad:</strong> ${toUpperDisplay(record.entidad_nombre) || '-'}<br>
+                            <strong>Localidad:</strong> ${toUpperDisplay(record.entidad_localidad) || '-'}
                         </div>
                     `;
                 }
-        
+    
                 const fieldsToExclude = ['_primaryKey', '_rowIndex', 'id', 'created_at', 'updated_at'];
                 if (!isEntidadPrincipal) {
                     fieldsToExclude.push('entidad_nombre', 'entidad_localidad');
                 }
-        
-                const recordContent = Object.entries(record)
-                    .filter(([key]) => !fieldsToExclude.includes(key))
-                    .map(([key, value]) => {
-                        const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-                        let displayValue = value;
-                        if (currentTableSchema && currentTableSchema.columns) {
-                            const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
-                            if (columnInfo && isDateField(columnInfo.data_type)) {
-                                displayValue = formatDateForDisplay(value);
-                            }
-                        }
-                        return `<strong>${displayKey}:</strong> ${value || 'N/A'}`;
-                    })
-                    .join('<br>');
-        
+    
+                const visibleKeys = Object.keys(record).filter(k => !fieldsToExclude.includes(k));
+                const orderedKeys = reorderKeysForDisplay(visibleKeys);
+    
+
+                const recordContent = orderedKeys
+                  .map((key) => {
+                    const value = record[key];
+                    const displayKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                
+                    // 1) Fechas
+                    let displayValue = value;
+                    if (currentTableSchema && currentTableSchema.columns) {
+                      const columnInfo = currentTableSchema.columns.find(col => col.column_name === key);
+                      if (columnInfo && isDateField(columnInfo.data_type)) {
+                        displayValue = formatDateForDisplay(value);
+                      }
+                    }
+                
+                    // 2) Booleanos Si/No
+                    displayValue = formatBooleanForDisplay(displayValue);
+                
+                    // 3) Mayúsculas (excepto email)
+                    if (!isEmailFieldName(key)) {
+                      displayValue = toUpperDisplay(displayValue);
+                    }
+                
+                    return `<strong>${displayKey}:</strong> ${displayValue || 'N/A'}`;
+                  })
+                  .join('<br>');
+    
                 recordElement.innerHTML = `
                     <div class="record-header">
                         <div>
@@ -6355,10 +6459,9 @@
                 `;
                 container.appendChild(recordElement);
             });
-        
+    
             currentRecords = records;
         }
-
         // Función para descargar resultados como CSV
         async function downloadCSV() {
             if (!currentRecords || currentRecords.length === 0) {
