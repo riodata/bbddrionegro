@@ -974,22 +974,22 @@
                     </p>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 15px;">
                         
-                        <!-- Campo: Nombre de la Entidad -->
+                        <!-- Campo: Matrícula -->
                         <div>
-                            <label for="advanced-search-nombre" style="font-weight: 500; margin-bottom: 5px; display: block;">Nombre de la Entidad:</label>
+                            <label for="advanced-search-matricula" style="font-weight: 500; margin-bottom: 5px; display: block;">Matrícula:</label>
                             <div style="position: relative;">
                                 <input 
                                     type="text" 
-                                    id="advanced-search-nombre" 
-                                    placeholder="Escribe el nombre..."
+                                    id="advanced-search-matricula" 
+                                    placeholder="Escribe la matrícula..."
                                     autocomplete="off"
-                                    oninput="handleAdvancedAutocomplete('nombre', this.value)"
+                                    oninput="handleAdvancedAutocomplete('matricula', this.value)"
                                     style="width: 100%; padding-right: 30px;"
                                 />
-                                <div class="clear-btn" onclick="clearAdvancedField('nombre')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;">✕</div>
-                                <div id="advanced-dropdown-nombre" class="advanced-dropdown"></div>
+                                <div class="clear-btn" onclick="clearAdvancedField('matricula')" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;">✕</div>
+                                <div id="advanced-dropdown-matricula" class="advanced-dropdown"></div>
                             </div>
-                        </div>
+                        </div>           
                         
                         <!-- Campo: Localidad -->
                         <div>
@@ -2249,7 +2249,7 @@
         // ========== BÚSQUEDA AVANZADA DE ENTIDADES ==========
         
         let advancedSearchData = {
-            nombre: [],
+            matricula: [],
             localidad: [],
             tipo: []
         };
@@ -2271,22 +2271,31 @@
                 
                 if (result.success && result.data) {
                     const entidades = result.data;
-                    
+                                    
                     // Extraer valores únicos de TODOS los campos necesarios
-                    const nombreField = entityType === 'cooperativas' ? 'Nombre de la Entidad' : 'Entidad';
+                    // Cooperativas: usar "matricula" (normalizado)
+                    // Mutuales: la matrícula es "Matricula Nacional" (según tu confirmación)
+                    const matriculaField = entityType === 'cooperativas' ? 'matricula' : 'Matricula Nacional';
                     
-                    advancedSearchData.nombre = [...new Set(entidades.map(e => e[nombreField]).filter(Boolean))].sort();
+                    // Guardamos matrículas como strings (para autocompletar), filtrando vacíos
+                    advancedSearchData.matricula = [...new Set(
+                        entidades
+                            .map(e => e[matriculaField] ?? e.matricula ?? e['matricula nacional'])
+                            .filter(v => v !== undefined && v !== null && String(v).trim() !== '')
+                            .map(v => String(v).trim())
+                    )].sort();
+                    
                     advancedSearchData.localidad = [...new Set(entidades.map(e => e.Localidad || e.localidad).filter(Boolean))].sort();
                     advancedSearchData.tipo = [...new Set(entidades.map(e => e.Tipo || e.tipo).filter(Boolean))].sort();
                     
                     console.log('✅ Datos de búsqueda avanzada cargados:', {
-                        nombres: advancedSearchData.nombre.length,
+                        nombres: advancedSearchData.matricula.length,
                         localidades: advancedSearchData.localidad.length,
                         tipos: advancedSearchData.tipo.length
                     });
                     
                     console.log('📋 Ejemplos de datos:');
-                    console.log('Nombres:', advancedSearchData.nombre.slice(0, 3));
+                    console.log('Matriculas:', advancedSearchData.matricula.slice(0, 3));
                     console.log('Localidades:', advancedSearchData.localidad.slice(0, 3));
                     console.log('Tipos:', advancedSearchData.tipo.slice(0, 3));
                 }
@@ -2314,9 +2323,14 @@
             }
             
             // Filtrar opciones
-            const matches = advancedSearchData[field].filter(item => 
-                item && item.toLowerCase().includes(query)
-            );
+            const matches = advancedSearchData[field].filter(item => {
+                if (!item) return false;
+                const text = String(item).toLowerCase();
+                // Matrícula: sugerir por prefijo (startsWith)
+                if (field === 'matricula') return text.startsWith(query);
+                // Otros campos: contiene
+                return text.includes(query);
+            });
             
             if (matches.length === 0) {
                 dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">No se encontraron coincidencias</div>';
@@ -2359,7 +2373,7 @@
         
         // Limpiar toda la búsqueda avanzada
         function clearAdvancedSearch() {
-            ['nombre', 'localidad', 'tipo'].forEach(field => clearAdvancedField(field));
+            ['matricula', 'localidad', 'tipo'].forEach(field => clearAdvancedField(field));
             
             document.getElementById('advanced-search-results').innerHTML = '';
             document.getElementById('download-advanced-csv').style.display = 'none';
@@ -2368,20 +2382,20 @@
         
         // Realizar búsqueda avanzada
         async function performAdvancedSearch() {
-            const nombre = document.getElementById('advanced-search-nombre').value.trim();
+            const matricula = document.getElementById('advanced-search-matricula').value.trim();
             const localidad = document.getElementById('advanced-search-localidad').value.trim();
             const tipo = document.getElementById('advanced-search-tipo').value.trim();
             
-            if (!nombre && !localidad && !tipo) {
+            if (!matricula && !localidad && !tipo) {
                 showStatus('Por favor, ingresa al menos un criterio de búsqueda', 'error');
                 return;
             }
             
             try {
                 showStatus('Buscando...', 'info');
-                
+            
                 const params = new URLSearchParams();
-                if (nombre) params.append('nombre', nombre);
+                if (matricula) params.append('matricula', matricula);
                 if (localidad) params.append('localidad', localidad);
                 if (tipo) params.append('tipo', tipo);
                 
@@ -2469,6 +2483,10 @@
                                     <div class="advanced-entity-field-value">${entity.telefono || '-'}</div>
                                 </div>
                                 <div class="advanced-entity-field">
+                                  <div class="advanced-entity-field-label">Email</div>
+                                  <div class="advanced-entity-field-value">${entity.email_entidad || entity.email || entity.email_presidente || '-'}</div>
+                                </div>
+                                <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">CUIT</div>
                                     <div class="advanced-entity-field-value">${entity.cuit || '-'}</div>
                                 </div>
@@ -2551,6 +2569,12 @@
                                 </div>
                                 ` : ''}
                             </div>
+                            ${entity.estado_situacion_patrimonial_ultimo_ejercicio ? `
+                            <div class="advanced-entity-field">
+                              <div class="advanced-entity-field-label">Estado Situación Patrimonial (Último Ejercicio)</div>
+                              <div class="advanced-entity-field-value">${entity.estado_situacion_patrimonial_ultimo_ejercicio}</div>
+                            </div>
+                            ` : ''}
                         </div>
                         ` : ''}
                     </div>
@@ -2607,53 +2631,55 @@
                 } else {
                     // Columnas para cooperativas
                     columns = [
-                        'matricula',
-                        'legajo',
-                        'nombre_entidad',
-                        'registro_provincial',
-                        'fecha_inicio',
-                        'domicilio',
-                        'localidad',
-                        'codigo_postal',
-                        'telefono',
-                        'cuit',
-                        'tipo',
-                        'subtipo',
-                        'presidente',
-                        'telefono_presidente',
-                        'email_presidente',
-                        'fecha_ultima_asamblea',
-                        'tipo_asamblea',
-                        'estado_asamblea',
-                        'renovacion_autoridades',
-                        'renovacion_sindicatura',
-                        'cierre_ultimo_ejercicio',
-                        'cantidad_asociados'
+                      'matricula',
+                      'legajo',
+                      'nombre_entidad',
+                      'registro_provincial',
+                      'fecha_inicio',
+                      'domicilio',
+                      'localidad',
+                      'codigo_postal',
+                      'telefono',
+                      'email_entidad', // <-- NUEVO
+                      'cuit',
+                      'tipo',
+                      'subtipo',
+                      'presidente',
+                      'telefono_presidente',
+                      'fecha_ultima_asamblea',
+                      'tipo_asamblea',
+                      'estado_asamblea',
+                      'renovacion_autoridades',
+                      'renovacion_sindicatura',
+                      'cierre_ultimo_ejercicio',
+                      'estado_situacion_patrimonial_ultimo_ejercicio', // <-- NUEVO
+                      'cantidad_asociados'
                     ];
                     
                     headers = [
-                        'Matrícula',
-                        'Legajo',
-                        'Nombre',
-                        'Registro Provincial',
-                        'Fecha Inicio',
-                        'Domicilio',
-                        'Localidad',
-                        'Código Postal',
-                        'Teléfono',
-                        'CUIT',
-                        'Tipo',
-                        'Subtipo',
-                        'Presidente',
-                        'Teléfono Presidente',
-                        'Email Presidente',
-                        'Fecha Última Asamblea',
-                        'Tipo Asamblea',
-                        'Estado Asamblea',
-                        'Renovación Autoridades',
-                        'Renovación Sindicatura',
-                        'Cierre Último Ejercicio',
-                        'Cantidad Asociados'
+                      'Matrícula',
+                      'Legajo',
+                      'Nombre',
+                      'Registro Provincial',
+                      'Fecha Inicio',
+                      'Domicilio',
+                      'Localidad',
+                      'Código Postal',
+                      'Teléfono',
+                      'Email', // <-- NUEVO
+                      'CUIT',
+                      'Tipo',
+                      'Subtipo',
+                      'Presidente',
+                      'Teléfono Presidente',
+                      'Fecha Última Asamblea',
+                      'Tipo Asamblea',
+                      'Estado Asamblea',
+                      'Renovación Autoridades',
+                      'Renovación Sindicatura',
+                      'Cierre Último Ejercicio',
+                      'Estado Situación Patrimonial (Último Ejercicio)', // <-- NUEVO
+                      'Cantidad Asociados'
                     ];
                 }
        
@@ -2711,7 +2737,7 @@
         // Cerrar dropdowns al hacer click fuera
         document.addEventListener('click', function(event) {
             if (!event.target.closest('#advanced-entity-search')) {
-                ['nombre', 'localidad', 'tipo'].forEach(field => {
+                ['matricula', 'localidad', 'tipo'].forEach(field => {
                     const dropdown = document.getElementById(`advanced-dropdown-${field}`);
                     if (dropdown) dropdown.style.display = 'none';
                 });
