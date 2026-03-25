@@ -1772,22 +1772,48 @@ app.get('/api/entidades/mutuales', auth.requireAuth, async (req, res) => {
 // GET /api/entidades/mutuales/matriculas
 app.get('/api/entidades/:entityType/matriculas', auth.requireAuth, async (req, res) => {
   const { entityType } = req.params;
+  const { q } = req.query;
   try {
     let query;
+    let params = [];
+
+    // Validate q: allow only digits, letters, hyphens and spaces (typical matricula formats)
+    const sanitizedQ = q ? String(q).trim().replace(/[^a-zA-Z0-9\s\-]/g, '') : null;
+
     if (entityType === 'cooperativas') {
-      query = `SELECT "Matricula"::text AS matricula, "Nombre de la Entidad" AS nombre
-               FROM "entidades_cooperativas"
-               WHERE "Matricula" IS NOT NULL
-               ORDER BY "Matricula" ASC`;
+      if (sanitizedQ) {
+        query = `SELECT "Matricula"::text AS matricula, "Nombre de la Entidad" AS nombre
+                 FROM "entidades_cooperativas"
+                 WHERE "Matricula" IS NOT NULL
+                   AND "Matricula"::text ILIKE $1
+                 ORDER BY "Matricula" ASC
+                 LIMIT 15`;
+        params = [`${sanitizedQ}%`];
+      } else {
+        query = `SELECT "Matricula"::text AS matricula, "Nombre de la Entidad" AS nombre
+                 FROM "entidades_cooperativas"
+                 WHERE "Matricula" IS NOT NULL
+                 ORDER BY "Matricula" ASC`;
+      }
     } else if (entityType === 'mutuales') {
-      query = `SELECT "Matricula Nacional"::text AS matricula, "Entidad" AS nombre
-               FROM "entidades_mutuales"
-               WHERE "Matricula Nacional" IS NOT NULL
-               ORDER BY "Matricula Nacional" ASC`;
+      if (sanitizedQ) {
+        query = `SELECT "Matricula Nacional"::text AS matricula, "Entidad" AS nombre
+                 FROM "entidades_mutuales"
+                 WHERE "Matricula Nacional" IS NOT NULL
+                   AND "Matricula Nacional"::text ILIKE $1
+                 ORDER BY "Matricula Nacional" ASC
+                 LIMIT 15`;
+        params = [`${sanitizedQ}%`];
+      } else {
+        query = `SELECT "Matricula Nacional"::text AS matricula, "Entidad" AS nombre
+                 FROM "entidades_mutuales"
+                 WHERE "Matricula Nacional" IS NOT NULL
+                 ORDER BY "Matricula Nacional" ASC`;
+      }
     } else {
       return res.status(400).json({ success: false, message: 'Tipo de entidad inválido' });
     }
-    const result = await pool.query(query);
+    const result = await pool.query(query, params);
     res.json({ success: true, data: result.rows, total: result.rows.length });
   } catch (error) {
     console.error(`Error obteniendo matrículas de ${entityType}:`, error);
