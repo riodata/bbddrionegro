@@ -2291,21 +2291,9 @@
                 currentAdvancedEntityType = entityType;
                 const tableName = entityType === 'cooperativas' ? 'entidades_cooperativas' : 'entidades_mutuales';
 
-                // Cargar matrículas desde el endpoint dedicado y localidad/tipo desde la tabla completa
-                const [matriculasResponse, tableResponse] = await Promise.all([
-                    authenticatedFetch(`${API_BASE}/api/entidades/${entityType}/matriculas`),
-                    authenticatedFetch(`${API_BASE}/api/tables/${tableName}/read`)
-                ]);
-
-                const matriculasResult = await matriculasResponse.json();
+                // Cargar localidad/tipo desde la tabla completa (matrículas se buscan on-demand)
+                const tableResponse = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/read`);
                 const tableResult = await tableResponse.json();
-
-                if (matriculasResult.success && matriculasResult.data) {
-                    // Almacenar como objetos {matricula, nombre} para mostrar en el dropdown
-                    advancedSearchData.matricula = matriculasResult.data.filter(
-                        item => item.matricula !== null && item.matricula !== undefined && String(item.matricula).trim() !== ''
-                    );
-                }
 
                 if (tableResult.success && tableResult.data) {
                     const entidades = tableResult.data;
@@ -2314,7 +2302,6 @@
                 }
 
                 console.log('✅ Datos de búsqueda avanzada cargados:', {
-                    matriculas: advancedSearchData.matricula.length,
                     localidades: advancedSearchData.localidad.length,
                     tipos: advancedSearchData.tipo.length
                 });
@@ -2323,10 +2310,45 @@
                 showStatus('Error cargando datos: ' + error.message, 'error');
             }
         }
+
+        // Timer para debounce del autocomplete de matrícula
+        let matriculaAutocompleteTimer = null;
+        const MATRICULA_AUTOCOMPLETE_DEBOUNCE_MS = 200;
+
+        // Buscar matrículas en el backend por patrón
+        async function fetchMatriculasSuggestions(query) {
+            const dropdown = document.getElementById('advanced-dropdown-matricula');
+            try {
+                const response = await authenticatedFetch(
+                    `${API_BASE}/api/entidades/${currentAdvancedEntityType}/matriculas?q=${encodeURIComponent(query)}`
+                );
+                const result = await response.json();
+
+                if (!result.success || !result.data || result.data.length === 0) {
+                    dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">No se encontraron coincidencias</div>';
+                    dropdown.style.display = 'block';
+                    return;
+                }
+
+                dropdown.innerHTML = '';
+                result.data.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'advanced-dropdown-item';
+                    div.innerHTML = highlightMatch(String(item.matricula), query);
+                    div.addEventListener('click', () => selectAdvancedOption('matricula', String(item.matricula)));
+                    dropdown.appendChild(div);
+                });
+
+                dropdown.style.display = 'block';
+            } catch (error) {
+                console.error('❌ Error buscando matrículas:', error);
+                dropdown.style.display = 'none';
+            }
+        }
         
         // Manejar autocompletado en campos de búsqueda avanzada
         function handleAdvancedAutocomplete(field, value) {
-            const query = value.toLowerCase().trim();
+            const query = value.trim();
             const dropdown = document.getElementById(`advanced-dropdown-${field}`);
             const input = document.getElementById(`advanced-search-${field}`);
             const clearBtn = input.nextElementSibling;
@@ -2338,19 +2360,27 @@
             
             if (query.length < 1) {
                 dropdown.style.display = 'none';
+                if (field === 'matricula') {
+                    clearTimeout(matriculaAutocompleteTimer);
+                }
+                return;
+            }
+
+            // Para matrícula: buscar en el backend por patrón (solo por número de matrícula)
+            if (field === 'matricula') {
+                clearTimeout(matriculaAutocompleteTimer);
+                matriculaAutocompleteTimer = setTimeout(() => {
+                    fetchMatriculasSuggestions(query);
+                }, MATRICULA_AUTOCOMPLETE_DEBOUNCE_MS);
                 return;
             }
             
-            // Filtrar opciones
+            // Para localidad y tipo: filtrar desde datos pre-cargados
+            const queryLower = query.toLowerCase();
             const matches = advancedSearchData[field].filter(item => {
                 if (!item) return false;
-                if (field === 'matricula') {
-                    // Los items de matrícula son objetos {matricula, nombre}
-                    const text = String(item.matricula || '').toLowerCase();
-                    return text.includes(query);
-                }
                 const text = String(item).toLowerCase();
-                return text.includes(query);
+                return text.includes(queryLower);
             });
             
             if (matches.length === 0) {
@@ -2359,17 +2389,9 @@
                 return;
             }
             
-            dropdown.innerHTML = matches.slice(0, 10).map(item => {
-                if (field === 'matricula') {
-                    const safeMatricula = String(item.matricula).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    const displayText = `${item.matricula} - ${item.nombre || ''}`;
-                    const highlightedText = highlightMatch(displayText, query);
-                    return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeMatricula}')">
-                        ${highlightedText}
-                    </div>`;
-                }
+            dropdown.innerHTML = matches.slice(0, 15).map(item => {
                 const safeItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                const highlightedText = highlightMatch(String(item), query);
+                const highlightedText = highlightMatch(String(item), queryLower);
                 return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeItem}')">
                     ${highlightedText}
                 </div>`;
