@@ -5857,7 +5857,21 @@
             if (inputType === 'textarea') {
                 return `<textarea ${commonAttributes} rows="3">${formattedValue}</textarea>`;
             } else if (inputType === 'checkbox') {
-                return `<input type="checkbox" ${commonAttributes} ${value ? 'checked' : ''}>`;
+                const fieldId = `update-${column.column_name.replace(/\s+/g, '_')}`;
+                const isTrue = value === true || value === 'true';
+                const isFalse = value === false || value === 'false';
+                return `
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" id="${fieldId}_true" name="${column.column_name}" value="true" ${required} ${isTrue ? 'checked' : ''}>
+                            <label for="${fieldId}_true" class="radio-label">Sí</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" id="${fieldId}_false" name="${column.column_name}" value="false" ${required} ${isFalse ? 'checked' : ''}>
+                            <label for="${fieldId}_false" class="radio-label">No</label>
+                        </div>
+                    </div>
+                `;
             } else if (inputType === 'select') {
                 return `<select ${commonAttributes}>
                     <option value=""${!value ? ' selected' : ''}>Seleccionar...</option>
@@ -5922,7 +5936,7 @@
                     <div class="record">
                         ${Object.entries(record)
                             .filter(([k]) => !k.startsWith('_'))
-                            .map(([k, v]) => `<strong>${k}:</strong> ${v || 'N/A'}`)
+                            .map(([k, v]) => `<strong>${k}:</strong> ${formatBooleanForDisplay(v) || 'N/A'}`)
                             .join('<br>')}
                     </div>
                     
