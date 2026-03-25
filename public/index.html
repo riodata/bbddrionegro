@@ -5307,18 +5307,21 @@
             globalEntityMatches = [];
         }
 
-                // Helper: detectar si la tabla actual pertenece a COOPERATIVAS
         function isCooperativasTable() {
-            return currentTable === 'entidades_cooperativas' || (currentTable && currentTable.endsWith('_cooperativas'));
+          return currentTable === 'entidades_cooperativas' || (currentTable && currentTable.endsWith('_cooperativas'));
         }
-    
-        // Helper: devuelve el nombre de columna "matrícula" según el sistema
-        // (para este cambio solo forzamos cooperativas -> Matricula)
+        
+        function isMutualesTable() {
+          return currentTable === 'entidades_mutuales' || (currentTable && currentTable.endsWith('_mutuales'));
+        }
+        
+        // Devuelve el nombre EXACTO de columna por la que se debe buscar en global search
         function getPreferredSearchFieldForCurrentTable() {
-            if (isCooperativasTable()) return 'Matricula';
-            return null;
+          if (isCooperativasTable()) return 'Matricula';
+          if (isMutualesTable()) return 'Matricula Nacional';
+          return null;
         }
-    
+        
         // Helper: ordena las keys para mostrar "Matricula" primero
         function reorderKeysForDisplay(keys) {
             if (!keys || keys.length === 0) return keys;
