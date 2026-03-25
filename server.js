@@ -1974,6 +1974,13 @@ app.get('/api/tables/:tableName/download-csv', auth.requireAuth, async (req, res
   }
 });
 
+// Helper: convertir booleano a texto "Si"/"No"
+function booleanToText(value) {
+  if (value === true || value === 'true') return 'Si';
+  if (value === false || value === 'false') return 'No';
+  return value;
+}
+
 // Helper: escape CSV cell
 function escapeCSV(value) {
   if (value === null || value === undefined) return '';
@@ -2058,7 +2065,11 @@ function generateCSV(data, tableName, tableSchema) {
   data.forEach(row => {
     const csvRow = orderedColumns.map(col => {
       // Use explicit null/undefined check so 0 and false are preserved
-      const raw = (row[col] === null || row[col] === undefined) ? '' : row[col];
+      let raw = (row[col] === null || row[col] === undefined) ? '' : row[col];
+      // Convert booleans to "Si"/"No" for display
+      if (typeof raw === 'boolean' || raw === 'true' || raw === 'false') {
+        raw = booleanToText(raw);
+      }
       return escapeCSV(raw);
     }).join(',');
     csvLines.push(csvRow);
