@@ -1767,6 +1767,34 @@ app.get('/api/entidades/mutuales', auth.requireAuth, async (req, res) => {
   }
 });
 
+// Endpoint liviano para obtener solo matrícula + nombre (para dropdown de búsqueda avanzada)
+// GET /api/entidades/cooperativas/matriculas
+// GET /api/entidades/mutuales/matriculas
+app.get('/api/entidades/:entityType/matriculas', auth.requireAuth, async (req, res) => {
+  const { entityType } = req.params;
+  try {
+    let query;
+    if (entityType === 'cooperativas') {
+      query = `SELECT "Matricula"::text AS matricula, "Nombre de la Entidad" AS nombre
+               FROM "entidades_cooperativas"
+               WHERE "Matricula" IS NOT NULL
+               ORDER BY "Matricula" ASC`;
+    } else if (entityType === 'mutuales') {
+      query = `SELECT "Matricula Nacional"::text AS matricula, "Entidad" AS nombre
+               FROM "entidades_mutuales"
+               WHERE "Matricula Nacional" IS NOT NULL
+               ORDER BY "Matricula Nacional" ASC`;
+    } else {
+      return res.status(400).json({ success: false, message: 'Tipo de entidad inválido' });
+    }
+    const result = await pool.query(query);
+    res.json({ success: true, data: result.rows, total: result.rows.length });
+  } catch (error) {
+    console.error(`Error obteniendo matrículas de ${entityType}:`, error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ENDPOINTS DINÁMICOS PARA OPERACIONES CRUD
 // CREATE - Crear nuevo registro con auditoría
 app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => {
