@@ -1267,7 +1267,7 @@
         function isEmailFieldName(fieldName) {
             if (!fieldName) return false;
             const f = fieldName.toLowerCase().trim();
-            return f === 'email' || f.includes('email') || f === 'mail' || f.includes('mail');
+            return f === 'email' || f.includes('email') || f === 'mail' || f.includes('mail') || f === 'correo' || f.includes('correo');
         }
         
         function toUpperDisplay(value) {
@@ -4084,17 +4084,17 @@
                 case 'email':
                     return `<input type="email" name="${column_name}" id="${column_name}" ${required}>`;
                 case 'tel':
-                    return `<input type="tel" name="${column_name}" id="${column_name}" ${required}>`;
+                    return `<input type="tel" name="${column_name}" id="${column_name}" ${required} oninput="this.value = this.value.toUpperCase()">`;
                 case 'date':
                     return `<input type="date" name="${column_name}" id="${column_name}" ${required}>`;
                 case 'datetime-local':
                     return `<input type="datetime-local" name="${column_name}" id="${column_name}" ${required}>`;
                 case 'textarea':
-                    return `<textarea name="${column_name}" id="${column_name}" rows="3" ${required}></textarea>`;
+                    return `<textarea name="${column_name}" id="${column_name}" rows="3" ${required} oninput="this.value = this.value.toUpperCase()"></textarea>`;
                 case 'checkbox':
                     return `<input type="checkbox" name="${column_name}" id="${column_name}">`;
                 default:
-                    return `<input type="text" name="${column_name}" id="${column_name}" ${required}>`;
+                    return `<input type="text" name="${column_name}" id="${column_name}" ${required} oninput="this.value = this.value.toUpperCase()">`;
             }
         }
 
@@ -5863,7 +5863,7 @@
             `;
             
             if (inputType === 'textarea') {
-                return `<textarea ${commonAttributes} rows="3">${formattedValue}</textarea>`;
+                return `<textarea ${commonAttributes} rows="3" oninput="this.value = this.value.toUpperCase()">${formattedValue}</textarea>`;
             } else if (inputType === 'checkbox') {
                 const fieldId = `update-${column.column_name.replace(/\s+/g, '_')}`;
                 const isTrue = value === true || value === 'true';
@@ -5886,7 +5886,9 @@
                     <option value="${value}"${value ? ' selected' : ''}>${value}</option>
                 </select>`;
             } else {
-                return `<input type="${inputType}" ${commonAttributes} value="${formattedValue || ''}">`;
+                const addUppercase = (inputType === 'text' || inputType === 'tel') && !isEmailFieldName(column.column_name);
+                const uppercaseAttr = addUppercase ? `oninput="this.value = this.value.toUpperCase()"` : '';
+                return `<input type="${inputType}" ${commonAttributes} ${uppercaseAttr} value="${formattedValue || ''}">`;
             }
         }
         
@@ -6840,7 +6842,20 @@
             
             // Agregar datos
             records.forEach(record => {
-                const csvRow = orderedColumns.map(col => escapeCSV(record[col] || '')).join(',');
+                const csvRow = orderedColumns.map(col => {
+                    let value = record[col];
+                    // Convertir booleanos a "Si"/"No"
+                    if (typeof value === 'boolean' || value === 'true' || value === 'false') {
+                        value = (value === true || value === 'true') ? 'Si' : 'No';
+                    }
+                    // Convertir strings a mayúsculas (excepto campos de email)
+                    if (typeof value === 'string' && value !== '') {
+                        const k = col.toLowerCase();
+                        const isEmailCol = k.includes('email') || k.includes('mail') || k.includes('correo');
+                        if (!isEmailCol) value = value.toUpperCase();
+                    }
+                    return escapeCSV(value || '');
+                }).join(',');
                 csvLines.push(csvRow);
             });
             

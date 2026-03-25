@@ -1843,9 +1843,12 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
       }
     });
 
+    // Convertir strings a mayúsculas (excepto campos de email)
+    const upperData = toUpperCaseExceptEmail(cleanData);
+
     // Construir query de inserción
-    const columns = Object.keys(cleanData);
-    const values = Object.values(cleanData);
+    const columns = Object.keys(upperData);
+    const values = Object.values(upperData);
     
     if (columns.length === 0) {
       return res.status(400).json({
@@ -2007,6 +2010,21 @@ function booleanToText(value) {
   return value;
 }
 
+// Helper: convertir strings a mayúsculas excepto campos de email
+function toUpperCaseExceptEmail(obj) {
+  const result = {};
+  for (const key in obj) {
+    if (typeof obj[key] === 'string') {
+      const k = key.toLowerCase();
+      const isEmailField = k.includes('email') || k.includes('mail') || k.includes('correo');
+      result[key] = isEmailField ? obj[key] : obj[key].toUpperCase();
+    } else {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
 // Helper: escape CSV cell
 function escapeCSV(value) {
   if (value === null || value === undefined) return '';
@@ -2095,6 +2113,12 @@ function generateCSV(data, tableName, tableSchema) {
       // Convert booleans to "Si"/"No" for display
       if (typeof raw === 'boolean' || raw === 'true' || raw === 'false') {
         raw = booleanToText(raw);
+      }
+      // Convert strings to uppercase (except email fields)
+      if (typeof raw === 'string' && raw !== '') {
+        const k = col.toLowerCase();
+        const isEmailCol = k.includes('email') || k.includes('mail') || k.includes('correo');
+        if (!isEmailCol) raw = raw.toUpperCase();
       }
       return escapeCSV(raw);
     }).join(',');
@@ -2624,9 +2648,12 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
+    // Convertir strings a mayúsculas (excepto campos de email)
+    const upperUpdateData = toUpperCaseExceptEmail(cleanUpdateData);
+
     // Construir query de actualización
-    const updateColumns = Object.keys(cleanUpdateData);
-    const updateValues = Object.values(cleanUpdateData);
+    const updateColumns = Object.keys(upperUpdateData);
+    const updateValues = Object.values(upperUpdateData);
     const setClause = updateColumns.map((col, index) => `"${col}" = $${index + 1}`).join(', ');
     
     const updateQuery = `
