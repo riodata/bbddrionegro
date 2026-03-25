@@ -3645,6 +3645,10 @@
             
             const fieldsContainer = document.getElementById('create-fields');
             fieldsContainer.innerHTML = '';
+
+            // Reset auto-resultado flag so listeners can be re-attached to new inputs
+            const createFormEl = document.getElementById('createForm');
+            if (createFormEl) delete createFormEl.dataset.autoResultadoAttached;
     
             // AGREGAR CAMPO ENTIDAD AL INICIO solo si NO es tabla de entidades y tiene campos de matrícula
             const isEntidadTable = currentTable === 'entidades_cooperativas' || currentTable === 'entidades_mutuales';
@@ -5744,6 +5748,10 @@
             
             const fieldsContainer = document.getElementById('update-fields');
             fieldsContainer.innerHTML = '';
+
+            // Reset auto-resultado flag so listeners can be re-attached to new inputs
+            const updateFormEl = document.getElementById('updateForm');
+            if (updateFormEl) delete updateFormEl.dataset.autoResultadoAttached;
             
             // ✅ CORRECCIÓN: Usar setAttribute para asegurar que el name se aplique correctamente
             const hiddenIdField = document.createElement('input');
