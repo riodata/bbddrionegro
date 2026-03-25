@@ -1843,8 +1843,11 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
       }
     });
 
-    // Convertir strings a mayúsculas (excepto campos de email)
-    const upperData = toUpperCaseExceptEmail(cleanData);
+    // Convertir strings a mayúsculas (excepto campos de email y ENUMs)
+    const enumColumns = tableSchema.columns
+      .filter(col => col.data_type === 'USER-DEFINED')
+      .map(col => col.column_name);
+    const upperData = toUpperCaseExceptSpecialFields(cleanData, enumColumns);
 
     // Construir query de inserción
     const columns = Object.keys(upperData);
@@ -2010,14 +2013,15 @@ function booleanToText(value) {
   return value;
 }
 
-// Helper: convertir strings a mayúsculas excepto campos de email
-function toUpperCaseExceptEmail(obj) {
+// Helper: convertir strings a mayúsculas excepto campos de email y ENUMs
+function toUpperCaseExceptSpecialFields(obj, enumColumns = []) {
   const result = {};
   for (const key in obj) {
     if (typeof obj[key] === 'string') {
       const k = key.toLowerCase();
       const isEmailField = k.includes('email') || k.includes('mail') || k.includes('correo');
-      result[key] = isEmailField ? obj[key] : obj[key].toUpperCase();
+      const isEnumField = enumColumns.includes(key);
+      result[key] = (isEmailField || isEnumField) ? obj[key] : obj[key].toUpperCase();
     } else {
       result[key] = obj[key];
     }
@@ -2648,8 +2652,11 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
-    // Convertir strings a mayúsculas (excepto campos de email)
-    const upperUpdateData = toUpperCaseExceptEmail(cleanUpdateData);
+    // Convertir strings a mayúsculas (excepto campos de email y ENUMs)
+    const enumColumnsUpdate = tableSchema.columns
+      .filter(col => col.data_type === 'USER-DEFINED')
+      .map(col => col.column_name);
+    const upperUpdateData = toUpperCaseExceptSpecialFields(cleanUpdateData, enumColumnsUpdate);
 
     // Construir query de actualización
     const updateColumns = Object.keys(upperUpdateData);
