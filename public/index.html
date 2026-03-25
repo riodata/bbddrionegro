@@ -2280,44 +2280,35 @@
         async function loadAdvancedSearchData(entityType) {
             try {
                 currentAdvancedEntityType = entityType;
-                
-                // ✅ USAR ENDPOINT CORRECTO QUE DEVUELVE TODOS LOS CAMPOS
                 const tableName = entityType === 'cooperativas' ? 'entidades_cooperativas' : 'entidades_mutuales';
-                
-                // Cargar todos los registros de la tabla con todos sus campos
-                const response = await authenticatedFetch(`${API_BASE}/api/tables/${tableName}/read`);
-                const result = await response.json();
-                
-                if (result.success && result.data) {
-                    const entidades = result.data;
-                                    
-                    // Extraer valores únicos de TODOS los campos necesarios
-                    // Cooperativas: usar "matricula" (normalizado)
-                    // Mutuales: la matrícula es "Matricula Nacional" (según tu confirmación)
-                    const matriculaField = entityType === 'cooperativas' ? 'matricula' : 'Matricula Nacional';
-                    
-                    // Guardamos matrículas como strings (para autocompletar), filtrando vacíos
-                    advancedSearchData.matricula = [...new Set(
-                        entidades
-                            .map(e => e[matriculaField] ?? e.matricula ?? e['matricula nacional'])
-                            .filter(v => v !== undefined && v !== null && String(v).trim() !== '')
-                            .map(v => String(v).trim())
-                    )].sort();
-                    
+
+                // Cargar matrículas desde el endpoint dedicado y localidad/tipo desde la tabla completa
+                const [matriculasResponse, tableResponse] = await Promise.all([
+                    authenticatedFetch(`${API_BASE}/api/entidades/${entityType}/matriculas`),
+                    authenticatedFetch(`${API_BASE}/api/tables/${tableName}/read`)
+                ]);
+
+                const matriculasResult = await matriculasResponse.json();
+                const tableResult = await tableResponse.json();
+
+                if (matriculasResult.success && matriculasResult.data) {
+                    // Almacenar como objetos {matricula, nombre} para mostrar en el dropdown
+                    advancedSearchData.matricula = matriculasResult.data.filter(
+                        item => item.matricula !== null && item.matricula !== undefined && String(item.matricula).trim() !== ''
+                    );
+                }
+
+                if (tableResult.success && tableResult.data) {
+                    const entidades = tableResult.data;
                     advancedSearchData.localidad = [...new Set(entidades.map(e => e.Localidad || e.localidad).filter(Boolean))].sort();
                     advancedSearchData.tipo = [...new Set(entidades.map(e => e.Tipo || e.tipo).filter(Boolean))].sort();
-                    
-                    console.log('✅ Datos de búsqueda avanzada cargados:', {
-                        nombres: advancedSearchData.matricula.length,
-                        localidades: advancedSearchData.localidad.length,
-                        tipos: advancedSearchData.tipo.length
-                    });
-                    
-                    console.log('📋 Ejemplos de datos:');
-                    console.log('Matriculas:', advancedSearchData.matricula.slice(0, 3));
-                    console.log('Localidades:', advancedSearchData.localidad.slice(0, 3));
-                    console.log('Tipos:', advancedSearchData.tipo.slice(0, 3));
                 }
+
+                console.log('✅ Datos de búsqueda avanzada cargados:', {
+                    matriculas: advancedSearchData.matricula.length,
+                    localidades: advancedSearchData.localidad.length,
+                    tipos: advancedSearchData.tipo.length
+                });
             } catch (error) {
                 console.error('❌ Error cargando datos de búsqueda avanzada:', error);
                 showStatus('Error cargando datos: ' + error.message, 'error');
@@ -2336,7 +2327,7 @@
                 clearBtn.style.display = query ? 'block' : 'none';
             }
             
-            if (query.length < 2) {
+            if (query.length < 1) {
                 dropdown.style.display = 'none';
                 return;
             }
@@ -2344,10 +2335,12 @@
             // Filtrar opciones
             const matches = advancedSearchData[field].filter(item => {
                 if (!item) return false;
+                if (field === 'matricula') {
+                    // Los items de matrícula son objetos {matricula, nombre}
+                    const text = String(item.matricula || '').toLowerCase();
+                    return text.includes(query);
+                }
                 const text = String(item).toLowerCase();
-                // Matrícula: sugerir por prefijo (startsWith)
-                if (field === 'matricula') return text.startsWith(query);
-                // Otros campos: contiene
                 return text.includes(query);
             });
             
@@ -2357,11 +2350,17 @@
                 return;
             }
             
-            // ✅ CORRECCIÓN: Escapar comillas correctamente y usar template literals seguros
             dropdown.innerHTML = matches.slice(0, 10).map(item => {
-                const safeItem = item.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                const highlightedText = highlightMatch(item, query);
-                
+                if (field === 'matricula') {
+                    const safeMatricula = String(item.matricula).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const displayText = `${item.matricula} - ${item.nombre || ''}`;
+                    const highlightedText = highlightMatch(displayText, query);
+                    return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeMatricula}')">
+                        ${highlightedText}
+                    </div>`;
+                }
+                const safeItem = String(item).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const highlightedText = highlightMatch(String(item), query);
                 return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeItem}')">
                     ${highlightedText}
                 </div>`;
@@ -2456,13 +2455,21 @@
                 `;
                 return;
             }
+
+            // Helper: formatea un valor aplicando booleanos y mayúsculas (excepto emails)
+            function formatDisplayValue(fieldName, value) {
+                if (value === null || value === undefined || value === '') return '-';
+                const boolFormatted = formatBooleanForDisplay(value);
+                if (isEmailFieldName(fieldName)) return boolFormatted;
+                return typeof boolFormatted === 'string' ? boolFormatted.toUpperCase() : boolFormatted;
+            }
             
             container.innerHTML = results.map(entity => `
                 <div class="advanced-entity-card">
                     <div class="advanced-entity-card-inner">
                         <!-- Encabezado -->
                         <div class="advanced-entity-header">
-                            <h2 style="color: #667eea; margin: 0 0 10px 0;">${entity.nombre_entidad || 'Sin nombre'}</h2>
+                            <h2 style="color: #667eea; margin: 0 0 10px 0;">${formatDisplayValue('nombre_entidad', entity.nombre_entidad) !== '-' ? formatDisplayValue('nombre_entidad', entity.nombre_entidad) : 'Sin nombre'}</h2>
                             <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
                                 <div style="background: #e9ecef; padding: 8px 16px; border-radius: 20px;">
                                     <strong>Matrícula:</strong> <span style="color: #667eea; font-weight: bold;">${entity.matricula || 'N/A'}</span>
@@ -2479,7 +2486,7 @@
                             <div class="advanced-entity-grid">
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Registro Provincial</div>
-                                    <div class="advanced-entity-field-value">${entity.registro_provincial || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('registro_provincial', entity.registro_provincial)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Fecha de Inicio</div>
@@ -2487,35 +2494,35 @@
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Domicilio</div>
-                                    <div class="advanced-entity-field-value">${entity.domicilio || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('domicilio', entity.domicilio)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Localidad</div>
-                                    <div class="advanced-entity-field-value">${entity.localidad || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('localidad', entity.localidad)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Código Postal</div>
-                                    <div class="advanced-entity-field-value">${entity.codigo_postal || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('codigo_postal', entity.codigo_postal)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Teléfono</div>
-                                    <div class="advanced-entity-field-value">${entity.telefono || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('telefono', entity.telefono)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                   <div class="advanced-entity-field-label">Email</div>
-                                  <div class="advanced-entity-field-value">${entity.email_entidad || entity.email || entity.email_presidente || '-'}</div>
+                                  <div class="advanced-entity-field-value">${formatDisplayValue('email_entidad', entity.email_entidad || entity.email || entity.email_presidente || null)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">CUIT</div>
-                                    <div class="advanced-entity-field-value">${entity.cuit || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('cuit', entity.cuit)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Tipo</div>
-                                    <div class="advanced-entity-field-value">${entity.tipo || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('tipo', entity.tipo)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Subtipo</div>
-                                    <div class="advanced-entity-field-value">${entity.subtipo || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('subtipo', entity.subtipo)}</div>
                                 </div>
                             </div>
                         </div>
@@ -2527,15 +2534,15 @@
                             <div class="advanced-entity-grid">
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Presidente</div>
-                                    <div class="advanced-entity-field-value">${entity.presidente}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('presidente', entity.presidente)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Teléfono</div>
-                                    <div class="advanced-entity-field-value">${entity.telefono_presidente || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('telefono_presidente', entity.telefono_presidente)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Email</div>
-                                    <div class="advanced-entity-field-value">${entity.email_presidente || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('email_presidente', entity.email_presidente)}</div>
                                 </div>
                             </div>
                         </div>
@@ -2552,19 +2559,19 @@
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Tipo</div>
-                                    <div class="advanced-entity-field-value">${entity.tipo_asamblea || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('tipo_asamblea', entity.tipo_asamblea)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Estado</div>
-                                    <div class="advanced-entity-field-value">${entity.estado_asamblea || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('estado_asamblea', entity.estado_asamblea)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Renovación Autoridades</div>
-                                    <div class="advanced-entity-field-value">${entity.renovacion_autoridades || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('renovacion_autoridades', entity.renovacion_autoridades)}</div>
                                 </div>
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Renovación Sindicatura</div>
-                                    <div class="advanced-entity-field-value">${entity.renovacion_sindicatura || '-'}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('renovacion_sindicatura', entity.renovacion_sindicatura)}</div>
                                 </div>
                             </div>
                         </div>
@@ -2584,14 +2591,14 @@
                                 ${entity.cantidad_asociados ? `
                                 <div class="advanced-entity-field">
                                     <div class="advanced-entity-field-label">Cantidad de Asociados</div>
-                                    <div class="advanced-entity-field-value">${entity.cantidad_asociados}</div>
+                                    <div class="advanced-entity-field-value">${formatDisplayValue('cantidad_asociados', entity.cantidad_asociados)}</div>
                                 </div>
                                 ` : ''}
                             </div>
                             ${entity.estado_situacion_patrimonial_ultimo_ejercicio ? `
                             <div class="advanced-entity-field">
                               <div class="advanced-entity-field-label">Estado Situación Patrimonial (Último Ejercicio)</div>
-                              <div class="advanced-entity-field-value">${entity.estado_situacion_patrimonial_ultimo_ejercicio}</div>
+                              <div class="advanced-entity-field-value">${formatDisplayValue('estado_situacion_patrimonial_ultimo_ejercicio', entity.estado_situacion_patrimonial_ultimo_ejercicio)}</div>
                             </div>
                             ` : ''}
                         </div>
@@ -2708,11 +2715,18 @@
                 
                 advancedSearchResults.forEach(record => {
                     const row = columns.map(col => {
-                        let value = record[col] || '';
+                        let value = record[col] ?? '';
                         
                         // Formatear fechas
-                        if (col.includes('fecha') && value) {
-                            value = formatDateForDisplay(value);
+                        if (col.includes('fecha') || col.includes('cierre')) {
+                            if (value) value = formatDateForDisplay(value);
+                        } else if (value !== '') {
+                            // Aplicar formateo booleano
+                            value = formatBooleanForDisplay(value);
+                            // Aplicar mayúsculas a todos los campos excepto email
+                            if (typeof value === 'string' && !isEmailFieldName(col)) {
+                                value = value.toUpperCase();
+                            }
                         }
                         
                         // Escapar valores
@@ -3459,10 +3473,18 @@
             if (!form) return;
             
             originalFormData = {};
-            const formData = new FormData(form);
-            for (let [key, value] of formData.entries()) {
-                originalFormData[key] = value;
-            }
+            // Usar input.value directamente para capturar correctamente campos tipo date (YYYY-MM-DD)
+            const inputs = form.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                if (!input.name) return;
+                if (input.type === 'checkbox') {
+                    originalFormData[input.name] = input.checked;
+                } else if (input.type === 'radio') {
+                    if (input.checked) originalFormData[input.name] = input.value;
+                } else {
+                    originalFormData[input.name] = input.value;
+                }
+            });
             hasUnsavedChanges = false; // Resetear estado al capturar
         }
 
@@ -4683,6 +4705,13 @@
             
             // ✅ IMPORTANTE: NO enviar el primaryKey en updateData si ya está en searchCriteria
             delete data[primaryKey];
+
+            // 🔍 DIAGNÓSTICO FECHA: logs para detectar problemas con campos de tipo fecha
+            console.log('🔍 [DIAGNÓSTICO FECHA] originalFormData:', JSON.stringify(originalFormData));
+            console.log('🔍 [DIAGNÓSTICO FECHA] updateData (antes de enviar):', JSON.stringify(data));
+            // Listar campos de tipo date en el formulario
+            const dateFields = Array.from(e.target.querySelectorAll('input[type="date"]')).map(i => ({ name: i.name, value: i.value }));
+            console.log('🔍 [DIAGNÓSTICO FECHA] campos date en el formulario:', JSON.stringify(dateFields));
             
             const updateButton = e.target.querySelector('button[type="submit"]');
             const originalText = updateButton.textContent;
@@ -4692,6 +4721,15 @@
                 updateButton.innerHTML = '<span class="loading"></span> Guardando...';
                 
                 showStatus('Actualizando registro...', 'info');
+
+                const updatePayload = {
+                    searchCriteria: {
+                        field: primaryKey,
+                        value: primaryKeyValue
+                    },
+                    updateData: data
+                };
+                console.log('🔍 [DIAGNÓSTICO FECHA] updatePayload enviado al backend:', JSON.stringify(updatePayload));
                 
                 const response = await fetch(`${API_BASE}/api/tables/${currentTable}/update`, {
                     method: 'PUT',
@@ -4699,13 +4737,7 @@
                         'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        searchCriteria: {
-                            field: primaryKey,
-                            value: primaryKeyValue
-                        },
-                        updateData: data
-                    })
+                    body: JSON.stringify(updatePayload)
                 });
                 
                 const result = await response.json();
@@ -6868,8 +6900,7 @@
                 style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee;"
                 onmouseover="this.style.backgroundColor='#f0f8ff'"
                 onmouseout="this.style.backgroundColor='white'">
-              <div style="font-weight: bold; color: #4a90e2;">MATRÍCULA: ${entidad.matricula}</div>
-              <div style="font-size: 0.9em; color: #6c757d;">${entidad.nombre}</div>
+              <strong>Matrícula: ${entidad.matricula}</strong> — ${entidad.nombre}
             </div>
           `).join('');
         
