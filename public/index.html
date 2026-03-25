@@ -1275,6 +1275,15 @@
             if (typeof value !== 'string') return value;
             return value.toUpperCase();
         }
+
+        // Helper: formatea un valor aplicando booleanos y mayúsculas (excepto emails)
+        // Usado en displayAdvancedSearchResults y exportaciones
+        function formatDisplayValue(fieldName, value) {
+            if (value === null || value === undefined || value === '') return '-';
+            const boolFormatted = formatBooleanForDisplay(value);
+            if (isEmailFieldName(fieldName)) return boolFormatted;
+            return typeof boolFormatted === 'string' ? boolFormatted.toUpperCase() : boolFormatted;
+        }
         
         // ========== FUNCIONES DE FORMATEO DE FECHAS ==========
 
@@ -2352,14 +2361,14 @@
             
             dropdown.innerHTML = matches.slice(0, 10).map(item => {
                 if (field === 'matricula') {
-                    const safeMatricula = String(item.matricula).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const safeMatricula = String(item.matricula).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     const displayText = `${item.matricula} - ${item.nombre || ''}`;
                     const highlightedText = highlightMatch(displayText, query);
                     return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeMatricula}')">
                         ${highlightedText}
                     </div>`;
                 }
-                const safeItem = String(item).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeItem = String(item).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const highlightedText = highlightMatch(String(item), query);
                 return `<div class="advanced-dropdown-item" onclick="selectAdvancedOption('${field}', '${safeItem}')">
                     ${highlightedText}
@@ -2455,21 +2464,15 @@
                 `;
                 return;
             }
-
-            // Helper: formatea un valor aplicando booleanos y mayúsculas (excepto emails)
-            function formatDisplayValue(fieldName, value) {
-                if (value === null || value === undefined || value === '') return '-';
-                const boolFormatted = formatBooleanForDisplay(value);
-                if (isEmailFieldName(fieldName)) return boolFormatted;
-                return typeof boolFormatted === 'string' ? boolFormatted.toUpperCase() : boolFormatted;
-            }
             
-            container.innerHTML = results.map(entity => `
+            container.innerHTML = results.map(entity => {
+                const entityName = formatDisplayValue('nombre_entidad', entity.nombre_entidad);
+                return `
                 <div class="advanced-entity-card">
                     <div class="advanced-entity-card-inner">
                         <!-- Encabezado -->
                         <div class="advanced-entity-header">
-                            <h2 style="color: #667eea; margin: 0 0 10px 0;">${formatDisplayValue('nombre_entidad', entity.nombre_entidad) !== '-' ? formatDisplayValue('nombre_entidad', entity.nombre_entidad) : 'Sin nombre'}</h2>
+                            <h2 style="color: #667eea; margin: 0 0 10px 0;">${entityName !== '-' ? entityName : 'Sin nombre'}</h2>
                             <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
                                 <div style="background: #e9ecef; padding: 8px 16px; border-radius: 20px;">
                                     <strong>Matrícula:</strong> <span style="color: #667eea; font-weight: bold;">${entity.matricula || 'N/A'}</span>
@@ -2605,7 +2608,8 @@
                         ` : ''}
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
         
         // Descargar resultados como CSV
