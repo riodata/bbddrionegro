@@ -3765,37 +3765,52 @@
                 
                 // Crear el HTML del campo con autocompletado SIN SCRIPT TAG
                 return `
-                    <div class="form-group" style="border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; background-color: #f8f9fa; margin-bottom: 25px;">
-                        <label for="entidad_autocomplete" style="color: #4a90e2; font-weight: bold;">
-                            🏢 Seleccionar Entidad ${isCooperativa ? '(Cooperativa)' : isMutual ? '(Mutual)' : ''}
-                        </label>
-                        <div style="position: relative;">
-                            <input 
-                                type="text" 
-                                id="entidad_autocomplete" 
-                                name="entidad_autocomplete"
-                                placeholder="Escribe el nombre de la ${isCooperativa ? 'cooperativa' : 'mutual'}..."
-                                style="border-color: #4a90e2; width: 100%; padding-right: 40px;"
-                                autocomplete="off"
-                                oninput="handleAutocompleteInput(this, '${matriculaTargetField}')"
-                                onblur="handleAutocompleteBlur(this, '${matriculaTargetField}')"
-                                onkeydown="handleAutocompleteKeydown(event, '${matriculaTargetField}')"
-                            />
-                            <div id="clear-autocomplete" 
-                                 style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;"
-                                 onclick="clearAutocomplete('${matriculaTargetField}')">
-                                ✕
-                            </div>
-                            <div id="autocomplete-dropdown" 
-                                 style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #4a90e2; border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none;">
-                            </div>
-                        </div>
-                        <small style="color: #6c757d; display: block; margin-top: 5px;">
-                            Escribe para buscar y seleccionar una entidad. La matrícula se completará automáticamente.
-                        </small>
-                        <input type="hidden" id="selected_entidad_matricula" name="selected_entidad_matricula" />
-                        <input type="hidden" id="selected_entidad_nombre" name="selected_entidad_nombre" />
+                  <div class="form-group" style="border: 2px solid #4a90e2; padding: 15px; border-radius: 8px; background-color: #f8f9fa; margin-bottom: 25px;">
+                    <label for="entidad_autocomplete" style="color: #4a90e2; font-weight: bold;">
+                      🏢 Seleccionar Entidad ${isCooperativa ? '(Cooperativa)' : isMutual ? '(Mutual)' : ''}
+                    </label>
+                
+                    <div style="position: relative;">
+                      <input 
+                        type="text" 
+                        id="entidad_autocomplete" 
+                        name="entidad_autocomplete"
+                        placeholder="INGRESÁ LA MATRÍCULA DE LA ${isCooperativa ? 'COOPERATIVA' : 'MUTUAL'}..."
+                        style="border-color: #4a90e2; width: 100%; padding-right: 40px;"
+                        autocomplete="off"
+                        inputmode="numeric"
+                        oninput="handleAutocompleteInputByMatricula(this, '${matriculaTargetField}')"
+                        onblur="handleAutocompleteBlur(this, '${matriculaTargetField}')"
+                        onkeydown="handleAutocompleteKeydown(event, '${matriculaTargetField}')"
+                      />
+                
+                      <div id="clear-autocomplete" 
+                           style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #6c757d; display: none;"
+                           onclick="clearAutocomplete('${matriculaTargetField}')">
+                        ✕
+                      </div>
+                
+                      <div id="autocomplete-dropdown" 
+                           style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #4a90e2; border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none;">
+                      </div>
                     </div>
+                
+                    <small style="color: #6c757d; display: block; margin-top: 5px;">
+                      SELECCIONÁ UNA ENTIDAD COLOCANDO EL NÚMERO DE MATRÍCULA. EL NOMBRE SE COMPLETARÁ AUTOMÁTICAMENTE.
+                    </small>
+                
+                    <div class="form-group" style="margin-top: 12px;">
+                      <label for="nombre_entidad_autofill" style="font-weight: 600;">NOMBRE DE LA ENTIDAD</label>
+                      <input type="text"
+                             id="nombre_entidad_autofill"
+                             placeholder="SE COMPLETARÁ AUTOMÁTICAMENTE"
+                             readonly
+                             style="width: 100%; background: #e9ecef; cursor: not-allowed;" />
+                    </div>
+                
+                    <input type="hidden" id="selected_entidad_matricula" name="selected_entidad_matricula" />
+                    <input type="hidden" id="selected_entidad_nombre" name="selected_entidad_nombre" />
+                  </div>
                 `;
                 
             } catch (error) {
@@ -6800,6 +6815,99 @@
             // FUNCIONES DE AUTOCOMPLETADO
         let selectedAutocompleteIndex = -1;
         let currentAutocompleteMatches = [];
+
+        function handleAutocompleteInputByMatricula(input, matriculaTargetField) {
+          const queryRaw = input.value.trim();
+          const query = queryRaw.toLowerCase();
+          const dropdown = document.getElementById('autocomplete-dropdown');
+          const clearBtn = document.getElementById('clear-autocomplete');
+        
+          clearBtn.style.display = queryRaw ? 'block' : 'none';
+        
+          // permitir buscar con 1-2 dígitos
+          if (queryRaw.length < 1) {
+            dropdown.style.display = 'none';
+            selectedAutocompleteIndex = -1;
+            currentAutocompleteMatches = [];
+            return;
+          }
+        
+          // Normalizar: dejar solo dígitos para comparar
+          const digits = queryRaw.replace(/[^\d]/g, '');
+        
+          // Si no hay dígitos, no buscamos
+          if (!digits) {
+            dropdown.style.display = 'none';
+            selectedAutocompleteIndex = -1;
+            currentAutocompleteMatches = [];
+            return;
+          }
+        
+          const matches = window.entidadesAutocomplete.filter(entidad =>
+            String(entidad.matricula || '').startsWith(digits)
+          );
+        
+          currentAutocompleteMatches = matches;
+          selectedAutocompleteIndex = -1;
+        
+          if (matches.length === 0) {
+            dropdown.innerHTML = '<div style="padding: 10px; color: #6c757d;">No se encontraron coincidencias</div>';
+            dropdown.style.display = 'block';
+            return;
+          }
+        
+          dropdown.innerHTML = matches.map((entidad, index) => `
+            <div class="autocomplete-item" 
+                data-index="${index}"
+                data-matricula="${entidad.matricula}"
+                data-nombre="${entidad.nombre}"
+                onclick="selectAutocompleteItemByMatricula(${index}, '${matriculaTargetField}')"
+                style="padding: 10px; cursor: pointer; border-bottom: 1px solid #eee;"
+                onmouseover="this.style.backgroundColor='#f0f8ff'"
+                onmouseout="this.style.backgroundColor='white'">
+              <div style="font-weight: bold; color: #4a90e2;">MATRÍCULA: ${entidad.matricula}</div>
+              <div style="font-size: 0.9em; color: #6c757d;">${entidad.nombre}</div>
+            </div>
+          `).join('');
+        
+          dropdown.style.display = 'block';
+        }
+
+        function selectAutocompleteItemByMatricula(index, matriculaTargetField) {
+          const selectedEntity = currentAutocompleteMatches[index];
+          const input = document.getElementById('entidad_autocomplete');
+          const dropdown = document.getElementById('autocomplete-dropdown');
+        
+          // Ahora el input visible muestra la matrícula
+          input.value = selectedEntity.matricula;
+        
+          dropdown.style.display = 'none';
+        
+          // Guardar hidden
+          document.getElementById('selected_entidad_matricula').value = selectedEntity.matricula;
+          document.getElementById('selected_entidad_nombre').value = selectedEntity.nombre;
+        
+          // 1) Completar el campo matrícula target (lo seguimos llenando porque es FK real)
+          const matriculaField = document.getElementById(matriculaTargetField);
+          if (matriculaField) {
+            matriculaField.value = selectedEntity.matricula;
+            matriculaField.readOnly = true;
+            matriculaField.style.backgroundColor = '#e9ecef';
+            matriculaField.style.cursor = 'not-allowed';
+            showFieldError(matriculaTargetField, '');
+          }
+        
+          // 2) Completar el campo "Nombre de la entidad" si existe (ver punto 4)
+          const nombreEntidadField = document.getElementById('nombre_entidad_autofill');
+          if (nombreEntidadField) {
+            nombreEntidadField.value = selectedEntity.nombre;
+            nombreEntidadField.readOnly = true;
+            nombreEntidadField.style.backgroundColor = '#e9ecef';
+            nombreEntidadField.style.cursor = 'not-allowed';
+          }
+        
+          showStatus(`✅ MATRÍCULA ${selectedEntity.matricula} - ${selectedEntity.nombre}`, 'success');
+        }
         
         function handleAutocompleteInput(input, matriculaTargetField) {
             const query = input.value.toLowerCase().trim();
@@ -6930,21 +7038,47 @@
         }
         
         function handleAutocompleteBlur(input, matriculaTargetField) {
-            // Pequeño delay para permitir clicks en el dropdown
-            setTimeout(() => {
-                const dropdown = document.getElementById('autocomplete-dropdown');
-                dropdown.style.display = 'none';
-                
-                // Verificar si se seleccionó una entidad válida
-                const selectedMatricula = document.getElementById('selected_entidad_matricula').value;
-                if (!selectedMatricula && input.value) {
-                    // Si hay texto pero no se seleccionó nada válido
-                    showStatus('⚠️ Por favor selecciona una entidad de la lista', 'error');
-                    input.style.borderColor = '#e74c3c';
-                } else {
-                    input.style.borderColor = '#4a90e2';
-                }
-            }, 200);
+          setTimeout(() => {
+            const dropdown = document.getElementById('autocomplete-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        
+            const raw = (input.value || '').trim();
+            const digits = raw.replace(/[^\d]/g, '');
+        
+            // Si ya hay una matrícula seleccionada, OK
+            const selectedMatriculaEl = document.getElementById('selected_entidad_matricula');
+            const alreadySelected = selectedMatriculaEl && selectedMatriculaEl.value;
+        
+            // Si no escribió nada, limpiar estilos y salir
+            if (!raw) {
+              input.style.borderColor = '#4a90e2';
+              return;
+            }
+        
+            // Si el usuario escribió pero no hay selected y hay dígitos -> intentar autoselect exacto
+            if (!alreadySelected && digits) {
+              const exactMatches = (window.entidadesAutocomplete || []).filter(e =>
+                String(e.matricula || '') === String(digits)
+              );
+        
+              if (exactMatches.length === 1) {
+                // Inyectar match en el array de matches y seleccionarlo
+                currentAutocompleteMatches = exactMatches;
+                selectAutocompleteItemByMatricula(0, matriculaTargetField);
+                input.style.borderColor = '#4a90e2';
+                return;
+              }
+            }
+        
+            // Si NO se seleccionó una entidad válida
+            const selectedMatricula = selectedMatriculaEl ? selectedMatriculaEl.value : '';
+            if (!selectedMatricula) {
+              showStatus('⚠️ POR FAVOR SELECCIONÁ UNA ENTIDAD INGRESANDO UNA MATRÍCULA VÁLIDA', 'error');
+              input.style.borderColor = '#e74c3c';
+            } else {
+              input.style.borderColor = '#4a90e2';
+            }
+          }, 200);
         }
         
         function clearAutocomplete(matriculaTargetField = null) {
