@@ -411,6 +411,10 @@
             transition: border-color 0.3s ease;
         }
 
+        select {
+            text-transform: uppercase;
+        }
+
         input:focus, textarea:focus, select:focus {
             outline: none;
             border-color: #4a90e2;
@@ -2864,6 +2868,9 @@
             try {
                 currentTable = tableName;
                 
+                // Limpiar mensajes de operaciones anteriores
+                clearNavigationMessages();
+
                 // Cargar esquema de la tabla
                 await loadTableSchema(tableName);
                 
@@ -4545,6 +4552,7 @@
             currentTable = null;
             currentTableSchema = null;
             clearUnsavedChanges();
+            clearNavigationMessages();
             showScreen('main-menu');
             updateBreadcrumb([{ text: 'Inicio', active: true }]);
             loadDynamicCategories();
@@ -4584,6 +4592,8 @@
             // Limpiar estado de cambios
             clearUnsavedChanges();
 
+            // Limpiar mensajes de operaciones anteriores
+            clearNavigationMessages();
             // ✅ Limpiar estado de creación y resultados al cambiar de tabla
             lastCreatedRecord = null;
             const createSuccessContainer = document.getElementById('create-success-container');
@@ -6128,6 +6138,28 @@
         function clearStatus() {
             const statusDiv = document.getElementById('status-message');
             statusDiv.innerHTML = '';
+        }
+
+        // Limpiar mensajes de éxito/error al navegar entre tablas
+        function clearNavigationMessages() {
+            // Limpiar el mensaje de estado
+            const statusDiv = document.getElementById('status-message');
+            if (statusDiv) statusDiv.innerHTML = '';
+
+            // Ocultar el contenedor de éxito de creación
+            const successContainer = document.getElementById('create-success-container');
+            if (successContainer) successContainer.style.display = 'none';
+
+            // Mostrar el formulario de creación (por si quedó oculto)
+            const formContainer = document.getElementById('create-form-container');
+            if (formContainer) formContainer.style.display = 'block';
+
+            // Eliminar tarjetas de registro creado que queden en el DOM
+            const existingCard = document.getElementById('created-record-card');
+            if (existingCard) existingCard.remove();
+
+            // Limpiar el último registro creado
+            lastCreatedRecord = null;
         }
         
         function showCreateSuccess() {

@@ -2676,8 +2676,11 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
-    // Convertir strings a mayúsculas (excepto campos de email y enum)
-    const upperUpdateData = toUpperCaseExceptEmail(cleanUpdateData, tableSchema.columns);
+    // Convertir strings a mayúsculas (excepto campos de email y ENUMs)
+    const enumColumnsUpdate = tableSchema.columns
+      .filter(col => col.data_type === 'USER-DEFINED')
+      .map(col => col.column_name);
+    const upperUpdateData = toUpperCaseExceptSpecialFields(cleanUpdateData, enumColumnsUpdate);
 
     // Construir query de actualización
     const updateColumns = Object.keys(upperUpdateData);
