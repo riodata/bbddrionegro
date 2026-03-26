@@ -423,8 +423,20 @@ function buildSearchCondition(fieldName, searchText, dataType, tableName = null)
         : `"${fieldName}"`;
     
     console.log(`🔍 Construyendo búsqueda para campo: ${fieldName}, tipo: ${dataType}, texto: ${searchText}, tabla: ${tableName || 'sin especificar'}`);
+
+    // ✅ CASO ESPECIAL: campos Matricula siempre usan búsqueda numérica exacta
+    const lowerFieldName = fieldName.toLowerCase();
+    if (lowerFieldName === 'matricula' || lowerFieldName === 'matricula nacional') {
+        const numericVal = parseInt(searchText, 10);
+        if (!isNaN(numericVal)) {
+            console.log(`🔢 Búsqueda exacta por matrícula: ${numericVal}`);
+            return {
+                condition: `${qualifiedField} = $1`,
+                value: numericVal
+            };
+        }
+    }
     
-    // Números (enteros, decimales, etc.)
     if (lowerDataType.includes('int') || lowerDataType.includes('numeric') || 
         lowerDataType.includes('decimal') || lowerDataType.includes('float') || 
         lowerDataType.includes('double') || lowerDataType.includes('bigint') ||
@@ -1843,8 +1855,8 @@ app.post('/api/tables/:tableName/create', auth.requireAuth, async (req, res) => 
       }
     });
 
-    // Convertir strings a mayúsculas (excepto campos de email)
-    const upperData = toUpperCaseExceptEmail(cleanData);
+    // Convertir strings a mayúsculas (excepto campos de email y enum)
+    const upperData = toUpperCaseExceptEmail(cleanData, tableSchema.columns);
 
     // Construir query de inserción
     const columns = Object.keys(upperData);
@@ -2011,13 +2023,23 @@ function booleanToText(value) {
 }
 
 // Helper: convertir strings a mayúsculas excepto campos de email
-function toUpperCaseExceptEmail(obj) {
+function toUpperCaseExceptEmail(obj, schemaColumns = []) {
+  // Build a lookup of field name → data_type for quick access
+  const fieldTypeMap = {};
+  schemaColumns.forEach(col => {
+    fieldTypeMap[col.column_name] = (col.data_type || '').toLowerCase();
+  });
+
   const result = {};
   for (const key in obj) {
     if (typeof obj[key] === 'string') {
       const k = key.toLowerCase();
       const isEmailField = k.includes('email') || k.includes('mail') || k.includes('correo');
-      result[key] = isEmailField ? obj[key] : obj[key].toUpperCase();
+      // Preserve original case for enum (USER-DEFINED) fields so they match DB enum values
+      // Note: fieldType is already lowercased (see fieldTypeMap construction above)
+      const fieldType = fieldTypeMap[key] || '';
+      const isEnumField = fieldType === 'user-defined' || fieldType.includes('enum');
+      result[key] = (isEmailField || isEnumField) ? obj[key] : obj[key].toUpperCase();
     } else {
       result[key] = obj[key];
     }
@@ -2442,10 +2464,16 @@ app.get('/api/entidades/:entityType/search-advanced', auth.requireAuth, async (r
         let params = [];
         let paramIndex = 1;
 
-        // ✅ Filtro por matrícula (prioritario)
+        // ✅ Filtro por matrícula — búsqueda exacta
         if (matricula) {
-            whereConditions.push(`CAST(e."${matriculaField}" AS TEXT) ILIKE $${paramIndex}`);
-            params.push(`${String(matricula).trim()}%`);
+            const matriculaVal = parseInt(String(matricula).trim(), 10);
+            if (!isNaN(matriculaVal)) {
+                whereConditions.push(`e."${matriculaField}" = $${paramIndex}`);
+                params.push(matriculaVal);
+            } else {
+                whereConditions.push(`CAST(e."${matriculaField}" AS TEXT) = $${paramIndex}`);
+                params.push(String(matricula).trim());
+            }
             paramIndex++;
         }
 
@@ -2648,8 +2676,8 @@ app.put('/api/tables/:tableName/update', auth.requireAuth, async (req, res) => {
     delete cleanUpdateData._rowIndex;
     delete cleanUpdateData._primaryKey;
 
-    // Convertir strings a mayúsculas (excepto campos de email)
-    const upperUpdateData = toUpperCaseExceptEmail(cleanUpdateData);
+    // Convertir strings a mayúsculas (excepto campos de email y enum)
+    const upperUpdateData = toUpperCaseExceptEmail(cleanUpdateData, tableSchema.columns);
 
     // Construir query de actualización
     const updateColumns = Object.keys(upperUpdateData);
