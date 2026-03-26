@@ -870,6 +870,11 @@
                 display: none;
             }
         }
+
+        /* UI text transform: all labels and buttons in uppercase for visual consistency */
+        label, button, .tab, .nav-button, .breadcrumb-item {
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
@@ -2975,6 +2980,17 @@
             document.getElementById('search-title').textContent = `Buscar Registros - ${tableDisplayName}`;
         
             // NO actualizar breadcrumb aquí, ya se hace en selectDynamicTable
+
+            // ✅ Limpiar estado de creación anterior al cargar una nueva tabla
+            lastCreatedRecord = null;
+            const createSuccessContainer = document.getElementById('create-success-container');
+            if (createSuccessContainer) createSuccessContainer.style.display = 'none';
+            const createFormContainer = document.getElementById('create-form-container');
+            if (createFormContainer) createFormContainer.style.display = 'block';
+
+            // ✅ Limpiar resultados de búsqueda anteriores
+            currentRecords = [];
+            if (typeof clearAllTabResults === 'function') clearAllTabResults();
             
             // Configurar formulario de creación
             setupDynamicCreateForm();
@@ -4456,6 +4472,14 @@
             clearUnsavedChanges();
             // Limpiar mensajes de estado
             clearStatus();
+
+            // ✅ Limpiar estado de creación y resultados de búsqueda al volver al inicio
+            lastCreatedRecord = null;
+            const createSuccessContainer = document.getElementById('create-success-container');
+            if (createSuccessContainer) createSuccessContainer.style.display = 'none';
+            const createFormContainer = document.getElementById('create-form-container');
+            if (createFormContainer) createFormContainer.style.display = 'block';
+            if (typeof clearAllTabResults === 'function') clearAllTabResults();
             
             // Ocultar búsqueda global
             const globalSearch = document.getElementById('global-search');
@@ -4570,6 +4594,13 @@
 
             // Limpiar mensajes de operaciones anteriores
             clearNavigationMessages();
+            // ✅ Limpiar estado de creación y resultados al cambiar de tabla
+            lastCreatedRecord = null;
+            const createSuccessContainer = document.getElementById('create-success-container');
+            if (createSuccessContainer) createSuccessContainer.style.display = 'none';
+            const createFormContainer = document.getElementById('create-form-container');
+            if (createFormContainer) createFormContainer.style.display = 'block';
+            if (typeof clearAllTabResults === 'function') clearAllTabResults();
             
             // Ocultar búsqueda global
             const globalSearch = document.getElementById('global-search');
